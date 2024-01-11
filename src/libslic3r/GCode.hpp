@@ -14,6 +14,8 @@
 #include "GCode/CoolingBuffer.hpp"
 #include "GCode/FanMover.hpp"
 #include "GCode/FindReplace.hpp"
+#include "GCode/AddLineNumber.hpp"
+#include "GCode/RemoveComments.hpp"
 #include "GCode/SpiralVase.hpp"
 #include "GCode/ToolOrdering.hpp"
 #include "GCode/WipeTower.hpp"
@@ -213,7 +215,13 @@ private:
         // Set a find-replace post-processor to modify the G-code before GCodePostProcessor.
         // It is being set to null inside process_layers(), because the find-replace process
         // is being called on a secondary thread to improve performance.
-        void set_find_replace(GCodeFindReplace *find_replace, bool enabled) { m_find_replace_backup = find_replace; m_find_replace = enabled ? find_replace : nullptr; }
+        void set_find_replace(GCodeFindReplace *find_replace, AddLineNumber *add_line_number, RemoveComments *rc, bool enabled)
+        {
+            m_find_replace_backup = find_replace;
+            m_find_replace        = enabled ? find_replace : nullptr;
+            m_add_line_number     = add_line_number;
+            m_remove_comments     = rc;
+        }
         void find_replace_enable() { m_find_replace = m_find_replace_backup; }
         void find_replace_supress() { m_find_replace = nullptr; }
 
@@ -239,6 +247,8 @@ private:
         FILE             *f { nullptr };
         // Find-replace post-processor to be called before GCodePostProcessor.
         GCodeFindReplace *m_find_replace { nullptr };
+        AddLineNumber    *m_add_line_number{nullptr};
+        RemoveComments   *m_remove_comments{nullptr};
         // If suppressed, the backoup holds m_find_replace.
         GCodeFindReplace *m_find_replace_backup { nullptr };
         GCodeProcessor   &m_processor;
@@ -476,6 +486,9 @@ private:
     std::unique_ptr<GCodeFindReplace>   m_find_replace;
     std::unique_ptr<PressureEqualizer>  m_pressure_equalizer;
     std::unique_ptr<WipeTowerIntegration> m_wipe_tower;
+    std::unique_ptr<AddLineNumber>        m_add_line_number;
+    std::unique_ptr<RemoveComments>       m_remove_comments;
+    std::unique_ptr<FanMover>             m_fan_mover;
 
     // Heights (print_z) at which the skirt has already been extruded.
     std::vector<coordf_t>               m_skirt_done;
@@ -499,9 +512,6 @@ private:
 
     // Processor
     GCodeProcessor m_processor;
-
-    //some post-processing on the file, with their data class
-    std::unique_ptr<FanMover> m_fan_mover;
 
     std::string _extrude(const ExtrusionPath &path, const std::string &description, double speed = -1);
     void _extrude_line(std::string& gcode_str, const Line& line, const double e_per_mm, const std::string& comment);

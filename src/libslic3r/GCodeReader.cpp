@@ -37,6 +37,7 @@ void GCodeReader::apply_config(const DynamicPrintConfig &config)
 
 const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, GCodeLine &gline, std::pair<const char*, const char*> &command)
 {
+
     PROFILE_FUNC();
 
     assert(is_decimal_separator_point());
@@ -46,7 +47,18 @@ const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, G
     {
         PROFILE_BLOCK(command_and_args);
         // Skip the whitespaces.
-        command.first = skip_whitespaces(c);
+        c = command.first = skip_whitespaces(c);
+        // Check for line number
+        if (*c == 'N') {
+            c = skip_whitespaces(++c);
+            const char* number_end = skip_word(c);
+            double v        = 0;
+            auto [pend, ec] = fast_float::from_chars(c, number_end, v);
+            if (pend != c)
+                gline.m_line_number = size_t(v / 10 - 1);
+            //go before command
+            c = command.first = skip_whitespaces(number_end);
+        }
         // Skip the command.
         c = command.second = skip_word(command.first);
         // Up to the end of line or comment.
@@ -215,11 +227,27 @@ bool GCodeReader::parse_file_raw(const std::string &filename, raw_line_callback_
         [](size_t){});
 }
 
+const std::string_view GCodeReader::GCodeLine::cmd() const
+{
+    const char *cmd = GCodeReader::skip_whitespaces(m_raw.c_str());
+    // Skip line number
+    if (*cmd == 'N') {
+        cmd = skip_word(cmd);
+        cmd = skip_whitespaces(cmd);
+    }
+    return std::string_view(cmd, GCodeReader::skip_word(cmd) - cmd);
+}
+
 bool GCodeReader::GCodeLine::has(char axis) const
 {
     const char *c = m_raw.c_str();
     // Skip the whitespaces.
     c = skip_whitespaces(c);
+    // Skip line number
+    if (*c == 'N') {
+        c = skip_word(c);
+        c = skip_whitespaces(c);
+    }
     // Skip the command.
     c = skip_word(c);
     // Up to the end of line or comment.
@@ -243,6 +271,11 @@ bool GCodeReader::GCodeLine::has_value(char axis, float &value) const
     const char *c = m_raw.c_str();
     // Skip the whitespaces.
     c = skip_whitespaces(c);
+    // Skip line number
+    if (*c == 'N') {
+        c = skip_word(c);
+        c = skip_whitespaces(c);
+    }
     // Skip the command.
     c = skip_word(c);
     // Up to the end of line or comment.

@@ -2841,6 +2841,20 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comPrusa;
     def->set_default_value(new ConfigOptionBool(0));
 
+    def = this->add("gcode_line_number", coBool);
+    def->label = L("Add line numbers");
+    def->category = OptionCategory::output;
+    def->tooltip = L("Add a line number in the gcode file at the start of each line.");
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("gcode_no_comment", coBool);
+    def->label = L("Remove all comments");
+    def->category = OptionCategory::output;
+    def->tooltip = L("Remove comments, including the tags used by the gcode viewer.");
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionBool(false));
+
     def = this->add("gcode_filename_illegal_char", coString);
     def->label = L("Illegal characters");
     def->full_label = L("Illegal characters for filename");
@@ -7912,6 +7926,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "gap_fill_min_width",
 "gap_fill_overlap",
 "gcode_filename_illegal_char",
+"gcode_line_number",
 "hole_size_compensation",
 "hole_size_threshold",
 "hole_to_polyhole_threshold",

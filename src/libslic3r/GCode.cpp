@@ -1326,8 +1326,13 @@ void GCode::_do_export(Print& print_mod, GCodeOutputStream &file, ThumbnailsGene
 
     if (! print.config().gcode_substitutions.values.empty()) {
         m_find_replace = make_unique<GCodeFindReplace>(print.config());
-        file.set_find_replace(m_find_replace.get(), false);
+    } else {
+        m_find_replace = nullptr;
     }
+    m_add_line_number = make_unique<AddLineNumber>(print.config());
+    m_remove_comments = make_unique<RemoveComments>(print.config());
+    file.set_find_replace(m_find_replace.get(), m_add_line_number.get(), m_remove_comments.get(), false);
+    m_fan_mover.release();
 
     // resets analyzer's tracking data
     m_last_height  = 0.f;
@@ -1337,7 +1342,6 @@ void GCode::_do_export(Print& print_mod, GCodeOutputStream &file, ThumbnailsGene
 #if ENABLE_GCODE_VIEWER_DATA_CHECKING
     m_last_mm3_per_mm = 0.;
 #endif // ENABLE_GCODE_VIEWER_DATA_CHECKING
-    m_fan_mover.release();
 
     status_monitor.stats().color_extruderid_to_used_filament.clear();
     status_monitor.stats().color_extruderid_to_used_weight.clear();
@@ -5136,11 +5140,18 @@ void GCode::GCodeOutputStream::close()
 void GCode::GCodeOutputStream::write(const char *what)
 {
     if (what != nullptr) {
+        // post-process on everything, even outside a layer
         //FIXME don't allocate a string, maybe process a batch of lines?
         std::string gcode(m_find_replace ? m_find_replace->process_layer(what) : what);
+        if (m_add_line_number)
+            this->m_add_line_number->process_string(gcode);
+        //process the gcode for the gcode viewer
+        m_processor.process_buffer(gcode);
+        // post-process that will mess with the gcode viewer
+        if (m_remove_comments)
+            this->m_remove_comments->process_string(gcode);
         // writes string to file
         fwrite(gcode.c_str(), 1, gcode.size(), this->f);
-        m_processor.process_buffer(gcode);
     }
 }
 

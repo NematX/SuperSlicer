@@ -13,16 +13,14 @@ namespace Slic3r {
 
 class GCodeReader {
 public:
+
     class GCodeLine {
     public:
         GCodeLine() { reset(); }
-        void reset() { m_mask = 0; memset(m_axis, 0, sizeof(m_axis)); m_raw.clear(); }
+        void reset() { m_line_number = size_t(-1); m_mask = 0; memset(m_axis, 0, sizeof(m_axis)); m_raw.clear(); }
 
         const std::string&      raw() const { return m_raw; }
-        const std::string_view  cmd() const { 
-            const char *cmd = GCodeReader::skip_whitespaces(m_raw.c_str());
-            return std::string_view(cmd, GCodeReader::skip_word(cmd) - cmd);
-        }
+        const std::string_view  cmd() const;
         const std::string_view  comment() const
             { size_t pos = m_raw.find(';'); return (pos == std::string::npos) ? std::string_view() : std::string_view(m_raw).substr(pos + 1); }
 
@@ -44,6 +42,7 @@ public:
             float y = this->has(Y) ? (this->y() - reader.y()) : 0;
             return sqrt(x*x + y*y);
         }
+        size_t line_number() { return this->m_line_number; }
         bool cmd_is(const char *cmd_test)          const { return cmd_is(m_raw, cmd_test); }
         bool extruding(const GCodeReader &reader)  const { return this->cmd_is("G1") && this->dist_E(reader) > 0; }
         bool retracting(const GCodeReader &reader) const { return this->cmd_is("G1") && this->dist_E(reader) < 0; }
@@ -71,6 +70,7 @@ public:
     private:
         std::string      m_raw;
         float            m_axis[NUM_AXES];
+        size_t           m_line_number;
         uint32_t         m_mask;
         friend class GCodeReader;
     };

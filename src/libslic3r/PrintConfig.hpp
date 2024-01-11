@@ -1045,6 +1045,8 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionString,              gcode_filename_illegal_char))
     ((ConfigOptionEnum<GCodeFlavor>,   gcode_flavor))
     ((ConfigOptionBool,                gcode_label_objects))
+    ((ConfigOptionBool,                gcode_line_number))
+    ((ConfigOptionBool,                gcode_no_comment))
     ((ConfigOptionInt,                 gcode_precision_xyz))
     ((ConfigOptionInt,                 gcode_precision_e))
     // Triples of strings: "search pattern", "replace with pattern", "attribs"

@@ -109,6 +109,8 @@ add_library(libslic3r STATIC
     Format/SLAArchive.cpp
     Format/CWS.hpp
     Format/CWS.cpp
+    GCode/AddLineNumber.cpp
+    GCode/AddLineNumber.hpp
     GCode/ThumbnailData.cpp
     GCode/ThumbnailData.hpp
     GCode/Thumbnails.cpp
@@ -125,6 +127,8 @@ add_library(libslic3r STATIC
     GCode/PressureEqualizer.hpp
     GCode/PrintExtents.cpp
     GCode/PrintExtents.hpp
+    GCode/RemoveComments.cpp
+    GCode/RemoveComments.hpp
     GCode/SpiralVase.cpp
     GCode/SpiralVase.hpp
     GCode/SeamPlacer.cpp

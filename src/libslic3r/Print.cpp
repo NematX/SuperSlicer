@@ -126,6 +126,8 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
         "gcode_comments",
         "gcode_filename_illegal_char",
         "gcode_label_objects",
+        "gcode_line_number",
+        "gcode_no_comment",
         "gcode_precision_xyz",
         "gcode_precision_e",
         "infill_acceleration",

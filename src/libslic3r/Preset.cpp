@@ -812,6 +812,8 @@ static std::vector<std::string> s_Preset_printer_options {
     "fan_printer_min_speed",
     "gcode_filename_illegal_char",
     "gcode_flavor",
+    "gcode_line_number",
+    "gcode_no_comment",
     "gcode_precision_xyz",
     "gcode_precision_e",
     "use_relative_e_distances",

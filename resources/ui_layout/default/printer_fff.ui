@@ -36,6 +36,10 @@ group:silent_mode_event:Firmware
 		setting:arc_fitting
 		setting:arc_fitting_tolerance
 	end_line
+	line:gcode post-process
+		setting:gcode_line_number
+		setting:gcode_no_comment
+	end_line
 	setting:gcode_filename_illegal_char
 group:Cooling fan
 	setting:fan_printer_min_speed
