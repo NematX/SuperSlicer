@@ -275,26 +275,22 @@ AboutDialog::AboutDialog()
         // TRN "Slic3r _is licensed under the_ License"
         const std::string is_lecensed_str = _utf8(L("is licensed under the"));
         const std::string license_str = _utf8(L("GNU Affero General Public License, version 3"));
-        const std::string based_on_str = _utf8(L("Slic3r contains sizable contributions from Prusa Research. Original work by Alessandro Ranellucci and the RepRap community."));
+        const std::string based_on_str = _utf8(wxString::Format(L("%s contains sizable contributions from Prusa Research. Original work by Alessandro Ranellucci and the RepRap community."),SLIC3R_APP_NAME));
         const std::string contributors_str = _utf8(L("Contributions by Henrik Brix Andersen, Nicolas Dandrimont, Mark Hindess, Petr Ledvina, Joseph Lenox, Y. Sapir, Mike Sheldrake, Vojtech Bubnik, Durand Rémi and numerous others."));
-        const std::string manual_str = _utf8(L("Manual by Gary Hodgson. Inspired by the RepRap community."));
-        const std::string icon_str = _utf8(L("Slic3r logo designed by Corey Daniels."));
         const auto text = from_u8(
             (boost::format(
             "<html>"
             "<body bgcolor= %1% link= %2%>"
             "<font color=%3%>"
-            " &copy; 2018-2022 Durand Rémi. <br />"
-            "%5% &copy; 2016-2022 Prusa Research. <br />"
+            " &copy; 2018-2024 Durand Rémi. <br />"
+            "%5% &copy; 2016-2023 Prusa Research. <br />"
             "%5% &copy; 2011-2018 Alessandro Ranellucci. <br />"
-            "<a href=\"http://slic3r.org/\">Slic3r</a> %6% "
+            "<a href=\"%10%\">%11%</a> %6% "
             "<a href=\"http://www.gnu.org/licenses/agpl-3.0.html\">%7%</a>."
             "<br /><br />"
             "%8%"
             "<br /><br />"
-            "%9%<br />"
-            "%10%<br />"
-            "%11%"
+            "%9%"
             "</font>"
             "</body>"
             "</html>") % bgr_clr_str % text_clr_str % text_clr_str
@@ -303,8 +299,8 @@ AboutDialog::AboutDialog()
             % license_str
             % based_on_str
             % contributors_str
-            % manual_str
-            % icon_str).str());
+            % ("http://github.com/" SLIC3R_GITHUB)
+            % SLIC3R_APP_NAME).str());
         m_html->SetPage(text);
         vsizer->Add(m_html, 1, wxEXPAND | wxBOTTOM, 10);
         m_html->Bind(wxEVT_HTML_LINK_CLICKED, &AboutDialog::onLinkClicked, this);

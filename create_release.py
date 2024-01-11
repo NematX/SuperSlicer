@@ -14,10 +14,10 @@ from datetime import date
 import tarfile
 import subprocess
 
-repo = "slic3r/slic3r"
-program_name = "Slic3r"
+repo = "NematX/NematXSlicer"
+program_name = "NematXSlicer"
 path_7zip = r"C:\Program Files\7-Zip\7z.exe"
-github_auth_token = "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"
+github_auth_token = ""
 
 def get_version():
 	settings_stream = open("./version.inc", mode="r", encoding="utf-8");
