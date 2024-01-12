@@ -85,6 +85,7 @@ static const t_config_enum_values s_keys_map_GCodeFlavor{
     {"sprinter",        gcfSprinter},
     {"mach3",           gcfMach3},
     {"machinekit",      gcfMachinekit},
+    {"nematx",          gcfNematX},
     {"no-extrusion",    gcfNoExtrusion},
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(GCodeFlavor)
@@ -2883,7 +2884,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_values.push_back("machinekit");
     def->enum_values.push_back("smoothie");
     def->enum_values.push_back("sprinter");
-    def->enum_values.push_back("lerdge");
+    def->enum_values.push_back("nematx");
     def->enum_values.push_back("no-extrusion");
     def->enum_labels.push_back("RepRapFirmware");
     def->enum_labels.push_back("Repetier");
@@ -2897,7 +2898,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels.push_back("Machinekit");
     def->enum_labels.push_back("Smoothie");
     def->enum_labels.push_back("Sprinter");
-    def->enum_labels.push_back("Lerdge");
+    def->enum_labels.push_back("NematX");
     def->enum_labels.push_back(L("No extrusion"));
     def->mode = comAdvancedE | comPrusa;
     def->set_default_value(new ConfigOptionEnum<GCodeFlavor>(gcfMarlinLegacy));

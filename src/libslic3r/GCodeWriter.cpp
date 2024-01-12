@@ -142,6 +142,12 @@ std::string GCodeWriter::preamble()
 {
     std::ostringstream gcode;
     
+    if(FLAVOR_IS(gcfNematX)) {
+        gcode << "G90 ; use absolute coordinates\n";
+        gcode << "M82 ; use absolute distances for extrusion\n";
+        return gcode.str();
+    }
+    
     if (FLAVOR_IS_NOT(gcfMakerWare)) {
         gcode << "G21 ; set units to millimeters\n";
         gcode << "G90 ; use absolute coordinates\n";
@@ -206,19 +212,21 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
     }
     
     std::ostringstream gcode;
-    gcode << code << " ";
+    gcode << code;
     if (FLAVOR_IS(gcfMach3) || FLAVOR_IS(gcfMachinekit)) {
-        gcode << "P";
+        gcode << " P";
     } else if (FLAVOR_IS(gcfRepRap)) {
-        gcode << "P" << tool << " S";
+        gcode << " P" << tool << " S";
     } else if (wait && (FLAVOR_IS(gcfMarlinFirmware) || FLAVOR_IS(gcfMarlinLegacy)) && temp_w_offset < m_last_temperature_with_offset) {
-        gcode << "R"; //marlin doesn't wait with S if it's a cooling change, it needs a R
+        gcode << " R"; //marlin doesn't wait with S if it's a cooling change, it needs a R
+    } else if (FLAVOR_IS(gcfNematX)) {
+        gcode << "=";
     } else {
-        gcode << "S";
+        gcode << " S";
     }
     gcode << temp_w_offset;
     bool multiple_tools = this->multiple_extruders && ! m_single_extruder_multi_material;
-    if (tool != -1 && (multiple_tools || FLAVOR_IS(gcfMakerWare) || FLAVOR_IS(gcfSailfish)) && FLAVOR_IS_NOT(gcfRepRap)) {
+    if (tool != -1 && (multiple_tools || FLAVOR_IS(gcfMakerWare) || FLAVOR_IS(gcfSailfish)) && FLAVOR_IS_NOT(gcfRepRap) && FLAVOR_IS_NOT(gcfNematX)) {
         gcode << " T" << tool;
     }
     gcode << " ; " << comment << "\n";
@@ -254,11 +262,13 @@ std::string GCodeWriter::set_bed_temperature(uint32_t temperature, bool wait)
     }
     
     std::ostringstream gcode;
-    gcode << code << " ";
+    gcode << code;
     if (FLAVOR_IS(gcfMach3) || FLAVOR_IS(gcfMachinekit)) {
-        gcode << "P";
+        gcode << " P";
+    } else if (FLAVOR_IS(gcfNematX)) {
+        gcode << "=";
     } else {
-        gcode << "S";
+        gcode << " S";
     }
     gcode << temperature << " ; " << comment << "\n";
     
@@ -346,6 +356,7 @@ std::string GCodeWriter::reset_e(bool force)
     if (FLAVOR_IS(gcfMach3)
         || FLAVOR_IS(gcfMakerWare)
         || FLAVOR_IS(gcfSailfish))
+        || FLAVOR_IS(gcfNematX)
         return "";
     
     if (m_tool != nullptr) {
@@ -864,7 +875,7 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comm
 
     // write it
     if (fan_speed == 0) {
-        if ((gcfTeacup == gcode_flavor)) {
+        if ((gcfTeacup == gcode_flavor) || (gcfNematX == gcode_flavor)) {
             gcode << "M106 S0";
         } else if ((gcfMakerWare == gcode_flavor) || (gcfSailfish == gcode_flavor)) {
             gcode << "M127";
@@ -878,7 +889,7 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comm
             gcode << "M126 T";
         } else {
             gcode << "M106 ";
-            if ((gcfMach3 == gcode_flavor) || (gcfMachinekit == gcode_flavor)) {
+            if ((gcfMach3 == gcode_flavor) || (gcfMachinekit == gcode_flavor) || (gcfNematX == gcode_flavor)) {
                 gcode << "P";
             } else {
                 gcode << "S";

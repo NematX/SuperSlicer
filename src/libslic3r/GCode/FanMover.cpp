@@ -80,7 +80,7 @@ void change_axis_value(std::string& line, char axis, const float new_value, cons
 
 int16_t get_fan_speed(const std::string &line, GCodeFlavor flavor) {
     if (line.compare(0, 4, "M106") == 0) {
-        if (flavor == (gcfMach3) || flavor == (gcfMachinekit)) {
+        if (flavor == (gcfMach3) || flavor == (gcfMachinekit) || flavor == (gcfNematX)) {
             return (int16_t)get_axis_value(line, 'P');
         } else {
             return (int16_t)get_axis_value(line, 'S');

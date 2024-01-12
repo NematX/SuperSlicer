@@ -411,7 +411,7 @@ public:
 
         std::ostringstream gcode;
         gcode << code << " ";
-        if (this->m_gcode_flavor == (gcfMach3) || this->m_gcode_flavor == (gcfMachinekit)) {
+        if (this->m_gcode_flavor == (gcfMach3) || this->m_gcode_flavor == (gcfMachinekit) || this->m_gcode_flavor == (gcfNematX)) {
             gcode << "P";
         } else if (this->m_gcode_flavor == (gcfRepRap)) {
             gcode << "P" << tool << " S";

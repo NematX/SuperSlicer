@@ -5176,17 +5176,17 @@ void TabPrinter::update_machine_limits_description(const MachineLimitsUsage usag
         Field* field;
         std::vector<std::string> axes{ "x", "y", "z", "e" };
 
-        wxColour color = (std::set<uint8_t>{gcfKlipper, gcfMach3, gcfMachinekit, gcfMakerWare, gcfSailfish, gcfTeacup}.count(flavor) > 0) ? grey_color : black_color;
+        wxColour color = (std::set<uint8_t>{gcfKlipper, gcfMach3, gcfMachinekit, gcfNematX, gcfMakerWare, gcfSailfish, gcfTeacup}.count(flavor) > 0) ? grey_color : black_color;
             for (const std::string& axis : axes) {
                 field = m_active_page->get_field("machine_max_feedrate_" + axis, 0);
                 if (field) dynamic_cast<wxTextCtrl*>(field->getWindow())->SetForegroundColour(color);
             }
-        color = (std::set<uint8_t>{gcfKlipper, gcfSmoothie, gcfMach3, gcfMachinekit, gcfMakerWare, gcfSailfish, gcfTeacup}.count(flavor) > 0) ? grey_color : black_color;
+        color = (std::set<uint8_t>{gcfKlipper, gcfSmoothie, gcfMach3, gcfMachinekit, gcfNematX, gcfMakerWare, gcfSailfish, gcfTeacup}.count(flavor) > 0) ? grey_color : black_color;
             for (const std::string& axis : axes) {
                 field = m_active_page->get_field("machine_max_acceleration_" + axis, 0);
                 if (field) dynamic_cast<wxTextCtrl*>(field->getWindow())->SetForegroundColour(color);
             }
-        color = (std::set<uint8_t>{gcfSmoothie, gcfMach3, gcfMachinekit, gcfMakerWare, gcfSailfish, gcfTeacup}.count(flavor) > 0) ? grey_color : black_color;
+        color = (std::set<uint8_t>{gcfSmoothie, gcfMach3, gcfMachinekit, gcfNematX, gcfMakerWare, gcfSailfish, gcfTeacup}.count(flavor) > 0) ? grey_color : black_color;
         {
             field = m_active_page->get_field("machine_max_acceleration_extruding", 0);
             if (field) dynamic_cast<wxTextCtrl*>(field->getWindow())->SetForegroundColour(color);
@@ -5196,12 +5196,12 @@ void TabPrinter::update_machine_limits_description(const MachineLimitsUsage usag
             field = m_active_page->get_field("machine_max_acceleration_retracting", 0);
             if (field) dynamic_cast<wxTextCtrl*>(field->getWindow())->SetForegroundColour(color);
         }
-        color = (std::set<uint8_t>{gcfSmoothie, gcfMach3, gcfMachinekit, gcfMakerWare, gcfSailfish, gcfTeacup}.count(flavor) > 0) ? grey_color : black_color;
+        color = (std::set<uint8_t>{gcfSmoothie, gcfMach3, gcfMachinekit, gcfNematX, gcfMakerWare, gcfSailfish, gcfTeacup}.count(flavor) > 0) ? grey_color : black_color;
         {
             field = m_active_page->get_field("machine_max_acceleration_travel", 0);
             if (field) dynamic_cast<wxTextCtrl*>(field->getWindow())->SetForegroundColour(color);
         }
-        color = (std::set<uint8_t>{gcfKlipper, gcfMach3, gcfMachinekit, gcfMakerWare, gcfSailfish, gcfTeacup}.count(flavor) > 0) ? grey_color : black_color;
+        color = (std::set<uint8_t>{gcfKlipper, gcfMach3, gcfMachinekit, gcfNematX, gcfMakerWare, gcfSailfish, gcfTeacup}.count(flavor) > 0) ? grey_color : black_color;
             for (const std::string& axis : axes) {
                 field = m_active_page->get_field("machine_max_jerk_" + axis, 0);
                 if (field) dynamic_cast<wxTextCtrl*>(field->getWindow())->SetForegroundColour(color);

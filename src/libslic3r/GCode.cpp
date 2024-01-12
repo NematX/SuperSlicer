@@ -884,6 +884,9 @@ void GCode::do_export(Print* print, const char* path, GCodeProcessorResult* resu
     if (print->is_step_done(psGCodeExport) && boost::filesystem::exists(boost::filesystem::path(path)))
         return;
 
+    if(print->config().gcode_flavor.value == gcfNematX && print->config().use_relative_e_distances)
+            throw Slic3r::SlicingError(_(L("NematX firmware can only handle absolute E gcode, please change it from relative in printer settings (use_relative_e_distances).")));
+
     Print::StatusMonitor monitor{ *print };
     monitor.set_started(psGCodeExport);
 
@@ -2495,7 +2498,7 @@ static bool custom_gcode_sets_temperature(const std::string &gcode, const int mc
 void GCode::print_machine_envelope(GCodeOutputStream &file, const Print &print)
 {
    // gcfRepRap, gcfRepetier, gcfTeacup, gcfMakerWare, gcfMarlinLegacy, gcfMarlinFirmware, gcfKlipper, gcfSailfish, gcfSprinter, gcfMach3, gcfMachinekit,
-   ///     gcfSmoothie, gcfNoExtrusion, gcfLerdge,
+   ///     gcfSmoothie, gcfNoExtrusion, gcfNematX,
     if (print.config().machine_limits_usage.value == MachineLimitsUsage::EmitToGCode) {
         // some firmware are using mm/sec and some others mm/min for M203 and M566
         int factor = (std::set<uint8_t>{gcfMarlinLegacy, gcfMarlinFirmware, gcfLerdge, gcfSmoothie}.count(print.config().gcode_flavor.value) > 0) ? 1 : 60;

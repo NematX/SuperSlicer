@@ -68,6 +68,7 @@ enum GCodeFlavor : uint8_t {
     gcfMachinekit,
     gcfSmoothie,
     gcfNoExtrusion,
+    gcfNematX,
 };
 
 enum class MachineLimitsUsage : uint8_t {
@@ -1123,7 +1124,7 @@ PRINT_CONFIG_CLASS_DEFINE(
 static inline std::string get_extrusion_axis(const GCodeConfig& cfg)
 {
     return
-        ((cfg.gcode_flavor.value == gcfMach3) || (cfg.gcode_flavor.value == gcfMachinekit)) ? "A" :
+        ((cfg.gcode_flavor.value == gcfMach3) || (cfg.gcode_flavor.value == gcfMachinekit) || (cfg.gcode_flavor.value == gcfNematX)) ? "A" :
         (cfg.gcode_flavor.value == gcfNoExtrusion) ? "" : cfg.extrusion_axis.value;
 }
 
