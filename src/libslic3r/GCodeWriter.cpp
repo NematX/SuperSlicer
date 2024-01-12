@@ -355,8 +355,8 @@ std::string GCodeWriter::reset_e(bool force)
 {
     if (FLAVOR_IS(gcfMach3)
         || FLAVOR_IS(gcfMakerWare)
-        || FLAVOR_IS(gcfSailfish))
-        || FLAVOR_IS(gcfNematX)
+        || FLAVOR_IS(gcfSailfish)
+        || FLAVOR_IS(gcfNematX) )
         return "";
     
     if (m_tool != nullptr) {
@@ -879,6 +879,8 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comm
             gcode << "M106 S0";
         } else if ((gcfMakerWare == gcode_flavor) || (gcfSailfish == gcode_flavor)) {
             gcode << "M127";
+        } else if (gcfNematX == gcode_flavor) {
+            return "";
         } else {
             gcode << "M107";
         }

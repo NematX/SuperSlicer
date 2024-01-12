@@ -5146,13 +5146,13 @@ void GCode::GCodeOutputStream::write(const char *what)
         // post-process on everything, even outside a layer
         //FIXME don't allocate a string, maybe process a batch of lines?
         std::string gcode(m_find_replace ? m_find_replace->process_layer(what) : what);
+        if (m_remove_comments)
+            this->m_remove_comments->process_string(gcode);
         if (m_add_line_number)
             this->m_add_line_number->process_string(gcode);
         //process the gcode for the gcode viewer
         m_processor.process_buffer(gcode);
         // post-process that will mess with the gcode viewer
-        if (m_remove_comments)
-            this->m_remove_comments->process_string(gcode);
         // writes string to file
         fwrite(gcode.c_str(), 1, gcode.size(), this->f);
     }

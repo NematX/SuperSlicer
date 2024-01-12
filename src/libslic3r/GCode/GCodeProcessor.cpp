@@ -819,14 +819,27 @@ bool GCodeProcessor::contains_reserved_tag(const std::string& gcode, std::string
     GCodeReader parser;
     parser.parse_buffer(gcode, [&ret, &found_tag](GCodeReader& parser, const GCodeReader::GCodeLine& line) {
         std::string comment = line.raw();
-        if (comment.length() > 2 && comment.front() == ';') {
-            comment = comment.substr(1);
-            for (const std::string& s : Reserved_Tags) {
-                if (boost::starts_with(comment, s)) {
-                    ret = true;
-                    found_tag = comment;
-                    parser.quit_parsing();
+        boost::trim_left(comment);
+        if (comment.length() > 2) {
+            size_t start_idx = 0;
+            //remove line numbering if present
+            if (comment.front() == 'N') {
+                if (start_idx = comment.find(";"); start_idx == std::string::npos)
+                    // no comment, skip
                     return;
+            } else if (comment.front() != ';') {
+                // no comment on start, skip
+                return;
+            }
+            if (comment.length() > 2) {
+                comment = comment.substr(start_idx + 1);
+                for (const std::string &s : Reserved_Tags) {
+                    if (boost::starts_with(comment, s)) {
+                        ret       = true;
+                        found_tag = comment;
+                        parser.quit_parsing();
+                        return;
+                    }
                 }
             }
         }
@@ -846,15 +859,28 @@ bool GCodeProcessor::contains_reserved_tags(const std::string& gcode, unsigned i
     GCodeReader parser;
     parser.parse_buffer(gcode, [&ret, &found_tag, max_count](GCodeReader& parser, const GCodeReader::GCodeLine& line) {
         std::string comment = line.raw();
-        if (comment.length() > 2 && comment.front() == ';') {
-            comment = comment.substr(1);
-            for (const std::string& s : Reserved_Tags) {
-                if (boost::starts_with(comment, s)) {
-                    ret = true;
-                    found_tag.push_back(comment);
-                    if (found_tag.size() == max_count) {
-                        parser.quit_parsing();
-                        return;
+        boost::trim_left(comment);
+        if (comment.length() > 2) {
+            size_t start_idx = 0;
+            //remove line numbering if present
+            if (comment.front() == 'N') {
+                if (start_idx = comment.find(";"); start_idx == std::string::npos)
+                    // no comment, skip
+                    return;
+            } else if (comment.front() != ';') {
+                // no comment on start, skip
+                return;
+            }
+            if (comment.length() > 2) {
+                comment = comment.substr(start_idx + 1);
+                for (const std::string &s : Reserved_Tags) {
+                    if (boost::starts_with(comment, s)) {
+                        ret = true;
+                        found_tag.push_back(comment);
+                        if (found_tag.size() == max_count) {
+                            parser.quit_parsing();
+                            return;
+                        }
                     }
                 }
             }
@@ -1393,6 +1419,11 @@ void GCodeProcessor::process_file(const std::string& filename, std::function<voi
     {
         m_parser.parse_file_raw(filename, [this](GCodeReader& reader, const char *begin, const char *end) {
             begin = skip_whitespaces(begin, end);
+            //remove line number if any
+            if (begin != end && *begin == 'N') {
+                for (; begin != end && (*begin != ' ' || *begin != '\t'); ++ begin);
+                begin = skip_whitespaces(++ begin, end);
+            }
             if (begin != end && *begin == ';') {
                 // Comment.
                 begin = skip_whitespaces(++ begin, end);
@@ -1696,6 +1727,11 @@ void GCodeProcessor::apply_config_simplify3d(const std::string& filename)
         begin = skip_whitespaces(begin, end);
         end   = remove_eols(begin, end);
         if (begin != end) {
+            //remove line number if any
+            if (begin != end && *begin == 'N') {
+                for (; begin != end && (*begin != ' ' || *begin != '\t'); ++ begin);
+                begin = skip_whitespaces(++ begin, end);
+            }
             if (*begin == ';') {
                 // Comment.
                 begin = skip_whitespaces(++ begin, end);
@@ -1943,10 +1979,21 @@ void GCodeProcessor::process_gcode_line(const GCodeReader::GCodeLine& line, bool
         }
     } else {
         const std::string &comment = line.raw();
-        if (comment.length() > 2 && comment.front() == ';')
-            // Process tags embedded into comments. Tag comments always start at the start of a line
-            // with a comment and continue with a tag without any whitespace separator.
-            process_tags(comment.substr(1), producers_enabled);
+        if (comment.length() > 2) {
+            size_t start_idx = 0;
+            // remove line numbering if present
+            if (comment.front() == 'N') {
+                // just bypass the line number, it has to be a ' ' just after (no \t, please)
+                if (size_t space_pos = comment.find(" "); space_pos != std::string::npos) {
+                    if (comment.size() > space_pos + 2)
+                        start_idx = (space_pos + 1);
+                }
+            }
+            if (comment.size() > start_idx && comment[start_idx] == ';')
+                // Process tags embedded into comments. Tag comments always start at the start of a line
+                // with a comment and continue with a tag without any whitespace separator.
+                process_tags(comment.substr(start_idx + 1), producers_enabled);
+        }
     }
 }
 

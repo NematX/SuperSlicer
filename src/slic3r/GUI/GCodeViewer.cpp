@@ -352,7 +352,8 @@ void GCodeViewer::SequentialView::GCodeWindow::render(float top, float bottom, u
             const size_t start = id == 1 ? 0 : m_lines_ends[id - 2];
             const size_t len   = m_lines_ends[id - 1] - start;
             std::string gline(m_file.data() + start, len);
-
+            
+            std::string line_idx;
             std::string command;
             std::string parameters;
             std::string comment;
@@ -368,13 +369,22 @@ void GCodeViewer::SequentialView::GCodeWindow::render(float top, float bottom, u
             if (!command.empty()) {
                 boost::split(tokens, command, boost::is_any_of(" "), boost::token_compress_on);
                 command = tokens.front();
+                size_t first_token = 1;
+                if (command.front() == 'N') {
+                    line_idx = command;
+                    first_token = 2;
+                    if (tokens.size() > 1)
+                        command = tokens[1];
+                    else
+                        command.clear();
+                }
                 if (tokens.size() > 1) {
-                    for (size_t i = 1; i < tokens.size(); ++i) {
+                    for (size_t i = first_token; i < tokens.size(); ++i) {
                         parameters += " " + tokens[i];
                     }
                 }
             }
-            ret.push_back({ command, parameters, comment });
+            ret.push_back({ line_idx, command, parameters, comment });
         }
         return ret;
     };
@@ -458,7 +468,7 @@ void GCodeViewer::SequentialView::GCodeWindow::render(float top, float bottom, u
         ImGui::Dummy({ id_width - ImGui::CalcTextSize(id_str.c_str()).x, text_height });
         ImGui::SameLine(0.0f, 0.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, LINE_NUMBER_COLOR);
-        imgui.text(id_str);
+        imgui.text(line.line_idx.empty() ? id_str : line.line_idx);
         ImGui::PopStyleColor();
 
         if (!line.command.empty() || !line.comment.empty())

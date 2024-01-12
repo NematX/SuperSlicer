@@ -33,14 +33,19 @@ void RemoveComments::_process_gcode_line(GCodeReader &reader, const GCodeReader:
     //remove commands that aren't G1 or M
     std::string_view cmd = line.cmd();
     if (!cmd.empty()) {
-        if (cmd.front() == 'N' ||cmd.front() == 'G' || cmd.front() == 'M') {
-            // TODO: remove comment inside line.raw()
-            if (auto idx = line.raw().find(";"); idx == std::string::npos) {
+        //too extreme
+        //if (cmd.front() == 'N' ||cmd.front() == 'G' || cmd.front() == 'M') {
+        //    // TODO: remove comment inside line.raw()
+        //    else {
+        //        process_output.append(line.raw().substr(0,idx)).append("\n");
+        //    }
+        //}
+         if (auto idx = line.raw().find(";"); idx == std::string::npos) {
+             if(!boost::trim_copy(line.raw()).empty())
                 process_output.append(line.raw()).append("\n");
-            } else {
-                process_output.append(line.raw().substr(0,idx)).append("\n");
-            }
-        }
+         } else {
+             process_output.append(line.raw().substr(0,idx)).append("\n");
+         }
     }
 }
 

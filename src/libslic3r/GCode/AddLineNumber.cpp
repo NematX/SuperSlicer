@@ -31,15 +31,18 @@ std::string AddLineNumber::process_layer(const std::string &gcode)
 void AddLineNumber::_process_gcode_line(GCodeReader &reader, const GCodeReader::GCodeLine &line, std::string &process_output)
 {
     //remove commands that aren't G1 or M
-    std::string_view cmd = line.cmd();
-    if (!cmd.empty()) {
-        if (cmd.front() == 'G' || cmd.front() == 'M') {
-            process_output.append("N").append(std::to_string(++nb_lines)).append(" ").append(line.raw()).append("\n");
-            //process_output.append(line.raw()).append("\n");
-        }else
-            process_output.append(line.raw()).append("\n");
-    } else
-        process_output.append(line.raw()).append("\n");
+    //std::string_view cmd = line.cmd();
+    //if (!cmd.empty()) {
+    //    if (cmd.front() == 'G' || cmd.front() == 'M') {
+    //        process_output.append("N").append(std::to_string((++nb_lines)*10)).append(" ").append(line.raw()).append("\n");
+    //        //process_output.append(line.raw()).append("\n");
+    //    }else
+    //        process_output.append(line.raw()).append("\n");
+    //} else
+    //    process_output.append(line.raw()).append("\n");
+    // need to add lines on evrythign, even comments
+    if(!boost::trim_copy(line.raw()).empty())
+        process_output.append("N").append(std::to_string((++nb_lines)*10)).append(" ").append(line.raw()).append("\n");
 }
 
 } // namespace Slic3r

@@ -633,6 +633,7 @@ public:
         {
             struct Line
             {
+                std::string line_idx;
                 std::string command;
                 std::string parameters;
                 std::string comment;
