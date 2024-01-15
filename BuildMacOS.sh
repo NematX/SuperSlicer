@@ -69,14 +69,6 @@ then
     mkdir build
 fi
 
-echo -n "[1/9] Updating submodules..."
-{
-    # update submodule profiles
-    pushd resources/profiles
-    git submodule update --init
-    popd
-} #> $ROOT/build/Build.log # Capture all command output
-echo "done"
 
 echo -n "[2/9] Changing date in version..."
 {

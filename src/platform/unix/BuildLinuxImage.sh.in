@@ -23,6 +23,9 @@ done
 
 echo -n "[9/9] Generating Linux app..."
 #{
+    ls .
+    ls src
+    ls ..
     # create directory and copy into it
     if [ -d "package" ]
     then
@@ -45,6 +48,7 @@ echo -n "[9/9] Generating Linux app..."
     cp -f @SLIC3R_APP_CMD@ package/@SLIC3R_APP_CMD@
     pushd package
     tar -cvf ../@SLIC3R_APP_KEY@.tar .  &>/dev/null
+    ls package
     popd
 #} &> $ROOT/Build.log # Capture all command output
 echo "done"

@@ -103,14 +103,6 @@ then
 fi
 fi
 
-echo "[1/9] Updating submodules..."
-{
-    # update submodule profiles
-    pushd resources/profiles
-    git submodule update --init
-    popd
-}
-
 echo "[2/9] Changing date in version..."
 {
     # change date in version
@@ -206,6 +198,9 @@ chmod 755 $ROOT/build/src/BuildLinuxImage.sh
 
 echo "[9/9] Generating Linux app..."
     pushd build
+        ls .
+        ls src
+        ls ..
         if [[ -n "$BUILD_IMAGE" ]]
         then
             $ROOT/build/src/BuildLinuxImage.sh -i
