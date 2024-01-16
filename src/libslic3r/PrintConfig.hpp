@@ -67,8 +67,8 @@ enum GCodeFlavor : uint8_t {
     gcfMach3,
     gcfMachinekit,
     gcfSmoothie,
-    gcfNoExtrusion,
     gcfNematX,
+    gcfNoExtrusion,
 };
 
 enum class MachineLimitsUsage : uint8_t {

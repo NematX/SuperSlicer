@@ -213,7 +213,7 @@ void FanMover::_remove_slow_fan(int16_t min_speed, float past_sec) {
 
 std::string FanMover::_set_fan(int16_t speed) {
     const Tool* tool = m_writer.get_tool(m_currrent_extruder < 20 ? m_currrent_extruder : 0);
-    return GCodeWriter::set_fan(m_writer.config.gcode_flavor.value, m_writer.config.gcode_comments.value, speed, tool ? tool->fan_offset() : 0, m_writer.config.fan_percentage.value);
+    return GCodeWriter::set_fan(m_writer.config.gcode_flavor.value, m_writer.config.gcode_comments.value, speed, tool ? tool->fan_offset() : 0, tool ? tool->id() : 0, m_writer.config.fan_percentage.value);
 }
 
 

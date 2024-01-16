@@ -144,7 +144,9 @@ std::string GCodeWriter::preamble()
     
     if(FLAVOR_IS(gcfNematX)) {
         gcode << "G90 ; use absolute coordinates\n";
-        gcode << "M82 ; use absolute distances for extrusion\n";
+        gcode << "G71 ; use metric units\n;";
+        if (this->config.use_relative_e_distances)
+            throw Slic3r::InvalidArgument("Error: NematX firmware does only allow absolute e distance.");
         return gcode.str();
     }
     
@@ -199,12 +201,14 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
         return "";
     
     std::string code, comment;
-    if (wait && FLAVOR_IS_NOT(gcfTeacup) && FLAVOR_IS_NOT(gcfRepRap)) {
+    if (wait && FLAVOR_IS_NOT(gcfTeacup) && FLAVOR_IS_NOT(gcfRepRap) && FLAVOR_IS_NOT(gcfNematX)) {
         code = "M109";
         comment = "set temperature and wait for it to be reached";
     } else {
         if (FLAVOR_IS(gcfRepRap)) { // M104 is deprecated on RepRapFirmware
             code = "G10";
+        } else if (FLAVOR_IS(gcfNematX) && tool > 0) {
+            code = "M107";
         } else {
             code = "M104";
         }
@@ -233,6 +237,11 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
     
     if ((FLAVOR_IS(gcfTeacup) || FLAVOR_IS(gcfRepRap)) && wait)
         gcode << "M116 ; wait for temperature to be reached\n";
+    if (FLAVOR_IS(gcfNematX) && wait)
+        if (tool == 0)
+            gcode << "M109 ; wait for extruder 1 temperature to be reached\n";
+        else
+            gcode << "M110 ; wait for extruder 2 temperature to be reached\n";
     
     m_last_temperature = temperature;
     m_last_temperature_with_offset = temp_w_offset;
@@ -249,7 +258,7 @@ std::string GCodeWriter::set_bed_temperature(uint32_t temperature, bool wait)
     m_last_bed_temperature_reached = wait;
 
     std::string code, comment;
-    if (wait && FLAVOR_IS_NOT(gcfTeacup)) {
+    if (wait && FLAVOR_IS_NOT(gcfTeacup) && FLAVOR_IS_NOT(gcfNematX)) {
         if (FLAVOR_IS(gcfMakerWare) || FLAVOR_IS(gcfSailfish)) {
             code = "M109";
         } else {
@@ -274,7 +283,12 @@ std::string GCodeWriter::set_bed_temperature(uint32_t temperature, bool wait)
     
     if (FLAVOR_IS(gcfTeacup) && wait)
         gcode << "M116 ; wait for bed temperature to be reached\n";
-    
+    if (FLAVOR_IS(gcfNematX) && temperature == 0) {
+        gcode.clear();
+        gcode << "M141 ; switch off bed temperature\n";
+    }
+    if (FLAVOR_IS(gcfNematX) && wait)
+        gcode << "M190 ; wait for bed temperature to be reached\n";
     return gcode.str();
 }
 
@@ -335,11 +349,13 @@ std::string GCodeWriter::write_acceleration(){
             gcode << "M204 P" << m_current_acceleration << " T" << (m_current_travel_acceleration > 0 ? m_current_travel_acceleration : m_current_acceleration);
         else if(m_current_travel_acceleration > 0)
             gcode << "M204 T" << m_current_travel_acceleration;
-    } else { // gcfMarlinLegacy
+    } else if (FLAVOR_IS(gcfMarlinLegacy) || FLAVOR_IS(gcfTeacup) || FLAVOR_IS(gcfMakerWare) ||
+               FLAVOR_IS(gcfKlipper) || FLAVOR_IS(gcfSailfish) || FLAVOR_IS(gcfMach3) || FLAVOR_IS(gcfMachinekit) || FLAVOR_IS(gcfSmoothie)) {
         // M204: Set default acceleration
         if (m_current_acceleration > 0)
             gcode << "M204 S" << m_current_acceleration;
     }
+    assert(!gcode.str().empty() || FLAVOR_IS(gcfNematX) || FLAVOR_IS(gcfNoExtrusion));
     //if at least something, add comment and line return
     if (gcode.tellp() != std::streampos(0)) {
         if (this->config.gcode_comments)
@@ -355,14 +371,20 @@ std::string GCodeWriter::reset_e(bool force)
 {
     if (FLAVOR_IS(gcfMach3)
         || FLAVOR_IS(gcfMakerWare)
-        || FLAVOR_IS(gcfSailfish)
-        || FLAVOR_IS(gcfNematX) )
+        || FLAVOR_IS(gcfSailfish))
         return "";
     
     if (m_tool != nullptr) {
         if (m_tool->E() == 0. && ! force)
             return "";
         m_tool->reset_E();
+    }
+
+    if (FLAVOR_IS(gcfNematX)) {
+        std::string gcode = m_extrusion_axis + "[SET_POSITION POS=0]";
+        if (this->config.gcode_comments) gcode += " ; reset extrusion distance";
+        gcode +="\n";
+        return gcode;
     }
 
     if (! m_extrusion_axis.empty() && ! this->config.use_relative_e_distances) {
@@ -439,6 +461,9 @@ std::string GCodeWriter::toolchange(uint16_t tool_id)
                 if (tool_id > 0)
                     gcode << tool_id;
             }
+        } else if (FLAVOR_IS(gcfNematX)) {
+            m_extrusion_axis = 'A' + tool_id;
+            return this->reset_e(true);
         } else {
             gcode << this->toolchange_prefix() << tool_id;
         }
@@ -682,7 +707,8 @@ std::string GCodeWriter::retract(bool before_wipe)
 std::string GCodeWriter::retract_for_toolchange(bool before_wipe)
 {
     double factor = before_wipe ? m_tool->retract_before_wipe() : 1.;
-    assert(factor >= 0. && factor <= 1. + EPSILON);
+    assert((factor >= 0. || before_wipe) && factor <= 1. + EPSILON);
+    if(factor == 0) return "";
     return this->_retract(
         factor * m_tool->retract_length_toolchange(),
         std::nullopt,
@@ -725,6 +751,8 @@ std::string GCodeWriter::_retract(double length, std::optional<double> restart_e
         if (this->config.use_firmware_retraction) {
             if (FLAVOR_IS(gcfMachinekit))
                 gcode << "G22 ; retract\n";
+            else if (FLAVOR_IS(gcfMachinekit))
+                throw Slic3r::InvalidArgument("Error: NematX firmware doesn't have firmware retraction.");
             else
                 gcode << "G10 ; retract\n";
         } else if (! m_extrusion_axis.empty()) {
@@ -831,7 +859,7 @@ std::string GCodeWriter::unlift()
     return gcode;
 }
 
-std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comments, uint8_t speed, uint8_t tool_fan_offset, bool is_fan_percentage, const std::string comment/*=""*/)
+std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comments, uint8_t speed, uint8_t tool_fan_offset, uint16_t tool_id, bool is_fan_percentage, const std::string comment/*=""*/)
 {
 /*
     std::ostringstream gcode;
@@ -875,12 +903,12 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comm
 
     // write it
     if (fan_speed == 0) {
-        if ((gcfTeacup == gcode_flavor) || (gcfNematX == gcode_flavor)) {
+        if ((gcfTeacup == gcode_flavor)) {
             gcode << "M106 S0";
         } else if ((gcfMakerWare == gcode_flavor) || (gcfSailfish == gcode_flavor)) {
             gcode << "M127";
         } else if (gcfNematX == gcode_flavor) {
-            return "";
+            gcode << (tool_id == 0 ? "M106=0" : "M108=0");
         } else {
             gcode << "M107";
         }
@@ -889,12 +917,14 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comm
     } else {
         if ((gcfMakerWare == gcode_flavor) || (gcfSailfish == gcode_flavor)) {
             gcode << "M126 T";
-        } else {
-            gcode << "M106 ";
+        } else  if (gcfNematX == gcode_flavor) {
+            gcode << (tool_id == 0 ? "M106=" : "M108=");
+        } else{
+            gcode << "M106";
             if ((gcfMach3 == gcode_flavor) || (gcfMachinekit == gcode_flavor) || (gcfNematX == gcode_flavor)) {
-                gcode << "P";
+                gcode << " P";
             } else {
-                gcode << "S";
+                gcode << " S";
             }
             gcode << (fan_baseline * (fan_speed / 100.0));
         }
@@ -909,7 +939,7 @@ std::string GCodeWriter::set_fan(const uint8_t speed, uint16_t default_tool)
 {
     const Tool *tool = m_tool == nullptr ? get_tool(default_tool) : m_tool;
     m_last_fan_speed = speed;
-    return GCodeWriter::set_fan(this->config.gcode_flavor.value, this->config.gcode_comments.value, speed, tool ? tool->fan_offset() : 0, this->config.fan_percentage.value);
+    return GCodeWriter::set_fan(this->config.gcode_flavor.value, this->config.gcode_comments.value, speed, tool ? tool->fan_offset() : 0, tool ? tool->id() : 0, this->config.fan_percentage.value);
 }
 
 #ifdef USE_GCODEFORMATTER

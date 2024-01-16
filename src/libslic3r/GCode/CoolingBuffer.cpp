@@ -1011,7 +1011,7 @@ std::string CoolingBuffer::apply_layer_cooldown(
         if (fan_speeds[0] != m_fan_speed && fan_control[0]) {
             m_fan_speed = fan_speeds[0];
             new_gcode += GCodeWriter::set_fan(m_config.gcode_flavor, m_config.gcode_comments, m_fan_speed,
-                                              EXTRUDER_CONFIG(extruder_fan_offset), m_config.fan_percentage,
+                                              EXTRUDER_CONFIG(extruder_fan_offset), m_current_extruder, m_config.fan_percentage,
                                               std::string("set fan for new extruder"));
         }
     };
@@ -1040,8 +1040,8 @@ std::string CoolingBuffer::apply_layer_cooldown(
             stored_fan_speed = m_fan_speed < 0 ? 0 : m_fan_speed;
         } else if (line->type & CoolingLine::TYPE_RESTORE_AFTER_WT) {
             new_gcode += GCodeWriter::set_fan(m_config.gcode_flavor, m_config.gcode_comments, stored_fan_speed,
-                                              EXTRUDER_CONFIG(extruder_fan_offset), m_config.fan_percentage,
-                                              "restore fan after wipe tower");
+                                              EXTRUDER_CONFIG(extruder_fan_offset), m_current_extruder,
+                                              m_config.fan_percentage, "restore fan after wipe tower");
         } else if (line->type & CoolingLine::TYPE_EXTRUDE_START) {
             assert(CoolingLine::to_extrusion_role(uint32_t(line->type)) != 0);
             extrude_tree.push_back(CoolingLine::to_extrusion_role(uint32_t(line->type)));
@@ -1141,7 +1141,7 @@ std::string CoolingBuffer::apply_layer_cooldown(
                 if (fan_control[extrude_tree[i]]) {
                     new_gcode += GCodeWriter::set_fan(m_config.gcode_flavor, m_config.gcode_comments,
                                                       fan_speeds[extrude_tree[i]],
-                                                      EXTRUDER_CONFIG(extruder_fan_offset), m_config.fan_percentage,
+                                                      EXTRUDER_CONFIG(extruder_fan_offset), m_current_extruder, m_config.fan_percentage,
                                                       std::string("set fan for ") + ExtrusionEntity::role_to_string(extrude_tree[i]));
                     fan_set = true;
                     break;
@@ -1150,7 +1150,7 @@ std::string CoolingBuffer::apply_layer_cooldown(
             if (!fan_set) {
                 // return to default
                 new_gcode += GCodeWriter::set_fan(m_config.gcode_flavor, m_config.gcode_comments, m_fan_speed < 0 ? 0 : m_fan_speed,
-                                                    EXTRUDER_CONFIG(extruder_fan_offset), m_config.fan_percentage,
+                                                    EXTRUDER_CONFIG(extruder_fan_offset), m_current_extruder, m_config.fan_percentage,
                                                     "set default fan");
             }
             fan_need_set = false;
