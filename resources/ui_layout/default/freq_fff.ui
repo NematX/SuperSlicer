@@ -10,3 +10,6 @@ group:freq_settings_event:no_title:no_search:
 		setting:simple:script:bool:depends$brim_width:label$Brim:tooltip$Set the brim. Will be set to 5mm if nothing was previously set.:s_brim
 		freq_purging_volumes
 	end_line
+	line:
+		setting:simple:script:enum$custom$Custom$glue$With glue$noglue$Without glue:depends$bed_temperature$first_layer_bed_temperature:label$Bed:tooltip$Choose the bed type you installed. This will modify the bed temperature for all current filaments.:full_width:s_bed_fff
+	end_line

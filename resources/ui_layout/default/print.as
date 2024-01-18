@@ -267,6 +267,38 @@ void s_support_fff_set(string &in new_val, int idx)
 	}
 }
 
+
+// quick settings bed type (nematx)
+
+int s_bed_fff_get(string &out get_val)
+{
+    int bed_temperature = get_int("bed_temperature");
+    int fl_bed_temperature = get_int("first_layer_bed_temperature");
+    if (bed_temperature == fl_bed_temperature) {
+        if (bed_temperature == 130) {
+            return 1; //glue
+        }
+        if (bed_temperature == 170) {
+            return 2; //noglue
+        }
+    }
+    return 0; // custom
+}
+
+void s_bed_fff_set(string &in new_val, int idx)
+{
+	if(idx == 0) { // custom
+		back_initial_value("bed_temperature");
+		back_initial_value("first_layer_bed_temperature");
+	} else if(idx == 1) { // glue
+		set_int("bed_temperature", 130);
+		set_int("first_layer_bed_temperature", 130);
+	} else if(idx == 2) { // noglue
+		set_int("bed_temperature", 170);
+		set_int("first_layer_bed_temperature", 170);
+	}
+}
+
 //TODO to replicate prusa:
 // brim_type
 // cooling
