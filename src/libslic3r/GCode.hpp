@@ -222,6 +222,7 @@ private:
             m_add_line_number     = add_line_number;
             m_remove_comments     = rc;
         }
+        void set_only_ascii(bool only_ascii) { m_only_ascii = only_ascii; }
         void find_replace_enable() { m_find_replace = m_find_replace_backup; }
         void find_replace_supress() { m_find_replace = nullptr; }
 
@@ -247,6 +248,7 @@ private:
         FILE             *f { nullptr };
         // Find-replace post-processor to be called before GCodePostProcessor.
         GCodeFindReplace *m_find_replace { nullptr };
+        bool              m_only_ascii;
         AddLineNumber    *m_add_line_number{nullptr};
         RemoveComments   *m_remove_comments{nullptr};
         // If suppressed, the backoup holds m_find_replace.
@@ -394,7 +396,7 @@ private:
     std::string     extrude_perimeters(const Print &print, const std::vector<ObjectByExtruder::Island::Region> &by_region);
     std::string     extrude_infill(const Print& print, const std::vector<ObjectByExtruder::Island::Region>& by_region, bool is_infill_first);
     std::string     extrude_ironing(const Print& print, const std::vector<ObjectByExtruder::Island::Region>& by_region);
-    std::string     extrude_support(const ExtrusionEntityCollection &support_fills);
+    std::string     extrude_support(const ExtrusionEntitiesPtr &support_fills);
 
     Polyline        travel_to(std::string& gcode, const Point &point, ExtrusionRole role);
     void            write_travel_to(std::string& gcode, const Polyline& travel, std::string comment);
