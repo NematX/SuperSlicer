@@ -779,8 +779,8 @@ wxString Control::get_label(int tick, LabelType label_type/* = ltHeightWithLayer
             return value < m_layers_times.size() ? short_and_splitted_time(get_time_dhms(m_layers_times[value])) : "";
         }
         wxString str = m_values.empty() ?
-            wxString::Format("%.*f", 2, m_label_koef * value) :
-            wxString::Format("%.*f", 2, m_values[value]);
+            wxString::Format("%.*f", 3, m_label_koef * value) :
+            wxString::Format("%.*f", 3, m_values[value]);
         if (label_type == ltHeight)
             return str;
         if (label_type == ltHeightWithLayer) {
@@ -788,7 +788,7 @@ wxString Control::get_label(int tick, LabelType label_type/* = ltHeightWithLayer
             bool show_lheight = GUI::wxGetApp().app_config->get("show_layer_height_doubleslider") == "1";
             bool show_ltime = GUI::wxGetApp().app_config->get("show_layer_time_doubleslider") == "1";
             int nb_lines = 2; // to move things down if the slider is on top
-            wxString comma = "\n(";
+            wxString comma = "\n";
             if (show_lheight) {
                 nb_lines++;
                 double layer_height = 0;
@@ -800,8 +800,8 @@ wxString Control::get_label(int tick, LabelType label_type/* = ltHeightWithLayer
                 }else {
                     layer_height = m_values.empty() ? m_label_koef : m_values[layer_number] - (layer_number > 1 ? m_values[layer_number - 1] : 0);
                 }
-                str = str + comma + wxString::Format("%.*f", 2, layer_height);
-                comma = ",\n";
+                str = str + comma + wxString::Format("%.*f", 3, layer_height);
+                comma = "\n";
             }
             if (show_ltime && !m_layers_times.empty()) {
                 if (m_layers_times.size() +1 >= m_values.size()) {
@@ -814,7 +814,7 @@ wxString Control::get_label(int tick, LabelType label_type/* = ltHeightWithLayer
                         double previous_time = (layer_idx_time > 0 ? m_layers_times[layer_idx_time - 1] : 0);
                         wxString layer_time_wstr = short_and_splitted_time(get_time_dhms(m_layers_times[layer_idx_time] - previous_time));
                         str = str + comma + layer_time_wstr;
-                        comma = ",\n";
+                        comma = "\n";
                     }
                 }
             }
@@ -823,7 +823,7 @@ wxString Control::get_label(int tick, LabelType label_type/* = ltHeightWithLayer
                 str = "\n" + str;
                 nb_step_down--;
             }
-            return format_wxstr("%1%%2%%3%)", str, comma, layer_number);
+            return format_wxstr("%1%%2%%3%", str, comma, layer_number);
         }
     }
 

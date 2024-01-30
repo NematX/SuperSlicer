@@ -483,7 +483,7 @@ void ObjectManipulation::update_ui_from_settings()
 
         for (int i = 0; i < 3; ++i) {
             auto update = [this, i](/*ManipulationEditorKey*/int key_id, const Vec3d& new_value) {
-                wxString new_text = double_to_string(m_imperial_units ? new_value(i) * mm_to_in : new_value(i), 2);
+                wxString new_text = double_to_string(m_imperial_units ? new_value(i) * mm_to_in : new_value(i), 3);
                 const int id = key_id * 3 + i;
                 if (id >= 0) m_editors[id]->set_value(new_text);
             };
@@ -621,14 +621,14 @@ void ObjectManipulation::update_if_dirty()
 
     for (int i = 0; i < 3; ++ i) {
         auto update = [this, i](Vec3d &cached, Vec3d &cached_rounded, ManipulationEditorKey key_id, const Vec3d &new_value) {
-			wxString new_text = double_to_string(new_value(i), 2);
+			wxString new_text = double_to_string(new_value(i), 3);
 			double new_rounded;
 			new_text.ToDouble(&new_rounded);
 			if (std::abs(cached_rounded(i) - new_rounded) > EPSILON) {
 				cached_rounded(i) = new_rounded;
                 const int id = key_id*3+i;
                 if (m_imperial_units && (key_id == mePosition || key_id == meSize))
-                    new_text = double_to_string(new_value(i)*mm_to_in, 2);
+                    new_text = double_to_string(new_value(i)*mm_to_in, 3);
                 if (id >= 0) m_editors[id]->set_value(new_text);
             }
 			cached(i) = new_value(i);
