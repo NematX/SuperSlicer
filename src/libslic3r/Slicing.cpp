@@ -22,8 +22,8 @@
 namespace Slic3r
 {
 
-static const coordf_t MIN_LAYER_HEIGHT = 0.01;
-static const coordf_t MIN_LAYER_HEIGHT_DEFAULT = 0.07;
+static const coordf_t MIN_LAYER_HEIGHT = 0.001;
+static const coordf_t MIN_LAYER_HEIGHT_DEFAULT = 0.005;
 // fields are with 8-number precision after the dot
 coordf_t check_z_step(const coordf_t val, const coordf_t z_step) {
     if (z_step <= EPSILON) return val;
