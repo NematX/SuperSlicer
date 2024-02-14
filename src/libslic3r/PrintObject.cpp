@@ -1763,11 +1763,16 @@ bool PrintObject::invalidate_state_by_config_options(
             if (!exists)
                 return;
             double total_area = 0;
-            // compute for us first
-            for (const PrintObject *object : this->print()->objects()) {
-                for (auto *layer : object->m_layers) {
-                    if (std::abs(layer->print_z - my_layer->print_z) < EPSILON) {
-                        for (const ExPolygon &slice : layer->lslices) { total_area += slice.area(); }
+            if (this->print()->config().complete_objects.value) {
+                // sequential printing: only consider myself
+                for (const ExPolygon &slice : layer->lslices) { total_area += slice.area(); }
+            } else {
+                // parallel printing: get all objects
+                for (const PrintObject *object : this->print()->objects()) {
+                    for (auto *layer : object->m_layers) {
+                        if (std::abs(layer->print_z - my_layer->print_z) < EPSILON) {
+                            for (const ExPolygon &slice : layer->lslices) { total_area += slice.area(); }
+                        }
                     }
                 }
             }
