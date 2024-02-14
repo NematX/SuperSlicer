@@ -139,7 +139,7 @@ public:
     enum class ETabType : uint8_t
     {
         Plater3D,
-        PlaterPreview,
+        //PlaterPreview,
         PlaterGcode,
         LastPlater,
         PrintSettings,

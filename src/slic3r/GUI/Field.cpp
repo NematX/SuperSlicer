@@ -160,11 +160,11 @@ void Field::PostInitialize()
                 MainFrame::ETabType tab_id = MainFrame::ETabType::Any;
                 switch (evt.GetKeyCode()) {
                 case '1': { tab_id = MainFrame::ETabType::Plater3D; break; }
-                case '2': { tab_id = MainFrame::ETabType::PlaterPreview; break; }
-                case '3': { tab_id = MainFrame::ETabType::PlaterGcode; break; }
-                case '4': { tab_id = MainFrame::ETabType::PrintSettings; break; }
-                case '5': { tab_id = MainFrame::ETabType::FilamentSettings; break; }
-                case '6': { tab_id = MainFrame::ETabType::PrinterSettings; break; }
+                //case '2': { tab_id = MainFrame::ETabType::PlaterPreview; break; }
+                case '2': { tab_id = MainFrame::ETabType::PlaterGcode; break; }
+                case '3': { tab_id = MainFrame::ETabType::PrintSettings; break; }
+                case '4': { tab_id = MainFrame::ETabType::FilamentSettings; break; }
+                case '5': { tab_id = MainFrame::ETabType::PrinterSettings; break; }
 #ifdef __APPLE__
 				case 'f':
 #else /* __APPLE__ */

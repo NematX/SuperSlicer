@@ -191,7 +191,7 @@ public:
     bool is_any_job_running() const;
     void select_view(const std::string& direction);
     void select_view_3D(const std::string& name);
-    void set_force_preview(Preview::ForceState force);
+    //void set_force_preview(Preview::ForceState force);
     Preview::ForceState get_force_preview();
 
     bool is_preview_shown() const;

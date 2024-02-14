@@ -3421,8 +3421,8 @@ unsigned int Plater::priv::update_background_process(bool force_validation, bool
         } else if (wxGetApp().app_config->get("auto_switch_preview") == "2" || main_frame->selected_tab() < MainFrame::ETabType::LastPlater) {
             if (this->preview->can_display_gcode())
                 main_frame->select_tab(MainFrame::ETabType::PlaterGcode, true);
-            else if (this->preview->can_display_volume() && background_process.running()) // don't switch to plater3D if you modify a gcode settign and you don't have background processing
-                main_frame->select_tab(MainFrame::ETabType::PlaterPreview, true);
+            //else if (this->preview->can_display_volume() && background_process.running()) // don't switch to plater3D if you modify a gcode settign and you don't have background processing
+            //    main_frame->select_tab(MainFrame::ETabType::PlaterPreview, true);
             else
                 main_frame->select_tab(MainFrame::ETabType::Plater3D, true);
         }
@@ -4160,9 +4160,9 @@ void Plater::priv::on_slicing_update(SlicingStatusEvent &evt)
 
 void Plater::priv::on_slicing_completed(wxCommandEvent & evt)
 {
-    if( ( wxGetApp().app_config->get("auto_switch_preview") == "1" || (wxGetApp().app_config->get("auto_switch_preview") == "2" && main_frame->selected_tab() < MainFrame::ETabType::LastPlater) )
-        && !this->preview->can_display_gcode())
-        main_frame->select_tab(MainFrame::ETabType::PlaterPreview);
+    //if( ( wxGetApp().app_config->get("auto_switch_preview") == "1" || (wxGetApp().app_config->get("auto_switch_preview") == "2" && main_frame->selected_tab() < MainFrame::ETabType::LastPlater) )
+    //    && !this->preview->can_display_gcode())
+    //    main_frame->select_tab(MainFrame::ETabType::PlaterPreview);
 
     if (view3D->is_dragging()) // updating scene now would interfere with the gizmo dragging
         delayed_scene_refresh = true;
@@ -4588,7 +4588,7 @@ bool Plater::priv::init_view_toolbar()
 
     item.name = "Preview";
     item.icon_filename = "preview.svg";
-    item.tooltip = _utf8(L("Preview")) + " [" + GUI::shortkey_ctrl_prefix() + "3]";
+    item.tooltip = _utf8(L("Preview")) + " [" + GUI::shortkey_ctrl_prefix() + "2]";
     item.sprite_id = 1;
     item.left.action_callback = [this]() { if (this->q != nullptr) wxPostEvent(this->q, SimpleEvent(EVT_GLVIEWTOOLBAR_PREVIEW)); };
     if (!view_toolbar.add_item(item))
@@ -5606,10 +5606,10 @@ void Plater::select_view(const std::string& direction) { p->select_view(directio
 
 void Plater::select_view_3D(const std::string& name) { p->select_view_3D(name); }
 
-void Plater::set_force_preview(Preview::ForceState force) {
-    if (p->preview)
-        p->preview->set_force_state(force);
-}
+//void Plater::set_force_preview(Preview::ForceState force) {
+//    if (p->preview)
+//        p->preview->set_force_state(force);
+//}
 
 Preview::ForceState Plater::get_force_preview() {
     return p->preview->get_force_state();

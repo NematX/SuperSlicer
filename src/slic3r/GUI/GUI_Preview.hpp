@@ -174,7 +174,7 @@ Preview(wxWindow* parent, Bed3D& bed, Model* model, DynamicPrintConfig* config, 
     void load_print(bool keep_z_range = false);
     void reload_print(bool keep_volumes = false);
     void refresh_print();
-    void set_force_state(ForceState new_force_state = ForceState::NoForce) { current_force_state = new_force_state; }
+    //void set_force_state(ForceState new_force_state = ForceState::NoForce) { current_force_state = new_force_state; }
     ForceState get_force_state() { return current_force_state; }
 
     void msw_rescale();
@@ -196,7 +196,7 @@ Preview(wxWindow* parent, Bed3D& bed, Model* model, DynamicPrintConfig* config, 
     void reset_gcode_toolpaths();
 
 private:
-    ForceState current_force_state = ForceState::NoForce;
+    ForceState current_force_state = ForceState::ForceGcode;
 
     bool init(wxWindow* parent, Bed3D& bed, Model* model);
 
