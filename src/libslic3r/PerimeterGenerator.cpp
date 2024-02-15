@@ -1731,8 +1731,20 @@ ProcessSurfaceResult PerimeterGenerator::process_classic(int& contour_count, int
 
             if (next_onion.empty() && last_asynch.empty()) {
                 // Store the number of loops actually generated.
-                contour_count = std::min(contour_count, perimeter_idx);
-                holes_count = std::min(holes_count, perimeter_idx);
+                if (perimeter_idx < contour_count) {
+                    assert(contours.size() == contour_count);
+                    for(size_t i = perimeter_idx; i<contours.size(); i++)
+                        assert(contours[perimeter_idx].empty());
+                    contour_count = perimeter_idx;
+                    contours.resize(contour_count);
+                }
+                if (perimeter_idx < holes_count) {
+                    assert(holes.size() == holes_count);
+                    for(size_t i = perimeter_idx; i<holes.size(); i++)
+                        assert(holes[perimeter_idx].empty());
+                    holes_count = perimeter_idx;
+                    holes.resize(holes_count);
+                }
                 // No region left to be filled in.
                 last.clear();
                 break;
@@ -1760,27 +1772,31 @@ ProcessSurfaceResult PerimeterGenerator::process_classic(int& contour_count, int
             assert(contours.size() == contour_count);
             assert(holes.size() == holes_count);
 
-            // fuzzify
+            // fuzzify params
             const bool fuzzify_contours = this->config->fuzzy_skin != FuzzySkinType::None && perimeter_idx == 0 && this->layer->id() > 0;
             const bool fuzzify_holes = this->config->fuzzy_skin == FuzzySkinType::Shell && perimeter_idx == 0 && this->layer->id() > 0 ;
             const bool fuzzify_all = this->config->fuzzy_skin == FuzzySkinType::All && this->layer->id() > 0 ;
-            if (holes_count <= perimeter_idx && !last_asynch.empty()) {
-                assert(next_onion.empty());
+
+            //push last_asynch or next_onion into contours & holes
+            if (!last_asynch.empty()) {
+                // we already put the last hole, now add contours.
                 for (auto &exp : last_asynch) {
-                    assert(exp.type == ExPolygonAsynch::epatShrinkContour);
-                    assert(exp.expoly.contour.is_counter_clockwise());
-                    if(exp.expoly.contour.length() > SCALED_EPSILON) // TODO: atleastLength
-                        contours[perimeter_idx].emplace_back(exp.expoly.contour, perimeter_idx, true, has_steep_overhang,
-                                                         fuzzify_contours || fuzzify_all);
-                }
-            } else if (contour_count <= perimeter_idx && !last_asynch.empty()) {
-                for (ExPolygonAsynch &exp : last_asynch) {
-                    assert(exp.type == ExPolygonAsynch::epatGrowHole);
-                    for (auto &hole : exp.expoly.holes) {
-                        assert(hole.is_clockwise());
-                        if(hole.length() > SCALED_EPSILON) // TODO: atleastLength
-                            holes[perimeter_idx].emplace_back(hole, perimeter_idx, false, has_steep_overhang,
-                                                          fuzzify_contours || fuzzify_all);
+                    if (exp.type == ExPolygonAsynch::epatShrinkContour) {
+                        assert(next_onion.empty());
+                        assert(exp.expoly.contour.is_counter_clockwise());
+                        if (exp.expoly.contour.length() > SCALED_EPSILON) // TODO: atleastLength
+                            contours[perimeter_idx].emplace_back(exp.expoly.contour, perimeter_idx, true,
+                                                                 has_steep_overhang, fuzzify_contours || fuzzify_all);
+                    } else {
+                        // we already put the last contour, now add holes
+                        // contours from hole collapse is added via next_onion
+                        assert(exp.type == ExPolygonAsynch::epatGrowHole);
+                        for (auto &hole : exp.expoly.holes) {
+                            assert(hole.is_clockwise());
+                            if(hole.length() > SCALED_EPSILON) // TODO: atleastLength
+                                holes[perimeter_idx].emplace_back(hole, perimeter_idx, false, has_steep_overhang,
+                                                              fuzzify_contours || fuzzify_all);
+                        }
                     }
                 }
             }
@@ -1947,43 +1963,44 @@ ProcessSurfaceResult PerimeterGenerator::process_classic(int& contour_count, int
         // at this point, all loops should be in contours[0] (= contours.front() )
         // or no perimeters nor holes have been generated, too small area.
 
-        assert(contours.size() >= 1);
         assert(contours.empty() || contours.front().size() >= 1);
         // collection of loops to add into loops
         ExtrusionEntityCollection peri_entities;
-        if (config->perimeter_loop.value) {
-            //onlyone_perimeter = >fusion all perimeterLoops
-            for (PerimeterGeneratorLoop& loop : contours.front()) {
-                ExtrusionLoop extr_loop = this->_traverse_and_join_loops(loop, get_all_Childs(loop), loop.polygon.points.front());
-                //ExtrusionLoop extr_loop = this->_traverse_and_join_loops_old(loop, loop.polygon.points.front(), true);
-                if (extr_loop.paths.back().polyline.back() != extr_loop.paths.front().polyline.front()) {
-                    extr_loop.paths.back().polyline.append(extr_loop.paths.front().polyline.front());
-                    assert(false);
+        if (!contours.empty()) {
+            if (config->perimeter_loop.value) {
+                // onlyone_perimeter = >fusion all perimeterLoops
+                for (PerimeterGeneratorLoop &loop : contours.front()) {
+                    ExtrusionLoop extr_loop = this->_traverse_and_join_loops(loop, get_all_Childs(loop),
+                                                                             loop.polygon.points.front());
+                    // ExtrusionLoop extr_loop = this->_traverse_and_join_loops_old(loop, loop.polygon.points.front(), true);
+                    if (extr_loop.paths.back().polyline.back() != extr_loop.paths.front().polyline.front()) {
+                        extr_loop.paths.back().polyline.append(extr_loop.paths.front().polyline.front());
+                        assert(false);
+                    }
+                    peri_entities.append(extr_loop);
                 }
-                peri_entities.append(extr_loop);
-            }
 
-            // append thin walls
-            if (!thin_walls_thickpolys.empty()) {
+                // append thin walls
+                if (!thin_walls_thickpolys.empty()) {
+                    if (this->object_config->thin_walls_merge) {
+                        _merge_thin_walls(peri_entities, thin_walls_thickpolys);
+                    } else {
+                        peri_entities.append(
+                            Geometry::thin_variable_width(thin_walls_thickpolys, erThinWall, this->ext_perimeter_flow,
+                                                          std::max(ext_perimeter_width / 4,
+                                                                   scale_t(this->print_config->resolution)),
+                                                          false));
+                    }
+                    thin_walls_thickpolys.clear();
+                }
+            } else {
                 if (this->object_config->thin_walls_merge) {
+                    ThickPolylines no_thin_walls;
+                    peri_entities = this->_traverse_loops(contours.front(), no_thin_walls);
                     _merge_thin_walls(peri_entities, thin_walls_thickpolys);
                 } else {
-                    peri_entities.append(Geometry::thin_variable_width(
-                        thin_walls_thickpolys, 
-                        erThinWall, 
-                        this->ext_perimeter_flow, 
-                        std::max(ext_perimeter_width / 4, scale_t(this->print_config->resolution)),
-                        false));
+                    peri_entities = this->_traverse_loops(contours.front(), thin_walls_thickpolys);
                 }
-                thin_walls_thickpolys.clear();
-            }
-        } else {
-            if (this->object_config->thin_walls_merge) {
-                ThickPolylines no_thin_walls;
-                peri_entities = this->_traverse_loops(contours.front(), no_thin_walls);
-                _merge_thin_walls(peri_entities, thin_walls_thickpolys);
-            } else {
-                peri_entities = this->_traverse_loops(contours.front(), thin_walls_thickpolys);
             }
         }
 #if _DEBUG
