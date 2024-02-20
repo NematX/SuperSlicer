@@ -263,7 +263,7 @@ ProcessSurfaceResult PerimeterGenerator::process_arachne(int& loop_number, const
 
     const Polygons last_p = to_polygons(last);
     Arachne::WallToolPaths wallToolPaths(last_p, this->get_ext_perimeter_spacing(), this->get_ext_perimeter_width(), 
-        this->get_perimeter_spacing(), this->get_perimeter_width(), loop_number + 1, coord_t(0), 
+        this->get_perimeter_spacing(), this->get_perimeter_width(), loop_number, coord_t(0), 
         this->layer->height, *this->object_config, *this->print_config);
     std::vector<Arachne::VariableWidthLines> perimeters = wallToolPaths.getToolPaths();
 
@@ -323,7 +323,7 @@ ProcessSurfaceResult PerimeterGenerator::process_arachne(int& loop_number, const
         perimeters.insert(perimeters.begin(), out_shell.begin(), out_shell.end());
     }
 
-    loop_number = int(perimeters.size()) - 1;
+    loop_number = int(perimeters.size());
 
 #ifdef ARACHNE_DEBUG
         {
@@ -794,9 +794,9 @@ void PerimeterGenerator::process()
 
         ProcessSurfaceResult surface_process_result;
         //core generation
-        if (use_arachne) {
+        if (use_arachne && nb_loop_holes == nb_loop_contour) {
             surface_process_result = process_arachne(nb_loop_contour, surface);
-            nb_loop_holes = nb_loop_contour;
+            nb_loop_holes = nb_loop_contour; // nb_loop_contour is in/out
         } else {
             surface_process_result = process_classic(nb_loop_contour, nb_loop_holes, surface);
         }
