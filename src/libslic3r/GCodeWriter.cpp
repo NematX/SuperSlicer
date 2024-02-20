@@ -822,6 +822,10 @@ std::string GCodeWriter::unretract()
     return gcode.str();
 }
 
+void GCodeWriter::set_extra_lift(double extra_zlift) {
+    this->m_extra_lift = extra_zlift;
+}
+
 /*  If this method is called more than once before calling unlift(),
     it will not perform subsequent lifts, even if Z was raised manually
     (i.e. with travel_to_z()) and thus _lifted was reduced. */

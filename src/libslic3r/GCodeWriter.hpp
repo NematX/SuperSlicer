@@ -69,7 +69,7 @@ public:
     std::string retract(bool before_wipe = false);
     std::string retract_for_toolchange(bool before_wipe = false);
     std::string unretract();
-    void        set_extra_lift(double extra_zlift) { this->m_extra_lift = extra_zlift; }
+    void        set_extra_lift(double extra_zlift);
     double      get_extra_lift() { return this->m_extra_lift; }
     std::string lift(int layer_id);
     std::string unlift();
