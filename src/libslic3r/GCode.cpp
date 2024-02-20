@@ -6195,38 +6195,50 @@ bool GCode::can_cross_perimeter(const Polyline& travel, bool offset)
     if(m_layer != nullptr)
     if ( ( (m_config.only_retract_when_crossing_perimeters && !(m_config.enforce_retract_first_layer && m_layer_index == 0)) && m_config.fill_density.value > 0) || m_config.avoid_crossing_perimeters)
          {
-        //test && m_layer->any_internal_region_slice_contains(travel)
-        // Skip retraction if travel is contained in an internal slice *and*
-        // internal infill is enabled (so that stringing is entirely not visible).
-        //note: any_internal_region_slice_contains() is potentionally very slow, it shall test for the bounding boxes first.
-        //bool inside = false;
-        //BoundingBox bbtravel(travel.points);
-        //for (const BoundingBox &bbox : m_layer->lslices_bboxes) {
-        //    inside = bbox.overlap(bbtravel);
-        //    if(inside) break;
-        //}
-        ////have to do a bit more work to be sure
-        //if (inside) {
-            //contained inside at least one bb
-            //construct m_layer_slices_offseted if needed
-            if (m_layer_slices_offseted.layer != m_layer) {
-                m_layer_slices_offseted.layer = m_layer;
-                m_layer_slices_offseted.diameter = scale_t(EXTRUDER_CONFIG_WITH_DEFAULT(nozzle_diameter, 0.4));
-                m_layer_slices_offseted.slices = m_layer->lslices;
-                m_layer_slices_offseted.slices_offsetted = offset_ex(m_layer->lslices, -m_layer_slices_offseted.diameter * 1.5f);
-                //remove top surfaces
-                for (const LayerRegion* reg : m_layer->regions()) {
-                    m_layer_slices_offseted.slices_offsetted = diff_ex(m_layer_slices_offseted.slices_offsetted, to_expolygons(reg->fill_surfaces.filter_by_type_flag(SurfaceType::stPosTop)));
-                    m_layer_slices_offseted.slices = diff_ex(m_layer_slices_offseted.slices, to_expolygons(reg->fill_surfaces.filter_by_type_flag(SurfaceType::stPosTop)));
-                }
-                
+
+        //FROM 2.7
+        if (m_layer_slices_offseted.layer != m_layer) {
+            m_layer_slices_offseted.layer = m_layer;
+            m_layer_slices_offseted.diameter = scale_t(EXTRUDER_CONFIG_WITH_DEFAULT(nozzle_diameter, 0.4));
+            ExPolygons slices = m_layer->lslices;
+            ExPolygons slices_offsetted = offset_ex(m_layer->lslices, -m_layer_slices_offseted.diameter * 1.5f);
+            //remove top surfaces
+            for (const LayerRegion* reg : m_layer->regions()) {
+                slices_offsetted = diff_ex(slices_offsetted, to_expolygons(reg->fill_surfaces.filter_by_type_flag(SurfaceType::stPosTop)));
+                slices = diff_ex(slices, to_expolygons(reg->fill_surfaces.filter_by_type_flag(SurfaceType::stPosTop)));
             }
-            // test if a expoly contains the entire travel
-            for (const ExPolygon &poly : offset ? m_layer_slices_offseted.slices_offsetted : m_layer_slices_offseted.slices)
-                if (poly.contains(travel)) {
-                    return false;
+            //create bb for speeding things up.
+            m_layer_slices_offseted.slices.clear();
+            for (ExPolygon &ex : slices) {
+                BoundingBox bb{ex.contour.points};
+                // simplify as much as possible
+                for (ExPolygon &ex_simpl : ex.simplify(m_layer_slices_offseted.diameter)) {
+                    m_layer_slices_offseted.slices.emplace_back(std::move(ex_simpl),std::move(bb)); 
                 }
-        //}
+            }
+            m_layer_slices_offseted.slices_offsetted.clear();
+            for (ExPolygon &ex : slices_offsetted) {
+                BoundingBox bb{ex.contour.points};
+                for (ExPolygon &ex_simpl : ex.simplify(m_layer_slices_offseted.diameter)) {
+                    m_layer_slices_offseted.slices_offsetted.emplace_back(std::move(ex_simpl), std::move(bb));
+                }
+            }
+            
+            
+        }
+        // test if a expoly contains the entire travel
+        for (const std::pair<ExPolygon, BoundingBox> &expoly_2_bb : 
+            offset ? m_layer_slices_offseted.slices_offsetted : m_layer_slices_offseted.slices)
+            // first check if it's roughtly inside the bb, to reject quickly.
+            if (travel.size() > 1 && expoly_2_bb.second.contains(travel.front()) &&
+                expoly_2_bb.second.contains(travel.back()) &&
+                expoly_2_bb.second.contains(travel.points[travel.size() / 2])) {
+                // check precisely if it's inside (via a very very costly diff)
+                if (expoly_2_bb.first.holes.size() > 100)
+                    return true;
+                if (expoly_2_bb.first.contains(travel))
+                    return false;
+            }
     }
 
     // retract if only_retract_when_crossing_perimeters is disabled or doesn't apply
