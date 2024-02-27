@@ -111,6 +111,7 @@ enum class FuzzySkinType {
 
 enum InfillPattern : uint8_t{
     ipRectilinear, ipAlignedRectilinear, ipGrid, ipTriangles, ipStars, ipCubic, ipLine,
+    ipRectilinearAroundHoles,
     ipConcentric, ipConcentricGapFill,
     ipHoneycomb, ip3DHoneycomb,
     ipGyroid, ipHilbertCurve, ipArchimedeanChords, ipOctagramSpiral,

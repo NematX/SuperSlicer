@@ -81,12 +81,18 @@ public:
     bool empty() const { return this->m_entities.empty(); }
     void clear();
     void swap (ExtrusionEntityCollection &c);
-    void append(const ExtrusionEntity &entity) { this->m_entities.emplace_back(entity.clone()); }
-    void append(ExtrusionEntity &&entity) { this->m_entities.emplace_back(entity.clone_move()); }
+    void append(const ExtrusionEntity &entity) { this->m_entities.push_back(entity.clone()); }
+    void append(ExtrusionEntity &&entity) { this->m_entities.push_back(entity.clone_move()); }
+    // take ownership, empty the container.
+    template<typename ENTITY> void append(std::unique_ptr<ENTITY> &entity)
+    {
+        static_assert(std::is_base_of<ExtrusionEntity, ENTITY>::value, "ENTITY not derived from ExtrusionEntity in ExtrusionCollection::append(unique_ptr<ENTITY>)");
+        this->m_entities.push_back(entity.release());
+    }
     void append(const ExtrusionEntitiesPtr &entities) { 
         this->m_entities.reserve(this->m_entities.size() + entities.size());
         for (const ExtrusionEntity *ptr : entities)
-            this->m_entities.emplace_back(ptr->clone());
+            this->m_entities.push_back(ptr->clone());
     }
     void append(ExtrusionEntitiesPtr &&src) {
         if (m_entities.empty())
@@ -99,12 +105,12 @@ public:
     void append(const ExtrusionPaths &paths) {
         this->m_entities.reserve(this->m_entities.size() + paths.size());
         for (const ExtrusionPath &path : paths)
-            this->m_entities.emplace_back(path.clone());
+            this->m_entities.push_back(path.clone());
     }
     void append(ExtrusionPaths &&paths) {
         this->m_entities.reserve(this->m_entities.size() + paths.size());
         for (ExtrusionPath &path : paths)
-            this->m_entities.emplace_back(new ExtrusionPath(std::move(path)));
+            this->m_entities.push_back(new ExtrusionPath(std::move(path)));
     }
     void replace(size_t i, const ExtrusionEntity &entity);
     void remove(size_t i);

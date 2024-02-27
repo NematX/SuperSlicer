@@ -135,6 +135,7 @@ CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(FuzzySkinType)
 
 static const t_config_enum_values s_keys_map_InfillPattern {
     {"rectilinear",         ipRectilinear},
+    {"rectilineararoundholes", ipRectilinearAroundHoles},
     {"alignedrectilinear",  ipAlignedRectilinear},
     {"monotonic",           ipMonotonic},
     {"grid",                ipGrid},
@@ -1352,6 +1353,7 @@ void PrintConfigDef::init_fff_params()
     def->cli = "top-fill-pattern|external-fill-pattern=s";
     def->enum_keys_map = &ConfigOptionEnum<InfillPattern>::get_enum_values();
     def->enum_values.push_back("rectilinear");
+    def->enum_values.push_back("rectilineararoundholes");
     def->enum_values.push_back("monotonic");
     def->enum_values.push_back("monotonicgapfill");
     def->enum_values.push_back("concentric");
@@ -1362,6 +1364,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_values.push_back("sawtooth");
     def->enum_values.push_back("smooth");
     def->enum_labels.push_back(L("Rectilinear"));
+    def->enum_labels.push_back(L("Rectilinear around holes"));
     def->enum_labels.push_back(L("Monotonic"));
     def->enum_labels.push_back(L("Monotonic (filled)"));
     def->enum_labels.push_back(L("Concentric"));
@@ -1383,6 +1386,7 @@ void PrintConfigDef::init_fff_params()
     def->cli = "bottom-fill-pattern|external-fill-pattern=s";
     def->enum_keys_map = &ConfigOptionEnum<InfillPattern>::get_enum_values();
     def->enum_values.push_back("rectilinear");
+    def->enum_values.push_back("rectilineararoundholes");
     def->enum_values.push_back("monotonic");
     def->enum_values.push_back("monotonicgapfill");
     def->enum_values.push_back("concentric");
@@ -1392,6 +1396,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_values.push_back("octagramspiral");
     def->enum_values.push_back("smooth");
     def->enum_labels.push_back(L("Rectilinear"));
+    def->enum_labels.push_back(L("Rectilinear around holes"));
     def->enum_labels.push_back(L("Monotonic"));
     def->enum_labels.push_back(L("Monotonic (filled)"));
     def->enum_labels.push_back(L("Concentric"));
@@ -1412,6 +1417,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_keys_map = &ConfigOptionEnum<InfillPattern>::get_enum_values();
     def->enum_values.push_back("smooth");
     def->enum_values.push_back("rectilinear");
+    def->enum_values.push_back("rectilineararoundholes");
     def->enum_values.push_back("rectilineargapfill");
     def->enum_values.push_back("monotonic");
     def->enum_values.push_back("monotonicgapfill");
@@ -1422,6 +1428,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_values.push_back("octagramspiral");
     def->enum_labels.push_back(L("Ironing"));
     def->enum_labels.push_back(L("Rectilinear"));
+    def->enum_labels.push_back(L("Rectilinear around holes"));
     def->enum_labels.push_back(L("Rectilinear (filled)"));
     def->enum_labels.push_back(L("Monotonic"));
     def->enum_labels.push_back(L("Monotonic (filled)"));
@@ -2374,6 +2381,7 @@ void PrintConfigDef::init_fff_params()
         "\nIf you want an 'aligned' pattern, set 90° to the fill angle increment setting.");
     def->enum_keys_map = &ConfigOptionEnum<InfillPattern>::get_enum_values();
     def->enum_values.push_back("rectilinear");
+    def->enum_values.push_back("rectilineararoundholes");
     def->enum_values.push_back("monotonic");
     def->enum_values.push_back("grid");
     def->enum_values.push_back("triangles");
@@ -2392,6 +2400,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_values.push_back("supportcubic");
     def->enum_values.push_back("lightning");
     def->enum_labels.push_back(L("Rectilinear"));
+    def->enum_labels.push_back(L("Rectilinear around holes"));
     def->enum_labels.push_back(L("Monotonic"));
     def->enum_labels.push_back(L("Grid"));
     def->enum_labels.push_back(L("Triangles"));

@@ -3315,6 +3315,320 @@ std::vector<SegmentedIntersectionLine> FillScatteredRectilinear::_vert_lines_for
     return segs;
 }
 
+std::mutex mut;
+void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, const FillParams& params, ExtrusionEntitiesPtr& out) const
+//Polylines FillRectilinearAroundHoles::fill_surface(const Surface *surface, const FillParams &params) const
+{
+    std::unique_lock<std::mutex> lck(mut);
+    std::unique_ptr<ExtrusionEntityCollection> coll = std::make_unique<ExtrusionEntityCollection>();
+    coll->set_can_sort_reverse(true, true);
+    // Shrink the input polygon a bit first to not push the infill lines out of the perimeters.
+//    const float INFILL_OVERLAP_OVER_SPACING = 0.3f;
+    //const float INFILL_OVERLAP_OVER_SPACING = 0.45f; //merill: what is this value???
+    //assert(INFILL_OVERLAP_OVER_SPACING > 0 && INFILL_OVERLAP_OVER_SPACING < 0.5f);
+
+    // Rotate polygons so that we can work with vertical lines here
+    std::pair<float, Point> rotate_vector = this->_infill_direction(surface);
+    //rotate_vector.first += 0; // extra rotation
+    float pattern_shift = 0.0f; // extra shift
+
+    assert(params.density > 0.0001f);
+    coord_t line_spacing = _line_spacing_for_density(params.density);
+
+    // On the polygons of poly_with_offset, the infill lines will be connected.
+    ExPolygonWithOffset poly_with_offset(
+        surface->expolygon, 
+        - rotate_vector.first, 
+        (scale_t(0 /*this->overlap*/ - /*(0.5 - INFILL_OVERLAP_OVER_SPACING)*/ 0.05 * this->get_spacing())), // outer offset, have to be > to the inner one (less negative)
+        // inner offset (don't put 0.5, as it will cut full-filled area when it's exactly at the right place)
+        // Note: this will put the fill 2% too far into the perimeter.
+        (scale_t(0 /*this->overlap*/ - 0.48f * this->get_spacing())));
+    if (poly_with_offset.n_contours_inner == 0) {
+        // Not a single infill line fits.
+        //Prusa: maybe one shall trigger the gap fill here?
+        //supermerill: not possible here, gapfill return a ThickPolyline, not a Polyline. Have to it after that, to fill un-exterded areas.
+        return;
+    }
+
+    BoundingBox bounding_box = poly_with_offset.bounding_box_src();
+
+    // define flow spacing according to requested density
+    if ((params.full_infill() && !params.dont_adjust) || line_spacing == 0 ) {
+        //it's == this->_adjust_solid_spacing(bounding_box.size()(0), line_spacing) because of the init_spacing
+        line_spacing = scale_(this->get_spacing());
+    } else if (!params.full_infill()) {
+        // extend bounding box so that our pattern will be aligned with other layers
+        // Transform the reference point to the rotated coordinate system.
+        Point refpt = rotate_vector.second.rotated(- rotate_vector.first);
+        // align_to_grid will not work correctly with positive pattern_shift.
+        coord_t pattern_shift_scaled = scale_t(pattern_shift) % line_spacing;
+        refpt.x() -= (pattern_shift_scaled >= 0) ? pattern_shift_scaled : (line_spacing + pattern_shift_scaled);
+        bounding_box.merge(align_to_grid(
+            bounding_box.min, 
+            Point(line_spacing, line_spacing), 
+            refpt));
+    }
+
+
+    // Intersect a set of equally spaced vertical lines with expolygon.
+    std::vector<SegmentedIntersectionLine> segs = _vert_lines_for_polygon(poly_with_offset, bounding_box, params, line_spacing);
+
+    slice_region_by_vertical_lines(this, segs, poly_with_offset);
+
+    //all the works is done HERE
+    // Connect by horizontal / vertical links, classify the links based on link_max_length as too long.
+    connect_segment_intersections_by_contours(poly_with_offset, segs, params, link_max_length);
+
+
+#ifdef _DEBUG
+    {
+        static int iRun = 0;
+        std::stringstream filename;
+        filename << this->layer_id<<"_" << iRun++<<"_";
+        filename << "FillRectilinear.svg";
+        ::Slic3r::SVG svg(filename.str()); // , scale_(1.));
+        svg.draw(poly_with_offset.polygons_outer, "black");
+        svg.draw(poly_with_offset.polygons_src, "grey");
+        svg.draw(poly_with_offset.polygons_inner, "white");
+        // Paint the segments and finalize the SVG file.
+        for (size_t i_seg = 0; i_seg < segs.size(); ++ i_seg) {
+            SegmentedIntersectionLine &sil = segs[i_seg];
+            for (size_t i = 0; i < sil.intersections.size();) {
+                size_t j = i + 1;
+                for (; j < sil.intersections.size() && sil.intersections[j].is_inner(); ++ j) ;
+                if (i + 1 == j) {
+                    svg.draw(Line(Point(sil.pos, sil.intersections[i].pos()), Point(sil.pos, sil.intersections[j].pos())), "blue");
+                } else {
+                    svg.draw(Line(Point(sil.pos, sil.intersections[i].pos()), Point(sil.pos, sil.intersections[i+1].pos())), "green");
+                    svg.draw(Line(Point(sil.pos, sil.intersections[i+1].pos()), Point(sil.pos, sil.intersections[j-1].pos())), (j - i + 1 > 4) ? "yellow" : "magenta");
+                    svg.draw(Line(Point(sil.pos, sil.intersections[j-1].pos()), Point(sil.pos, sil.intersections[j].pos())), "green");
+                }
+                i = j + 1;
+            }
+        }
+        svg.Close();
+    }
+#endif /* SLIC3R_DEBUG */
+        //static int iRun = 0;
+        //std::stringstream filename;
+        //filename << this->layer_id<<"_" << iRun++<<"_";
+        //filename << "FillPerso.svg";
+        //::Slic3r::SVG svg(filename.str()); // , scale_(1.));
+        //svg.draw(poly_with_offset.polygons_src.contour, "black");
+        //svg.draw(union_ex(poly_with_offset.polygons_outer)[0].contour, "brown");
+        //svg.draw(union_ex(poly_with_offset.polygons_inner)[0].contour, "grey");
+        //svg.draw(union_ex(poly_with_offset.polygons_inner)[0].holes, "white");
+        //svg.draw(union_ex(poly_with_offset.polygons_outer)[0].holes, "orange");
+        //svg.draw(poly_with_offset.polygons_src.holes, "#333333");
+        
+
+    //use a simple pattern. TODO: conenctions over contour if possible
+    std::vector<ExtrusionEntityCollection*> all_multipaths;
+    std::unique_ptr<ExtrusionEntityCollection> current_paths = std::make_unique<ExtrusionEntityCollection>();
+    current_paths->set_can_sort_reverse(false, true);
+    ExtrusionRole good_role = getRoleFromSurfaceType(params, surface);
+    // Paint the segments and finalize the SVG file.
+    for (size_t i_seg = 0; i_seg < segs.size(); ++i_seg) {
+        SegmentedIntersectionLine &sil = segs[i_seg];
+        Polyline                   poly;
+        bool contour = false;
+        for (size_t i = 0; i < sil.intersections.size(); i++) {
+            SegmentIntersection &intersec = sil.intersections[i];
+            bool  is_on_ply = i > 0 && i + 1 < sil.intersections.size();
+            is_on_ply = is_on_ply && sil.intersections[i + 1].iContour == intersec.iContour;
+            is_on_ply = is_on_ply && intersec.type == intersec.OUTER_HIGH;
+            //if(intersec.type == intersec.INNER_LOW)
+            //    svg.draw(Point(sil.pos, intersec.pos()), "cyan", scale_t(0.05));
+            //else if (intersec.type == intersec.INNER_HIGH)
+            //    svg.draw(Point(sil.pos, intersec.pos()), "blue", scale_t(0.05));
+            //else if (intersec.type == intersec.OUTER_LOW)
+            //    svg.draw(Point(sil.pos, intersec.pos()), "orange", scale_t(0.05));
+            //else if (intersec.type == intersec.OUTER_HIGH)
+            //    svg.draw(Point(sil.pos, intersec.pos()), "red", scale_t(0.05));
+            //else if (intersec.prev_on_contour_type == SegmentIntersection::LinkType::Down || intersec.prev_on_contour_type == SegmentIntersection::LinkType::Up
+            //        || intersec.next_on_contour_type == SegmentIntersection::LinkType::Down || intersec.next_on_contour_type == SegmentIntersection::LinkType::Up)
+            //    svg.draw(Point(sil.pos, intersec.pos()), "green", scale_t(0.02));
+            //&&
+                //(intersec.prev_on_contour_type == SegmentIntersection::LinkType::Down || intersec.prev_on_contour_type == SegmentIntersection::LinkType::Up
+                    //|| intersec.next_on_contour_type == SegmentIntersection::LinkType::Down || intersec.next_on_contour_type == SegmentIntersection::LinkType::Up);
+            if (is_on_ply) {
+                assert(i > 0);
+                // Save current path
+                if (poly.size() > 1) {
+                    poly.append(Point(sil.pos, intersec.pos()));
+                    //svg.draw(poly, "cyan", scale_t(0.01));
+                    std::unique_ptr<ExtrusionPath> path(
+                        new ExtrusionPath(good_role, params.flow.mm3_per_mm() * params.flow_mult,
+                                          (float) (params.flow.width() * params.flow_mult),
+                                          (float) params.flow.height(), true));
+                    path->polyline = std::move(poly);
+                    current_paths->append(path);
+                    poly.clear();
+                }
+
+                // Create travel
+                SegmentIntersection &intersec_next = sil.intersections[i + 1];
+                assert(intersec.is_hole == intersec_next.is_hole);
+                assert(! intersec.is_hole  || (sil.intersections[i - 1].iContour != intersec.iContour));
+                // use intersec.iContour instead of intersec.iContour, to be abit farther away from the real contour
+                const coord_t scaled_spacing = params.flow.scaled_spacing();
+                bool previous_is_near_enough = sil.intersections[i - 1].iContour != intersec.iContour &&
+                                               std::abs(sil.intersections[i - 1].pos() - intersec.pos()) < scaled_spacing
+                                               && poly_with_offset.contour(sil.intersections[i - 1].iContour).size() == poly_with_offset.contour(intersec.iContour).size();
+                if (previous_is_near_enough) {
+                    assert(poly_with_offset.contour(sil.intersections[i - 1].iContour).size() > intersec.iSegment && poly_with_offset.contour(sil.intersections[i - 1].iContour).size() > intersec_next.iSegment);
+                    assert(poly_with_offset.contour(intersec.iContour).size() > intersec.iSegment && poly_with_offset.contour(intersec.iContour).size() > intersec_next.iSegment);
+                    previous_is_near_enough = previous_is_near_enough &&
+                                              poly_with_offset.contour(sil.intersections[i - 1].iContour)[intersec.iSegment].distance_to_square(poly_with_offset.contour(intersec.iContour)[intersec.iSegment])
+                                                  < scaled_spacing * scaled_spacing;
+                }
+                const Polygon &hole_poly = previous_is_near_enough ?
+                                               poly_with_offset.contour(sil.intersections[i - 1].iContour) :
+                                               poly_with_offset.contour(intersec.iContour);
+
+                // next intersec
+                //assert(intersec_next.type == intersec.OUTER_LOW);
+                assert(hole_poly.size() > intersec.iSegment && hole_poly.size() > intersec_next.iSegment);
+                // go both dir, choose lower one
+                poly.append(Point(sil.pos, intersec.pos()));
+                double length1_sqr = 0;
+                size_t idx_pt   = intersec.iSegment;
+                size_t last_idx = intersec_next.iSegment;
+                while (idx_pt != last_idx) {
+                    length1_sqr += poly.back().distance_to_square(hole_poly.points[idx_pt]);
+                    poly.append(hole_poly.points[idx_pt]);
+                    // go next point
+                    if (++idx_pt >= hole_poly.size())
+                        idx_pt = 0;
+                }
+                length1_sqr += poly.back().distance_to_square(Point(sil.pos, intersec_next.pos()));
+                // other dir
+                double   length2_sqr = 0;
+                Polyline poly2;
+                poly2.append(Point(sil.pos, intersec.pos()));
+                idx_pt   = (intersec.iSegment == 0 ? hole_poly.size() - 1 : intersec.iSegment - 1);
+                last_idx = (intersec_next.iSegment == 0 ? hole_poly.size() - 1 : intersec_next.iSegment - 1);
+                while (idx_pt != last_idx) {
+                    length2_sqr += poly2.back().distance_to_square(hole_poly.points[idx_pt]);
+                    poly2.append(hole_poly.points[idx_pt]);
+                    // go next point
+                    if (--idx_pt >= hole_poly.size())
+                        idx_pt = hole_poly.size() - 1;
+                }
+                length2_sqr += poly2.back().distance_to_square(Point(sil.pos, intersec_next.pos()));
+                // TODO: do both travel at the same time, end the loop when finishing one.
+                if (length1_sqr > length2_sqr && poly2.size() > 1)
+                    poly = poly2;
+
+                // Save travel
+                if (poly.size() > 1) {
+                    poly.append(Point(sil.pos, intersec_next.pos()));
+                    //if (length1_sqr > length2_sqr)
+                    //    svg.draw(poly, "red", scale_t(0.01));
+                    //else
+                    //    svg.draw(poly, "blue", scale_t(0.01));
+                    ExtrusionPath *path = new ExtrusionPath(good_role,
+                                                            params.flow.mm3_per_mm() * params.flow_mult * 0.01,
+                                                            (float) (params.flow.width() * 0.1),
+                                                            (float) params.flow.height(), true);
+                    path->polyline      = std::move(poly);
+                    current_paths->set_entities().push_back(path);
+                    poly.clear();
+                }
+                //else if(poly.empty()) {
+                //        assert(false);
+                //        svg.draw(poly.front(), "grey", scale_t(0.1));
+                //}
+
+                //do the next intersect already
+                poly.append(Point(sil.pos, intersec_next.pos()));
+                i++;
+            //} else if (intersec.type == intersec.OUTER_HIGH && i + 1 < sil.intersections.size()) {
+            //    // hit contour
+            //    poly.append(Point(sil.pos, intersec.pos()));
+                contour = true;
+            } else {
+                poly.append(Point(sil.pos, intersec.pos()));
+            }
+        }
+        if (poly.size() > 1) {
+            //svg.draw(poly, "lime", scale_t(0.01));
+            ExtrusionPath *path = new ExtrusionPath(good_role, params.flow.mm3_per_mm() * params.flow_mult,
+                                                    (float) (params.flow.width() * params.flow_mult),
+                                                    (float) params.flow.height(), true);
+            path->polyline      = std::move(poly);
+            current_paths->set_entities().push_back(path);
+        }
+        if (!current_paths->empty()) {
+            all_multipaths.push_back(current_paths.get());
+            coll->append(current_paths);
+            current_paths = std::make_unique<ExtrusionEntityCollection>();
+            current_paths->set_can_sort_reverse(false, true);
+        }
+    }
+    //svg.Close();
+
+    if (!current_paths->empty()) {
+        all_multipaths.push_back(current_paths.get());
+        coll->append(current_paths);
+    }
+
+    // paths must be rotated back
+    for (ExtrusionEntityCollection *multi : all_multipaths) {
+        for (ExtrusionEntity *entity : multi->entities()) {
+            assert(dynamic_cast<ExtrusionPath*>(entity));
+            ExtrusionPath &path = *static_cast<ExtrusionPath*>(entity);
+            // No need to translate, the absolute position is irrelevant.
+            // it->translate(- rotate_vector.second(0), - rotate_vector.second(1));
+            // assert(! it->has_duplicate_points());
+            path.polyline.as_polyline().remove_duplicate_points();
+            path.polyline.as_polyline().rotate(rotate_vector.first);
+            // FIXME rather simplify the paths to avoid very short edges?
+            // assert(! it->has_duplicate_points());
+            path.polyline.as_polyline().remove_duplicate_points();
+        }
+    }
+
+    // change flow to 100% if needed
+    // ensure it doesn't over or under-extrude
+    double mult_flow = 1;
+    if (!params.dont_adjust && params.full_infill() && !params.flow.bridge() && params.fill_exactly){
+        // compute the path of the nozzle -> extruded volume
+        double extruded_volume = 0;
+        for (ExtrusionEntityCollection *multi : all_multipaths) {
+            for (ExtrusionEntity *entity : multi->entities()) {
+                assert(dynamic_cast<ExtrusionPath*>(entity));
+                ExtrusionPath &path = *static_cast<ExtrusionPath*>(entity);
+                double length_tot = 0;
+                const Points &pts = path.polyline.get_points();
+                const Point *previous = &pts.front();
+                for(auto it = pts.begin()+1;it != pts.end(); ++it) {
+                    length_tot += unscaled(previous->distance_to(*it));
+                    previous = &*it;
+                }
+                extruded_volume += length_tot * path.mm3_per_mm;
+            }
+        }
+        // compute real volume
+        double polyline_volume = compute_unscaled_volume_to_fill(surface, params);
+        if (extruded_volume != 0 && polyline_volume != 0) mult_flow *= polyline_volume / extruded_volume;
+        //failsafe, it can happen
+        if (mult_flow > 1.3) mult_flow = 1.3;
+        if (mult_flow < 0.8) mult_flow = 0.8;
+        for (ExtrusionEntityCollection *multi : all_multipaths) {
+            for (ExtrusionEntity *entity : multi->entities()) {
+                assert(dynamic_cast<ExtrusionPath*>(entity));
+                static_cast<ExtrusionPath*>(entity)->mm3_per_mm *= mult_flow;
+            }
+        }
+        BOOST_LOG_TRIVIAL(info) << "Layer " << layer_id << ": Fill process extrude " << extruded_volume << " mm3 for a volume of " << polyline_volume << " mm3 : we mult the flow by " << mult_flow;
+    }
+
+    if (!coll->empty()) {
+        coll->chained_path_from(coll->first_point());
+        out.push_back(coll.release());
+    }
+}
 
 void
 FillRectilinearSawtooth::fill_surface_extrusion(const Surface *surface, const FillParams &params, ExtrusionEntitiesPtr &out) const {

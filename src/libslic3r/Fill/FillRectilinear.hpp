@@ -162,6 +162,15 @@ protected:
     virtual bool is_monotonic() const override { return true; }
 };
 
+class FillRectilinearAroundHoles : public FillRectilinear
+{
+public:
+    Fill* clone() const override { return new FillRectilinearAroundHoles(*this); }
+    ~FillRectilinearAroundHoles() override = default;
+    void fill_surface_extrusion(const Surface* surface, const FillParams& params, ExtrusionEntitiesPtr& out) const override;
+
+};
+
 Points sample_grid_pattern(const ExPolygon &expolygon, coord_t spacing, const BoundingBox &global_bounding_box);
 Points sample_grid_pattern(const ExPolygons &expolygons, coord_t spacing, const BoundingBox &global_bounding_box);
 Points sample_grid_pattern(const Polygons &polygons, coord_t spacing, const BoundingBox &global_bounding_box);

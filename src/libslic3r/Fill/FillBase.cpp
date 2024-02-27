@@ -39,6 +39,7 @@ Fill* Fill::new_from_type(const InfillPattern type)
     case ipRectilinear:         return new FillRectilinear();
     case ipRectilinearWGapFill: return new FillRectilinearWGapFill();
     case ipAlignedRectilinear:  return new FillAlignedRectilinear();
+    case ipRectilinearAroundHoles:return new FillRectilinearAroundHoles();
     case ipMonotonic:           return new FillMonotonic();
     case ipMonotonicWGapFill:   return new FillMonotonicWGapFill();
     case ipScatteredRectilinear:return new FillScatteredRectilinear();
