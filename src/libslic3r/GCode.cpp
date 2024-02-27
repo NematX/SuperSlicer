@@ -6027,10 +6027,39 @@ Polyline GCode::travel_to(std::string &gcode, const Point &point, ExtrusionRole 
             //    m_wipe.reset_path();
             //} else {
             //check if it cross hull
-                auto result = diff_pl(Polylines{ travel }, to_polygons(m_layer->lslices));
-                if (result.empty()) {
-                    m_wipe.reset_path();
+
+            //TODO: add bbox cache & checks like for can_cross_perimeter
+            bool has_intersect = false;
+            for (const ExPolygon &expoly : m_layer->lslices) {
+                // first, check if it's inside the contour (still, it can go over holes)
+                Polylines diff_result = diff_pl(travel, expoly.contour);
+                if (diff_result.size() == 1 && diff_result.front() == travel)
+                    // not inside/cross this contour, try another one.
+                    continue;
+                if (!diff_result.empty()) {
+                    //it's crossing this contour!
+                    has_intersect = true;
+                } else {
+                    // it's inside this contour, does it cross a hole?
+                    Line  travel_line;
+                    Point whatever;
+                    for (size_t idx_travel = travel.size() - 1; idx_travel > 0; --idx_travel) {
+                        travel_line.a = travel.points[idx_travel];
+                        travel_line.b = travel.points[idx_travel - 1];
+                        for (const Polygon &hole : expoly.holes) {
+                            if (hole.first_intersection(travel_line, &whatever) ||
+                                Line(hole.first_point(), hole.last_point()).intersection(travel_line, &whatever)) {
+                                has_intersect = true;
+                                break;
+                            }
+                        }
+                    }
                 }
+                break;
+            }
+            if (!has_intersect) {
+                m_wipe.reset_path();
+            }
             //}
         }
 
@@ -6236,11 +6265,18 @@ bool GCode::can_cross_perimeter(const Polyline& travel, bool offset)
                     expoly_2_bb.second.contains(travel.back()) &&
                     expoly_2_bb.second.contains(travel.points[travel.size() / 2])) {
                     // first, check if it's inside the contour (still, it can go over holes)
-                    if (!diff_pl(travel, expoly_2_bb.first.contour).empty())
+                    Polylines diff_result = diff_pl(travel, expoly_2_bb.first.contour);
+                    if (diff_result.size() == 1 && diff_result.front() == travel)
+                    //if (!diff_pl(travel, expoly_2_bb.first.contour).empty())
                         continue;
-                    // second, check if it's going over a hole
+                    //second, check if it's crossing this contour
+                    if (!diff_result.empty()) {
+                        //has_intersect = true;
+                        return true;
+                    }
+                    // third, check if it's going over a hole
                     // TODO: kdtree to get the ones interesting
-                    bool  has_intersect = false;
+                    //bool  has_intersect = false;
                     Line  travel_line;
                     Point whatever;
                     for (const Polygon &hole : expoly_2_bb.first.holes) {
@@ -6249,15 +6285,16 @@ bool GCode::can_cross_perimeter(const Polyline& travel, bool offset)
                             travel_line.b = travel.points[idx_travel - 1];
                             if (hole.first_intersection(travel_line, &whatever) ||
                                 Line(hole.first_point(), hole.last_point()).intersection(travel_line, &whatever)) {
-                                has_intersect = true;
-                                break;
+                                //has_intersect = true;
+                                //break;
+                                return true;
                             }
                         }
-                        if (has_intersect)
-                            break;
+                        //if (has_intersect)
+                        //    break;
                     }
                     // if inside contour and does not inersect hole -> inside expoly, you don't need to avoid.
-                    if (!has_intersect)
+                    //if (!has_intersect)
                         return false;
                 }
             }
