@@ -374,3 +374,205 @@ void s_noperi_set(string &out set_val, int idx)
 	if (idx == 0) set_int("no_perimeter_unsupported_algo",0);
 	else set_string("no_perimeter_unsupported_algo", "filled");
 }
+
+
+/// simple modes
+
+// s_simple_fill_pattern
+int s_simple_fill_pattern_get(string &out get_val)
+{
+	string seam_pos;
+	get_string("fill_pattern", seam_pos);
+    if (seam_pos == "rectilinear")
+        return 0;
+    if (seam_pos == "grid")
+        return 1;
+    if (seam_pos == "triangles")
+        return 2;
+    if (seam_pos == "stars")
+        return 3;
+    if (seam_pos == "cubic")
+        return 4;
+    if (seam_pos == "gyroid")
+        return 5;
+    if (seam_pos == "honeycomb")
+        return 6;
+    if (seam_pos == "lightning")
+        return 7;
+	return 8;
+}
+
+void s_simple_fill_pattern_set(string &in set_val, int idx)
+{
+    if (set_val != "other") {
+        set_string("fill_pattern", set_val);
+    } else {
+        back_initial_value("fill_pattern");
+    }
+}
+
+// s_simple_top_fill_pattern
+int s_simple_top_fill_pattern_get(string &out get_val)
+{
+	string seam_pos;
+	get_string("top_fill_pattern", seam_pos);
+    if (seam_pos == "monotonic")
+        return 0;
+    if (seam_pos == "monotonicgapfill")
+        return 1;
+    if (seam_pos == "concentric")
+        return 2;
+    if (seam_pos == "concentricgapfill")
+        return 3;
+	return 4;
+}
+
+void s_simple_top_fill_pattern_set(string &in set_val, int idx)
+{
+    if (set_val != "other") {
+        set_string("top_fill_pattern", set_val);
+    } else {
+        back_initial_value("fill_pattern");
+    }
+}
+
+// s_easy_speed
+int s_easy_speed_get(string &out get_val)
+{
+	float speed = get_computed_float("default_speed");
+    if (speed < 25)
+        return 0; // quality
+    if (speed < 35)
+        return 1; // normal
+	return 2; //speed
+}
+
+void s_easy_speed_set(string &in set_val, int idx)
+{
+    if (idx == 0 ) {
+        //quality
+        set_float("default_speed", 20);
+    } else if (idx == 1 ) {
+        //normal
+        set_float("default_speed", 30);
+    } else {
+        // speed
+        set_float("default_speed", 50);
+    }
+}
+
+// s_fill_angle
+int s_fill_angle_get(string &out get_val)
+{
+    float incr = get_float("fill_angle_increment");
+    bool can_cross = get_bool("fill_angle_cross");
+    int nb_template_val = size("fill_angle_template");
+    if (!can_cross && nb_template_val == 0 && incr == 0)
+        return 0; // unidir
+    if (can_cross && nb_template_val == 0 && incr == 0)
+        return 1; // cross
+    if (!can_cross && nb_template_val == 4 && incr == 0) {
+        if(get_float_idx("fill_angle_template",0)==0
+        && get_float_idx("fill_angle_template",1)==90
+        && get_float_idx("fill_angle_template",2)==45
+        && get_float_idx("fill_angle_template",3)==135) {
+            return 2; //Quasi-Isotropic
+        }
+    }
+	return 3; 
+}
+
+void s_fill_angle_set(string &in set_val, int idx)
+{
+    if (idx == 0) {
+        //unidir
+        set_float("fill_angle_increment", 0);
+        set_bool("fill_angle_cross", false);
+        clear("fill_angle_template");
+    } else if (idx == 1 ) {
+        //cross
+        set_float("fill_angle_increment", 0);
+        set_bool("fill_angle_cross", true);
+        clear("fill_angle_template");
+    } else if (idx == 2) {
+        // Quasi-Isotropic
+        set_float("fill_angle_increment", 0);
+        set_bool("fill_angle_cross", false);
+        clear("fill_angle_template");
+        set_float_idx("fill_angle_template", 0, 0);
+        set_float_idx("fill_angle_template", 1, 90);
+        set_float_idx("fill_angle_template", 2, 45);
+        set_float_idx("fill_angle_template", 3, 135);
+    } else {
+        back_initial_value("fill_angle_cross");
+        back_initial_value("fill_angle_template");
+    }
+}
+
+// s_has_skirts
+int s_has_skirts_get()
+{
+    int skirts_count = get_int("skirts");
+    if (skirts_count > 0)
+        return 1;
+    return 0;
+}
+
+void s_has_skirts_set(bool has)
+{
+    if (has) {
+        set_int("skirts", 3);
+    } else {
+        set_int("skirts", 0);
+    }
+}
+
+// s_support_material_angle
+int s_support_material_angle_get(string &out get_val)
+{
+    bool has_sup = get_bool("support_material");
+    bool is_auto = get_bool("support_material_auto");
+    int angle = get_int("support_material_threshold");
+    if (!has_sup || !is_auto) {
+        return 0; // none
+    }
+    if (angle == 0) {
+        return 1; // auto
+    }
+    if (angle < 25) {
+        return 2; //easy
+    }
+    if (angle < 55) {
+        return 3; //medium
+    }
+	return 4; //hard
+}
+
+void s_support_material_angle_set(string &in set_val, int idx)
+{
+    if (idx == 0) {
+        //none
+        set_bool("support_material", true);
+        set_bool("support_material_auto", false);
+        back_initial_value("support_material_threshold");
+    } else if (idx == 1 ) {
+        //auto
+        set_bool("support_material", true);
+        set_bool("support_material_auto", true);
+        set_int("support_material_threshold", 0);
+    } else if (idx == 2) {
+        // easy
+        set_bool("support_material", true);
+        set_bool("support_material_auto", true);
+        set_int("support_material_threshold", 20);
+    } else if (idx == 3) {
+        set_bool("support_material", true);
+        set_bool("support_material_auto", true);
+        set_int("support_material_threshold", 50);
+    } else {
+        set_bool("support_material", true);
+        set_bool("support_material_auto", true);
+        set_int("support_material_threshold", 70);
+    }
+}
+

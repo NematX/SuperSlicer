@@ -45,7 +45,7 @@ group:silent_mode_event:Firmware
         setting:gcode_ascii
 	end_line
 group:Cooling fan
-	setting:fan_printer_min_speed
+	setting:tags$Advanced$Expert:fan_printer_min_speed
 	line:Speedup time
 		setting:label$:fan_speedup_time
 		setting:label$Only for overhangs:fan_speedup_overhangs
