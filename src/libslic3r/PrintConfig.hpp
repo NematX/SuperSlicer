@@ -1031,7 +1031,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat,               extra_loading_move))
     ((ConfigOptionPercents,            extruder_fan_offset))
     ((ConfigOptionFloats,              extruder_temperature_offset))
-    ((ConfigOptionString,              extrusion_axis))
+    // ((ConfigOptionString,              extrusion_axis))
     ((ConfigOptionFloats,              extrusion_multiplier))
     ((ConfigOptionFloat,               fan_kickstart))
     ((ConfigOptionBool,                fan_percentage))
@@ -1155,7 +1155,7 @@ static inline std::string get_extrusion_axis(const GCodeConfig& cfg)
 {
     return
         ((cfg.gcode_flavor.value == gcfMach3) || (cfg.gcode_flavor.value == gcfMachinekit) || (cfg.gcode_flavor.value == gcfNematX)) ? "A" :
-        (cfg.gcode_flavor.value == gcfNoExtrusion) ? "" : cfg.extrusion_axis.value;
+        (cfg.gcode_flavor.value == gcfNoExtrusion) ? "" : "E";
 }
 
 // This object is mapped to Perl as Slic3r::Config::Print.
