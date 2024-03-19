@@ -201,6 +201,7 @@ public:
 	void				set_max_win_width(int max_win_width);
 
 	bool				is_activated() { return sizer != nullptr; }
+	bool				use_custom_ctrl() { return m_use_custom_ctrl; }
 
 protected:
 	std::map<t_config_option_key, Option>	m_options;

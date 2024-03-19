@@ -2926,7 +2926,11 @@ PageShp TabFilament::create_filament_overrides_page()
             opt.opt.label = opt.opt.get_full_label();
             line = optgroup->create_single_option_line(opt);
         } else {
-            line = optgroup->create_single_option_line(optgroup->get_option_and_register(opt_key, 0));
+            Option opt = optgroup->create_option_from_def(opt_key, opt_index);
+            opt.opt.mode = ConfigOptionMode(opt.opt.mode & (~comSimple));
+	        if(optgroup->use_custom_ctrl()) // fill group and category values just for options from Settings Tab
+		        optgroup->register_to_search(opt_key, opt.opt, opt_index, true);
+            line = optgroup->create_single_option_line(opt);
         }
 
         line.near_label_widget = [this, optgroup, opt_key, opt_index](wxWindow* parent) {
