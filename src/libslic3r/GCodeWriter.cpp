@@ -381,7 +381,9 @@ std::string GCodeWriter::reset_e(bool force)
     }
 
     if (FLAVOR_IS(gcfNematX)) {
-        std::string gcode = m_extrusion_axis + "[SET_POSITION POS=0]";
+        double retract_length = m_tool->retract_length();
+        m_tool->reset_E(retract_length);
+        std::string gcode = m_extrusion_axis + std::string("[SET_POSITION POS=") + std::to_string(retract_length) + std::string("]");
         if (this->config.gcode_comments) gcode += " ; reset extrusion distance";
         gcode +="\n";
         return gcode;

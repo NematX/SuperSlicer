@@ -32,7 +32,7 @@ public:
     virtual double unretract();
     virtual void   reset_retract();
     double E() const { return m_E; }
-    void   reset_E() { m_E = 0.; }
+    void   reset_E(double new_val = 0) { m_E = new_val; }
     double e_per_mm(double mm3_per_mm) const { return mm3_per_mm * m_e_per_mm3; }
     double e_per_mm3() const { return m_e_per_mm3; }
     // Used filament volume in mm^3.
