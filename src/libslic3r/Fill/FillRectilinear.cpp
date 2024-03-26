@@ -3336,7 +3336,7 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
     float pattern_shift = 0.0f; // extra shift
 
     assert(params.density > 0.0001f);
-    coord_t line_spacing = _line_spacing_for_density(params.density);
+    coord_t line_spacing = _line_spacing_for_density(params);
 
     // On the polygons of poly_with_offset, the infill lines will be connected.
     ExPolygonWithOffset poly_with_offset(
