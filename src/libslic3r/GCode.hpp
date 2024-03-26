@@ -515,6 +515,8 @@ private:
     // Processor
     GCodeProcessor m_processor;
 
+    std::function<void()> m_throw_if_canceled = [](){};
+
     std::string _extrude(const ExtrusionPath &path, const std::string &description, double speed = -1);
     void _extrude_line(std::string& gcode_str, const Line& line, const double e_per_mm, const std::string& comment);
     void _extrude_line_cut_corner(std::string& gcode_str, const Line& line, const double e_per_mm, const std::string& comment, Point& last_pos, const double path_width);
