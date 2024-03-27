@@ -1785,6 +1785,51 @@ void GCodeProcessor::set_extruder_temp(float temp) {
         m_extruder_temps[m_extruder_id] = temp;
 }
 
+#if __has_include(<charconv>)
+    template <typename T, typename = void>
+    struct is_from_chars_convertible : std::false_type {};
+    template <typename T>
+    struct is_from_chars_convertible<T, std::void_t<decltype(std::from_chars(std::declval<const char*>(), std::declval<const char*>(), std::declval<T&>()))>> : std::true_type {};
+#endif
+
+// Returns true if the number was parsed correctly into out and the number spanned the whole input string.
+template<typename T>
+[[nodiscard]] static inline bool parse_number(const std::string_view sv, T &out)
+{
+    // https://www.bfilipek.com/2019/07/detect-overload-from-chars.html#example-stdfromchars
+#if __has_include(<charconv>)
+    // Visual Studio 19 supports from_chars all right.
+    // OSX compiler that we use only implements std::from_chars just for ints.
+    // GCC that we compile on does not provide <charconv> at all.
+    if constexpr (is_from_chars_convertible<T>::value) {
+        auto str_end = sv.data() + sv.size();
+        auto [end_ptr, error_code] = std::from_chars(sv.data(), str_end, out);
+        return error_code == std::errc() && end_ptr == str_end;
+    }
+    else
+#endif
+    {
+        // Legacy conversion, which is costly due to having to make a copy of the string before conversion.
+        try {
+            assert(sv.size() < 1024);
+	    assert(sv.data() != nullptr);
+            std::string str { sv };
+            size_t read = 0;
+            if constexpr (std::is_same_v<T, int>)
+                out = std::stoi(str, &read);
+            else if constexpr (std::is_same_v<T, long>)
+                out = std::stol(str, &read);
+            else if constexpr (std::is_same_v<T, float>)
+                out = string_to_double_decimal_point(str, &read);
+            else if constexpr (std::is_same_v<T, double>)
+                out = string_to_double_decimal_point(str, &read);
+            return str.size() == read;
+        } catch (...) {
+            return false;
+        }
+    }
+}
+
 void GCodeProcessor::process_gcode_line(const GCodeReader::GCodeLine& line, bool producers_enabled)
 {
 /* std::cout << line.raw() << std::endl; */
@@ -1977,6 +2022,27 @@ void GCodeProcessor::process_gcode_line(const GCodeReader::GCodeLine& line, bool
         default:
             break;
         }
+        if (cmd.at(1) == '[' && m_flavor == GCodeFlavor::gcfNematX && line.raw().find("SET_POSITION") != std::string::npos
+            && line.raw().find("POS=") != std::string::npos) {
+            char axis = cmd.at(0);
+            size_t str_pos_start = line.raw().find("POS=") + 4;
+            assert(str_pos_start > 0 && str_pos_start != std::string::npos);
+            size_t str_pos_end = line.raw().find("]", str_pos_start);
+            assert(str_pos_end > str_pos_start && str_pos_end != std::string::npos);
+            double pos;
+            if (!parse_number(line.raw().substr(str_pos_start, str_pos_end - str_pos_start), pos)) {
+                BOOST_LOG_TRIVIAL(error) << "GCodeProcessor encountered an invalid value for position set (" << line.raw() << ").";
+                pos = 0;
+            }
+            if(axis == 'X')
+                m_end_position[X] = pos;
+            if(axis == 'Y')
+                m_end_position[Y] = pos;
+            if(axis == 'Z')
+                m_end_position[Z] = pos;
+            if(axis >= 'A' && axis < 'F')
+                m_end_position[E] = pos;
+        }
     } else {
         const std::string &comment = line.raw();
         if (comment.length() > 2) {
@@ -1993,51 +2059,6 @@ void GCodeProcessor::process_gcode_line(const GCodeReader::GCodeLine& line, bool
                 // Process tags embedded into comments. Tag comments always start at the start of a line
                 // with a comment and continue with a tag without any whitespace separator.
                 process_tags(comment.substr(start_idx + 1), producers_enabled);
-        }
-    }
-}
-
-#if __has_include(<charconv>)
-    template <typename T, typename = void>
-    struct is_from_chars_convertible : std::false_type {};
-    template <typename T>
-    struct is_from_chars_convertible<T, std::void_t<decltype(std::from_chars(std::declval<const char*>(), std::declval<const char*>(), std::declval<T&>()))>> : std::true_type {};
-#endif
-
-// Returns true if the number was parsed correctly into out and the number spanned the whole input string.
-template<typename T>
-[[nodiscard]] static inline bool parse_number(const std::string_view sv, T &out)
-{
-    // https://www.bfilipek.com/2019/07/detect-overload-from-chars.html#example-stdfromchars
-#if __has_include(<charconv>)
-    // Visual Studio 19 supports from_chars all right.
-    // OSX compiler that we use only implements std::from_chars just for ints.
-    // GCC that we compile on does not provide <charconv> at all.
-    if constexpr (is_from_chars_convertible<T>::value) {
-        auto str_end = sv.data() + sv.size();
-        auto [end_ptr, error_code] = std::from_chars(sv.data(), str_end, out);
-        return error_code == std::errc() && end_ptr == str_end;
-    }
-    else
-#endif
-    {
-        // Legacy conversion, which is costly due to having to make a copy of the string before conversion.
-        try {
-            assert(sv.size() < 1024);
-	    assert(sv.data() != nullptr);
-            std::string str { sv };
-            size_t read = 0;
-            if constexpr (std::is_same_v<T, int>)
-                out = std::stoi(str, &read);
-            else if constexpr (std::is_same_v<T, long>)
-                out = std::stol(str, &read);
-            else if constexpr (std::is_same_v<T, float>)
-                out = string_to_double_decimal_point(str, &read);
-            else if constexpr (std::is_same_v<T, double>)
-                out = string_to_double_decimal_point(str, &read);
-            return str.size() == read;
-        } catch (...) {
-            return false;
         }
     }
 }
