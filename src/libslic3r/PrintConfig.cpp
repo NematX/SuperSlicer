@@ -2891,7 +2891,7 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Remove all comments");
     def->category = OptionCategory::output;
     def->tooltip = L("Remove comments, including the tags used by the gcode viewer.");
-    def->mode = comExpert;
+    def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionBool(false));
 
     def = this->add("gcode_filename_illegal_char", coString);
@@ -8253,7 +8253,9 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "gap_fill_min_width",
 "gap_fill_overlap",
 "gcode_filename_illegal_char",
-"gcode_line_number","gcode_precision_e",
+"gcode_line_number",
+"gcode_no_comment",
+"gcode_precision_e",
 "gcode_precision_xyz",
 "hole_size_compensation",
 "hole_size_threshold",
@@ -8312,6 +8314,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "perimeter_overlap",
 "perimeter_reverse",
 "perimeter_round_corners",
+"perimeters_hole",
 "print_extrusion_multiplier",
 "print_custom_variables",
 "print_retract_length",
