@@ -63,6 +63,7 @@
 #include "CalibrationBridgeDialog.hpp"
 #include "CalibrationCubeDialog.hpp"
 #include "CalibrationFlowDialog.hpp"
+#include "CalibrationFlowSpeedDialog.hpp"
 #include "CalibrationOverBridgeDialog.hpp"
 #include "CalibrationTempDialog.hpp"
 #include "CalibrationRetractionDialog.hpp"
@@ -1960,6 +1961,10 @@ void GUI_App::bed_leveling_dialog()
 void GUI_App::flow_ratio_dialog()
 {
     change_calibration_dialog(nullptr, new CalibrationFlowDialog(this, mainframe));
+}
+void GUI_App::flow_speed_dialog()
+{
+    change_calibration_dialog(nullptr, new CalibrationFlowSpeedDialog(this, mainframe));
 }
 void GUI_App::over_bridge_dialog()
 {

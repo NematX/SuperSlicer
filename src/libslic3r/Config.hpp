@@ -1363,9 +1363,9 @@ public:
     double                  get_float(size_t idx = 0) const override { return get_abs_value(idx, 1.); }
     bool                    is_percent(size_t idx = 0) const override
     {
-        if (this->is_nil(i))
+        if (this->is_nil(idx))
             return false;
-        return this->get_at(i).percent;
+        return this->get_at(idx).percent;
     }
 
     static inline bool is_nil(const boost::any &to_check) {

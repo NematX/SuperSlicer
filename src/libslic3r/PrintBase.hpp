@@ -442,6 +442,7 @@ public:
         set_status(percent, message, {}, flags);
     }
     void                    set_status(int percent, const std::string& message, const std::vector<std::string>& args, unsigned int flags = SlicingStatus::DEFAULT) const {
+        std::scoped_lock<std::mutex> lock(state_mutex());
         //check if it need an update. Avoid doing a gui update each ms.
         if ((flags & SlicingStatus::SECONDARY_STATE) != 0 && message != m_last_status_message) {
             std::chrono::time_point<std::chrono::system_clock> current_time = std::chrono::system_clock::now();
