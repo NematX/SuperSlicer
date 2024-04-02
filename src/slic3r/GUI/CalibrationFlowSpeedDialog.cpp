@@ -55,8 +55,8 @@ void CalibrationFlowSpeedDialog::create_buttons(wxStdDialogButtonSizer* buttons)
         float layer_height = print_config->option("layer_height")->get_float();
         layer_height = std::max(layer_height, float(print_config->get_computed_value("first_layer_height", 0)));
         float nz = printer_config->option("nozzle_diameter")->get_float(0);
-        float overlap = print_config->option("solid_infill_overlap")->get_float();
-        Flow flow = Flow::new_from_config(FlowRole::frSolidInfill, *print_config, nz, layer_height, overlap, false);
+        float filament_max_overlap = filament_config->option<ConfigOptionPercents>("filament_max_overlap")->get_abs_value(0, 1.);
+        Flow flow = Flow::new_from_config(FlowRole::frSolidInfill, *print_config, nz, layer_height, filament_max_overlap, false);
         float current_flow = flow.mm3_per_mm();
         if (max_speed > 0) {
             max_speed = std::min(max_speed, curr_speed * max_vol_flow / current_flow);
@@ -71,8 +71,8 @@ void CalibrationFlowSpeedDialog::create_buttons(wxStdDialogButtonSizer* buttons)
     }
     
     auto size = wxSize(6 * em_unit(), wxDefaultCoord);
-    float min_speed = filament_config->option("slowdown_below_layer_time")->get_float(0);
-    if(min_speed <= 0)
+    float min_speed = std::max(filament_config->option("min_print_speed")->get_float(0), 0);
+    if (min_speed <= 0)
         min_speed = curr_speed / 10;
     txt_min_speed = new wxTextCtrl(this, wxID_ANY, std::to_string(min_speed), wxDefaultPosition, size);
     txt_min_speed->SetToolTip(_L("Speed of the first patch."));
@@ -134,12 +134,26 @@ std::pair<float, float> CalibrationFlowSpeedDialog::get_cube_size() {
         // enlarge if overlap < 1
         float nz           = printer_config->option("nozzle_diameter")->get_float(0);
         float overlap      = print_config->option("solid_infill_overlap")->get_float();
+        float filament_max_overlap = filament_config->option<ConfigOptionPercents>("filament_max_overlap")->get_abs_value(0, 1.);
+        overlap = std::min(overlap, filament_max_overlap);
         if (overlap < 1) {
-            Flow flow_full = Flow::new_from_config(FlowRole::frSolidInfill, *print_config, nz, layer_height, 1, false);
-            Flow flow      = Flow::new_from_config(FlowRole::frSolidInfill, *print_config, nz, layer_height, overlap,
-                                              false);
-            assert(flow.spacing() > flow_full.spacing());
-            size_x = flow.spacing() / flow_full.spacing();
+            //Flow flow_full = Flow::new_from_config(FlowRole::frSolidInfill, *print_config, nz, layer_height, 1, false);
+            Flow flow_full = Flow::Flow::new_from_config_width(FlowRole::frSolidInfill, 
+                *print_config->option<ConfigOptionFloatOrPercent>("solid_infill_extrusion_width"),
+                *print_config->option<ConfigOptionFloatOrPercent>("solid_infill_extrusion_spacing"),
+                nz, layer_height, 1 /*overlap ratio*/);
+            Flow flow      = Flow::new_from_config(FlowRole::frSolidInfill, *print_config, nz, layer_height, filament_max_overlap, false/*bridge*/);
+
+            if (flow.width() - flow_full.width() < -EPSILON) {
+                //same spacing, -> flow has lower width  and lower flow
+                assert(flow.mm3_per_mm() < flow_full.mm3_per_mm());
+                size_x *= flow_full.width() / flow.width();
+            } else {
+                //same width, -> flow has higher spacing, same flow
+                assert(std::abs(flow.mm3_per_mm() - flow_full.mm3_per_mm()) < EPSILON);
+                assert(flow.spacing() > flow_full.spacing());
+                size_x *= flow.spacing() / flow_full.spacing();
+            }
         }
 
         // add external perimeter width/spacing diff
@@ -194,9 +208,9 @@ void CalibrationFlowSpeedDialog::create_geometry(wxCommandEvent& event_args) {
     DynamicPrintConfig new_print_config = *print_config; //make a copy
     new_print_config.set_key_value("complete_objects", new ConfigOptionBool(true));
     //if skirt, use only one
-    if (print_config->option<ConfigOptionInt>("skirts")->get_int() > 0 && print_config->option<ConfigOptionInt>("skirt_height")->get_int() > 0) {
-        new_print_config.set_key_value("complete_objects_one_skirt", new ConfigOptionBool(true));
-    }
+    //if (print_config->option<ConfigOptionInt>("skirts")->get_int() > 0 && print_config->option<ConfigOptionInt>("skirt_height")->get_int() > 0) {
+    //    new_print_config.set_key_value("complete_objects_one_skirt", new ConfigOptionBool(true));
+    //}
 
     // same for printer config
     DynamicPrintConfig new_printer_config = *printer_config; //make a copy
@@ -208,6 +222,8 @@ void CalibrationFlowSpeedDialog::create_geometry(wxCommandEvent& event_args) {
 
     /// --- custom config ---
     float overlap = print_config->option("solid_infill_overlap")->get_float();
+    float filament_max_overlap = filament_config->option<ConfigOptionPercents>("filament_max_overlap")->get_abs_value(0, 1.);
+    overlap = std::min(overlap, filament_max_overlap);
     float layer_height = print_config->option("layer_height")->get_float();
     layer_height = std::max(layer_height, float(print_config->get_computed_value("first_layer_height", 0)));
     float nz = printer_config->option("nozzle_diameter")->get_float(0);
@@ -240,11 +256,13 @@ void CalibrationFlowSpeedDialog::create_geometry(wxCommandEvent& event_args) {
         //disable ironing post-process
         objs[i]->config.set_key_value("ironing", new ConfigOptionBool(false));
         //set speed
-        float speed = float(min_speed + (i * double(max_speed) / double(min_speed)));
-        objs[i]->config.set_key_value("perimeter_speed", new ConfigOptionFloatOrPercent(speed, false));
-        objs[i]->config.set_key_value("external_perimeter_speed", new ConfigOptionFloatOrPercent(speed, false));
-        objs[i]->config.set_key_value("solid_infill_speed", new ConfigOptionFloatOrPercent(speed, false));
-        objs[i]->config.set_key_value("top_solid_infill_speed", new ConfigOptionFloatOrPercent(speed, false));
+        if (nb_steps > 1){
+            float speed = float(min_speed + i * double(max_speed - min_speed) / (nb_steps - 1));
+            objs[i]->config.set_key_value("perimeter_speed", new ConfigOptionFloatOrPercent(speed, false));
+            objs[i]->config.set_key_value("external_perimeter_speed", new ConfigOptionFloatOrPercent(speed, false));
+            objs[i]->config.set_key_value("solid_infill_speed", new ConfigOptionFloatOrPercent(speed, false));
+            objs[i]->config.set_key_value("top_solid_infill_speed", new ConfigOptionFloatOrPercent(speed, false));
+        }
         // keep first_layer_speed.
     }
 
