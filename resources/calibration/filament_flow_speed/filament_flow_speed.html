@@ -10,7 +10,7 @@
 <tbody>
 <tr>
 <td style="text-align: center;">
-<h1>Filament Flow Calibration (per overlap/speed) by weight</h1>
+<h1>Filament Flow Calibration by weight</h1>
 </td>
 </tr>
 <tr>
@@ -23,5 +23,36 @@
 </tbody>
 </table>
 
+<p><strong>You need to do the bed level calibration before this one.</strong></p>
+<p>This test will help you to choose an extrusion multiplier, a maximum overlap and a curve for the extruder flow compensation for high speed. This is useful to first calibrate a custom printer.</p>
+<p>This calibration is cut in five main steps:
+<ul>
+<li>Main extrusion multiplier estimation.</li>
+<li>Overlap test.</li>
+<li>Slow speed extrusion multiplier calibration.</li>
+<li>Extrusion multiplier speed curve calibration.</li>
+<li>Filament extrusion multipler calibration.</li>
+</ul>
+<p>You will need a precisino scale, with some weight if possible.</p>
+<h2>Main extrusion multiplier estimation.</h2>
+<p>This step will allow you to check what are the maximum extrusion multiplier possible.</p>
+<p>First, you need to select a filament with a good dimensional profile (like prusament). Then create a filament profile with a correct density for it, and let the extrusion multiplier to 1. Set the filament max print speed to something low for your printer/extruder (something like 20mm/s) so it doesn't limit the extusion.</p>
+<p>Then, select below the weight of the samples. A lower weight will print faster, but will be more difficult to measure. If you have some weights, choose a weight you have, so you can compare them. </p>
+<p>Click on "Generate for multiple flow", and print the samples on your printer. The print should be ordered to print first the object that are nearest of 100% flow. Check regularly if a print won't fail. A flow too low can lead to a part that won't adhere enough on the build plate, and a flow too high may "fuse" the part with the nozzle.</p>
+<p>Each object has a name that is their flow percentage. When printed, write on them with a marker their number, so we can identify them. Weight them and report on a table.<p>
+<p>
+<p> here we can see where the curve cross. set the previous value as the minf low and the next as the max flow, regenerate and reprint a plate<p>
+<p>After this, we can now choose a filament extrusion multiplier to this value. Set it in your filament setting and save it.</p>
+<h2>Overlap test</h2>
+<p>The previous test is made at a maximum of 80% overlap. But to have a better strength and adhesion, we want to maximise the overlap. With this test, we'll see what overlap your filament/extruder combo is able to handle.</p>
+<p>Generate and print a first set with a minimum below 80%, and using 100% as a maximum. Be careful, if you use a too low overlap, the object may not stick to the build plate. As with the previosu test, be sure to mark each piece with their overlap number.</p>
+<p>Once again, report them into a table and look at how the curve look.
+<ul><li>If the curve is linear, then choose an overlap where the curve cross the objective weight, or 100% if it doesn't cross.</li>
+<li>If the curve is an asymptote, then choose the highest overlap value that still has a significant impact on the weight.<li>
+</ul>You can do another round if needed. If you ideal overlap is below 80%, then you should redo the first phase (be sure to save your new overlap value in your filament, and/or in all your overlap field in the print profile).</p>
+<h2>Extrusion multiplier speed curve calibration.</h2>
+<p>Now, we have a good idea of the extrusion multiplier and the overlap. This test will tell us what is the inpact of the printing speed.</p>
+<p>Choose your min and max speed (they should already be set, but if the profiles don't have any limit, then you should choose them manually).And again, generate (for multiple speed), print, label, create a curve.</p>
+<p>The cruve should be a kind of inverse asymptote. Now, we have to fill the extruder slippage compensation with value to rectify the curve. When done and saved, regenerate and reprint. It may not be possible to compensate entirely. Choose a maximum print speed, and use it to limit the printing speed for the filament, and/or for the printer (in machine limits, if used), and/or for the print profile</p>
 </body>
 </html>

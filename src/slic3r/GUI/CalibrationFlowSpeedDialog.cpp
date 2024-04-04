@@ -32,7 +32,7 @@ void CalibrationFlowSpeedDialog::create_buttons(wxStdDialogButtonSizer* buttons)
     wxString choices_gram[] = { "0.2","0.5","1","2","5","10" };
     cmb_gram = new wxComboBox(this, wxID_ANY, wxString{ "1" }, wxDefaultPosition, wxDefaultSize, 5, choices_gram);
     cmb_gram->SetToolTip(_L("Choose the size of the patch to print (in gramme). A bigger weight allow to have more precision but it takes longer to print"));
-    cmb_gram->SetSelection(3);
+    cmb_gram->SetSelection(2);
     
     wxString choices_nb[] = { "1","2","3","4","5","6","7","8" };
     cmb_nb_steps = new wxComboBox(this, wxID_ANY, wxString{ "4" }, wxDefaultPosition, wxDefaultSize, 8, choices_nb);
@@ -81,13 +81,19 @@ void CalibrationFlowSpeedDialog::create_buttons(wxStdDialogButtonSizer* buttons)
     txt_max_speed = new wxTextCtrl(this, wxID_ANY, std::to_string(max_speed), wxDefaultPosition, size);
     txt_max_speed->SetToolTip(_L("Speed of the first patch."));
 
-    wxString choices_min_overlap[] = { "0","10","20","30","40","50","75"};
+    txt_min_flow = new wxTextCtrl(this, wxID_ANY, std::to_string(0.9), wxDefaultPosition, size);
+    txt_min_flow->SetToolTip(_L("Minimum extrusion multiplier."));
+
+    txt_max_flow = new wxTextCtrl(this, wxID_ANY, std::to_string(1.3), wxDefaultPosition, size);
+    txt_max_flow->SetToolTip(_L("Maximum extrusion multiplier."));
+
+    wxString choices_min_overlap[] = { "0","10","20","30","40","50","60","70","80","90"};
     cmb_min_overlap = new wxComboBox(this, wxID_ANY, wxString{ "4" }, wxDefaultPosition, wxDefaultSize, 8, choices_min_overlap);
     cmb_min_overlap->SetToolTip(_L("Minimum overlap (0%: llnes don't touch (bad but easy to print)"
         " ; 100%: no empty spaces (almost impossible, the filament isn't liquid enough)."));
-    cmb_min_overlap->SetSelection(2);
+    cmb_min_overlap->SetSelection(6);
     
-    wxString choices_max_overlap[] = { "100","90","80","70","60","50","25"};
+    wxString choices_max_overlap[] = { "100","90","80","70","60","50","30", "10"};
     cmb_max_overlap = new wxComboBox(this, wxID_ANY, wxString{ "4" }, wxDefaultPosition, wxDefaultSize, 8, choices_max_overlap);
     cmb_max_overlap->SetToolTip(_L("Maximum overlap (0%: llnes don't touch (bad but easy to print)"
         " ; 100%: no empty spaces (almost impossible, the filament isn't liquid enough)."));
@@ -96,6 +102,7 @@ void CalibrationFlowSpeedDialog::create_buttons(wxStdDialogButtonSizer* buttons)
     wxBoxSizer* vertical =new wxBoxSizer(wxVERTICAL);
     wxBoxSizer* hsizer_common =new wxBoxSizer(wxHORIZONTAL);
     wxBoxSizer* hsizer_overlap =new wxBoxSizer(wxHORIZONTAL);
+    wxBoxSizer* hsizer_flow =new wxBoxSizer(wxHORIZONTAL);
     wxBoxSizer* hsizer_speed =new wxBoxSizer(wxHORIZONTAL);
 
     hsizer_common->Add(new wxStaticText(this, wxID_ANY, _L("Patch weight:")));
@@ -117,6 +124,17 @@ void CalibrationFlowSpeedDialog::create_buttons(wxStdDialogButtonSizer* buttons)
     wxButton* bt_speed = new wxButton(this, wxID_FILE1, _L("Generate for multiple speeds"));
     bt_speed->Bind(wxEVT_BUTTON, &CalibrationFlowSpeedDialog::create_speed, this);
     hsizer_speed->Add(bt_speed);
+    
+    hsizer_flow->Add(new wxStaticText(this, wxID_ANY, _L("Extrusion multiplier:")));
+    hsizer_flow->Add(new wxStaticText(this, wxID_ANY, _L("min:")));
+    hsizer_flow->Add(txt_min_flow);
+    hsizer_flow->AddSpacer(20);
+    hsizer_flow->Add(new wxStaticText(this, wxID_ANY, _L("max:")));
+    hsizer_flow->Add(txt_max_flow);
+    hsizer_flow->AddSpacer(20);
+    wxButton* bt_flow = new wxButton(this, wxID_FILE1, _L("Generate for multiple flow"));
+    bt_flow->Bind(wxEVT_BUTTON, &CalibrationFlowSpeedDialog::create_flow, this);
+    hsizer_flow->Add(bt_flow);
 
     hsizer_overlap->Add(new wxStaticText(this, wxID_ANY, _L("min overlap:")));
     hsizer_overlap->Add(cmb_min_overlap);
@@ -131,6 +149,7 @@ void CalibrationFlowSpeedDialog::create_buttons(wxStdDialogButtonSizer* buttons)
     hsizer_overlap->Add(bt_overlap);
 
     vertical->Add(hsizer_common);
+    vertical->Add(hsizer_flow);
     vertical->Add(hsizer_overlap);
     vertical->Add(hsizer_speed);
 
@@ -206,7 +225,7 @@ std::tuple<float, float, Flow> CalibrationFlowSpeedDialog::get_cube_size(float o
         max_height = int(max_height / layer_height) * layer_height;
     }
     assert(false);
-    return { 0, 0 , Flow::bridging_flow(0.2, 0.2)};
+    return { 0, 0 , Flow::bridging_flow(0.2f, 0.2f)};
 }
 
 void CalibrationFlowSpeedDialog::create_overlap(wxCommandEvent &event_args) 
@@ -223,8 +242,35 @@ void CalibrationFlowSpeedDialog::create_overlap(wxCommandEvent &event_args)
     //full_config.apply(*printer_config);
     //full_config.apply(*filament_config);
     //float speed = full_config.get_computed_value("solid_infill_speed", 0);
+    
+    const DynamicPrintConfig* filament_config = this->gui_app->get_tab(Preset::TYPE_FFF_FILAMENT)->get_config();
+    float extrusion_mult = filament_config->option("extrusion_multiplier")->get_float(0);
 
-    create_geometry(0, 0, min_overlap, max_overlap);
+    create_geometry(extrusion_mult, extrusion_mult, 0, 0, min_overlap, max_overlap);
+}
+void CalibrationFlowSpeedDialog::create_flow(wxCommandEvent &event_args) 
+{
+    std::string str_parse = txt_min_flow->GetValue().ToStdString();
+    float min_flow = std::stof(str_parse);
+    str_parse = txt_max_flow->GetValue().ToStdString();
+    float max_flow = std::stof(str_parse);
+
+    //const DynamicPrintConfig* print_config = this->gui_app->get_tab(Preset::TYPE_FFF_PRINT)->get_config();
+    //const DynamicPrintConfig* printer_config = this->gui_app->get_tab(Preset::TYPE_PRINTER)->get_config();
+    //const DynamicPrintConfig* filament_config = this->gui_app->get_tab(Preset::TYPE_FFF_FILAMENT)->get_config();
+    //DynamicPrintConfig full_config = *print_config;
+    //full_config.apply(*printer_config);
+    //full_config.apply(*filament_config);
+    //float speed = full_config.get_computed_value("solid_infill_speed", 0);
+    
+    const DynamicPrintConfig* print_config = this->gui_app->get_tab(Preset::TYPE_FFF_PRINT)->get_config();
+    const DynamicPrintConfig* filament_config = this->gui_app->get_tab(Preset::TYPE_FFF_FILAMENT)->get_config();
+    float overlap      = print_config->option("solid_infill_overlap")->get_float();
+    float filament_max_overlap = filament_config->option("filament_max_overlap")->get_float();
+    overlap = std::min(overlap, filament_max_overlap);
+    float extrusion_mult = filament_config->option("extrusion_multiplier")->get_float(0);
+
+    create_geometry(min_flow, max_flow, 0, 0, std::min(80.f, overlap), std::min(80.f, overlap));
 }
 void CalibrationFlowSpeedDialog::create_speed(wxCommandEvent &event_args) 
 {
@@ -239,9 +285,13 @@ void CalibrationFlowSpeedDialog::create_speed(wxCommandEvent &event_args)
     float filament_max_overlap = filament_config->option("filament_max_overlap")->get_float();
     overlap = std::min(overlap, filament_max_overlap);
 
-    create_geometry(min_speed, max_speed, overlap, overlap);
+    float extrusion_mult = filament_config->option("extrusion_multiplier")->get_float(0);
+
+    create_geometry(extrusion_mult, extrusion_mult, min_speed, max_speed, overlap, overlap);
 }
 void CalibrationFlowSpeedDialog::create_geometry(
+    float min_flow, //0-2
+    float max_flow, //0-2
     float min_speed, //0-150+ mm/s
     float max_speed, //0-150+ mm/s
     float min_overlap, //0-100 %
@@ -281,9 +331,12 @@ void CalibrationFlowSpeedDialog::create_geometry(
         if (nb_steps > 1) {
             if (min_overlap < max_overlap) {
                 name += std::string("_") + std::to_string(int(overlap));
-            } else if (min_speed < max_speed) {
-                float speed   = min_speed + i * (max_speed - min_speed) / (nb_steps - 1);
+            } else if (min_speed < max_speed && nb_steps > 1) {
+                const float speed   = min_speed + i * (max_speed - min_speed) / (nb_steps - 1);
                 name += std::string("_") + std::to_string(int(speed));
+            } else if (min_flow < max_flow && nb_steps > 1) {
+                const float flow   = min_flow + i * (max_flow - min_flow) / (nb_steps - 1);
+                name += std::string("_") + std::to_string(int(flow * 100 + EPSILON));
             }
         }
         // create object
@@ -311,9 +364,20 @@ void CalibrationFlowSpeedDialog::create_geometry(
     /// --- custom config ---
     float layer_height = print_config->option("layer_height")->get_float();
     layer_height = std::max(layer_height, float(print_config->get_computed_value("first_layer_height", 0)));
+    const float extrusion_mult = filament_config->option("extrusion_multiplier")->get_float(0);
     assert(objs_flow.size() == objs.size());
     assert(nb_steps == objs.size());
     for (size_t i = 0; i < nb_steps; i++) {
+
+        if (min_flow < max_flow) {
+            if (nb_steps == 1) {
+                objs[i]->config.set_key_value("print_extrusion_multiplier", 
+                    new ConfigOptionPercent(100 * (min_flow + max_flow) / (2 * extrusion_mult)));
+            } else {
+                objs[i]->config.set_key_value("print_extrusion_multiplier", 
+                    new ConfigOptionPercent(100 * (min_flow + i * (max_flow - min_flow) / (nb_steps - 1)) / extrusion_mult));
+            }
+        }
         
         float overlap = max_overlap;
         if (nb_steps > 1 && min_overlap < max_overlap)
