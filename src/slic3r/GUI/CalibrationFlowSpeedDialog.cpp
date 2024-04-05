@@ -385,6 +385,7 @@ void CalibrationFlowSpeedDialog::create_geometry(
         objs[i]->config.set_key_value("perimeter_overlap", new ConfigOptionPercent(overlap));
         objs[i]->config.set_key_value("external_perimeter_overlap", new ConfigOptionPercent(overlap));
         objs[i]->config.set_key_value("solid_infill_overlap", new ConfigOptionPercent(overlap));
+        objs[i]->config.set_key_value("top_solid_infill_overlap", new ConfigOptionPercent(overlap));
 
         Flow flow = objs_flow[i];
         objs[i]->config.set_key_value("solid_infill_extrusion_width", new ConfigOptionFloatOrPercent(flow.width(), false));
@@ -411,7 +412,7 @@ void CalibrationFlowSpeedDialog::create_geometry(
         //disable ironing post-process
         objs[i]->config.set_key_value("ironing", new ConfigOptionBool(false));
         //set speed
-        if (nb_steps > 1 && min_speed < max_speed){
+        if (nb_steps > 1 && min_speed < max_speed) {
             float speed = float(min_speed + i * double(max_speed - min_speed) / (nb_steps - 1));
             objs[i]->config.set_key_value("perimeter_speed", new ConfigOptionFloatOrPercent(speed, false));
             objs[i]->config.set_key_value("external_perimeter_speed", new ConfigOptionFloatOrPercent(speed, false));
