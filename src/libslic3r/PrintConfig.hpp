@@ -934,6 +934,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionPercent,              print_extrusion_multiplier))
     ((ConfigOptionFloat,                print_retract_length))
     ((ConfigOptionFloat,                print_retract_lift))
+    ((ConfigOptionPercent,              second_layer_flow_ratio))
     ((ConfigOptionFloatOrPercent,       small_perimeter_speed))
     ((ConfigOptionFloatOrPercent,       small_perimeter_min_length))
     ((ConfigOptionFloatOrPercent,       small_perimeter_max_length))

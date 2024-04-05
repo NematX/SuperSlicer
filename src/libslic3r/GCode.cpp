@@ -5377,7 +5377,10 @@ std::string GCode::_extrude(const ExtrusionPath &path, const std::string &descri
     double e_per_mm = path.mm3_per_mm
         * m_writer.tool()->e_per_mm3()
         * this->config().print_extrusion_multiplier.get_abs_value(1);
-    if (m_layer->bottom_z() < EPSILON) e_per_mm *= this->config().first_layer_flow_ratio.get_abs_value(1);
+    if (m_layer->bottom_z() < EPSILON)
+        e_per_mm *= this->config().first_layer_flow_ratio.get_abs_value(1);
+    else if (this->m_layer->lower_layer && this->m_layer->lower_layer->bottom_z() < EPSILON)
+        e_per_mm *= this->config().second_layer_flow_ratio.get_abs_value(1);
     if (m_writer.extrusion_axis().empty()) e_per_mm = 0;
     path.polyline.ensure_fitting_result_valid();
     if (path.polyline.lines().size() > 0) {
@@ -5571,6 +5574,8 @@ double_t GCode::_compute_speed_mm_per_sec(const ExtrusionPath& path, double spee
     double path_mm3_per_mm = path.mm3_per_mm;
     if (m_layer->bottom_z() < EPSILON)
         path_mm3_per_mm *= this->config().first_layer_flow_ratio.get_abs_value(1);
+    else if (this->m_layer->lower_layer && this->m_layer->lower_layer->bottom_z() < EPSILON)
+        path_mm3_per_mm *= this->config().second_layer_flow_ratio.get_abs_value(1);
     // cap speed with max_volumetric_speed anyway (even if user is not using autospeed)
     if (m_config.max_volumetric_speed.value > 0 && path_mm3_per_mm > 0) {
         speed = std::min(m_config.max_volumetric_speed.value / path_mm3_per_mm, speed);
