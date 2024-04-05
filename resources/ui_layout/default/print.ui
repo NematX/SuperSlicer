@@ -452,6 +452,7 @@ group:sidetext_width$2:Flow
 		setting:over_bridge_flow_ratio
 		setting:fill_top_flow_ratio
 		setting:first_layer_flow_ratio
+		setting:second_layer_flow_ratio
 	end_line
 	line:Bridge type
 		setting:bridge_type

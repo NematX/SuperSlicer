@@ -671,6 +671,7 @@ static std::vector<std::string> s_Preset_print_options {
         "bridge_overlap",
         "bridge_overlap_min",
         "first_layer_flow_ratio",
+        "second_layer_flow_ratio",
         "clip_multipart_objects", "enforce_full_fill_volume", "external_infill_margin", "bridged_infill_margin",
         // compensation
         "first_layer_size_compensation",

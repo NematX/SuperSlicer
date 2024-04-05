@@ -2463,6 +2463,16 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionPercent(100));
 
+    def = this->add("second_layer_flow_ratio", coPercent);
+    def->label = L("Second layer");
+    def->full_label = L("Second layer flow ratio");
+    def->sidetext = L("%");
+    def->category = OptionCategory::width;
+    def->tooltip = L("You can decrease this to under-extrude on the second layer if your first layer is over-extruded (for adhesion purpose). You should set it to the inverse of the first layer flow.");
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionPercent(100));
+
     def = this->add("first_layer_size_compensation", coFloat);
     def->label = L("First layer");
     def->full_label = L("XY First layer compensation");
@@ -7715,7 +7725,7 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
     }
     if ("first_layer_min_speed" == opt_key && value.back() == '%')
         value = value.substr(0, value.length() - 1); //no percent.
-    if (!value.empty() && value.back() != '%' && std::set<std::string>{"bridge_flow_ratio", "bridge_flow_ratio", "over_bridge_flow_ratio", "fill_top_flow_ratio", "first_layer_flow_ratio"}.count(opt_key) > 0 ) {
+    if (!value.empty() && value.back() != '%' && std::set<std::string>{"bridge_flow_ratio", "bridge_flow_ratio", "over_bridge_flow_ratio", "fill_top_flow_ratio", "first_layer_flow_ratio", "second_layer_flow_ratio"}.count(opt_key) > 0 ) {
         //need percent
         try {
             float val = boost::lexical_cast<float>(value);
@@ -8336,6 +8346,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "solid_over_perimeters",
 "filament_seam_gap", // filament override
 "filament_seam_gap_external", // filament override
+"second_layer_flow_ratio",
 "seam_notch_all",
 "seam_notch_angle",
 "seam_notch_inner",
