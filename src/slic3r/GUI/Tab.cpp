@@ -12,6 +12,7 @@
 #include "slic3r/Utils/PrintHost.hpp"
 #include "BonjourDialog.hpp"
 #include "WipeTowerDialog.hpp"
+#include "GraphDialog.hpp"
 #include "ButtonsDescription.hpp"
 #include "Search.hpp"
 #include "OG_CustomCtrl.hpp"
@@ -2546,6 +2547,24 @@ std::vector<Slic3r::GUI::PageShp> Tab::create_pages(std::string setting_type_nam
                         RammingDialog dlg(this, (m_config_base->option<ConfigOptionStrings>("filament_ramming_parameters"))->get_at(0));
                         if (dlg.ShowModal() == wxID_OK)
                             (m_config_base->option<ConfigOptionStrings>("filament_ramming_parameters"))->get_at(0) = dlg.get_parameters();
+                    }));
+                    return sizer;
+                };
+                current_group->append_line(thisline);
+            } else if (boost::starts_with(full_line, "extruder_extrusion_multiplier_speed")) {
+                Line thisline = current_group->create_single_option_line("extruder_extrusion_multiplier_speed");
+                thisline.widget = [this](wxWindow *parent) {
+                    auto dialog_btn = new wxButton(parent, wxID_ANY, _L("Extrusion multiplier per speed") + dots,
+                                                           wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+                    dialog_btn->SetFont(Slic3r::GUI::wxGetApp().normal_font());
+                    wxGetApp().UpdateDarkUI(dialog_btn);
+                    auto sizer = new wxBoxSizer(wxHORIZONTAL);
+                    sizer->Add(dialog_btn);
+
+                    dialog_btn->Bind(wxEVT_BUTTON, ([this](wxCommandEvent &e) {
+                        GraphDialog dlg(this, (m_config_base->option<ConfigOptionStrings>("extruder_extrusion_multiplier_speed"))->get_at(0));
+                        if (dlg.ShowModal() == wxID_OK)
+                            (m_config_base->option<ConfigOptionStrings>("extruder_extrusion_multiplier_speed"))->get_at(0) = dlg.get_parameters();
                     }));
                     return sizer;
                 };

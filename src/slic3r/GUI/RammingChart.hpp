@@ -13,13 +13,13 @@ wxDECLARE_EVENT(EVT_WIPE_TOWER_CHART_CHANGED, wxCommandEvent);
 class Chart : public wxWindow {
         
 public:
-    Chart(wxWindow* parent, wxRect rect,const std::vector<std::pair<float,float>>& initial_buttons,int ramming_speed_size, float sampling, int scale_unit=10) :
+    Chart(wxWindow* parent, wxRect rect,const std::vector<std::pair<float,float>>& initial_buttons, int scale_unit=10) :
         wxWindow(parent,wxID_ANY,rect.GetTopLeft(),rect.GetSize()),
         scale_unit(scale_unit), legend_side(5*scale_unit)
     {
         SetBackgroundStyle(wxBG_STYLE_PAINT);
         m_rect = wxRect(wxPoint(legend_side,0),rect.GetSize()-wxSize(legend_side,legend_side));
-        visible_area = wxRect2DDouble(0.0, 0.0, sampling*ramming_speed_size, 20.);
+        visible_area = wxRect2DDouble(0.0, 0.0, 20., 20.);
         m_buttons.clear();
         if (initial_buttons.size()>0)
             for (const auto& pair : initial_buttons)
@@ -32,11 +32,16 @@ public:
         if (y>=0) visible_area.SetBottom(y);
         recalculate_line();
     }
+    void  set_manual_points_manipulation(bool manip) { m_manual_points_manipulation = manip; }
+    void  set_x_label(wxString &label, float incr = 0.1f) { m_x_legend = label; m_x_legend_incr = incr; }
+    void  set_y_label(wxString &label, float incr = 0.1f) { m_y_legend = label; m_y_legend_incr = incr; }
+    void  set_no_point_label(wxString &label) { m_no_point_legend = label; }
     float get_volume() const { return m_total_volume; }
-    float get_time()   const { return visible_area.m_width; }
+    float get_max_x()   const { return visible_area.m_width; }
     
-    std::vector<float> get_ramming_speed(float sampling) const; //returns sampled ramming speed
-    std::vector<std::pair<float,float>> get_buttons() const; // returns buttons position   
+    std::vector<float> get_speed(float sampling) const; //returns sampled ramming speed
+    std::vector<std::pair<float,float>> get_buttons() const; // returns buttons position
+    void                                set_buttons(std::vector<std::pair<float, float>>);
     
     void draw();
     
@@ -44,8 +49,20 @@ public:
     void mouse_right_button_clicked(wxMouseEvent& event);
     void mouse_moved(wxMouseEvent& event);
     void mouse_double_clicked(wxMouseEvent& event);
-    void mouse_left_window(wxMouseEvent&) { m_dragged = nullptr; }        
-    void mouse_released(wxMouseEvent&)    { m_dragged = nullptr; }
+    void mouse_left_window(wxMouseEvent &)
+    {
+        if (m_dragged != nullptr) {
+            m_dragged = nullptr;
+            Refresh();
+        }
+    }        
+    void mouse_released(wxMouseEvent &)
+    {
+        if (m_dragged != nullptr) {
+            m_dragged = nullptr;
+            Refresh();
+        }
+    }
     void paint_event(wxPaintEvent&) { draw(); }
     DECLARE_EVENT_TABLE()
     
@@ -55,11 +72,16 @@ public:
 private:
     static const bool fixed_x = true;
     static const bool splines = true;
-    static const bool manual_points_manipulation = false;
     static const int side = 10; // side of draggable button
 
     const int scale_unit;
     int legend_side;
+    wxString m_x_legend;
+    wxString m_y_legend;
+    float m_x_legend_incr = 0.1f;
+    float m_y_legend_incr = 1.f;
+    wxString m_no_point_legend;
+    bool m_manual_points_manipulation = false;
 
     class ButtonToDrag {
     public:
