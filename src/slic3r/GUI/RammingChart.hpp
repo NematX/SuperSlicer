@@ -26,10 +26,15 @@ public:
                 m_buttons.push_back(wxPoint2DDouble(pair.first,pair.second));
         recalculate_line();
     }
-    void set_xy_range(float x,float y) {
-        x = int(x/0.5) * 0.5;
-        if (x>=0) visible_area.SetRight(x);
-        if (y>=0) visible_area.SetBottom(y);
+    void set_xy_range(float min_x, float min_y, float max_x, float max_y) {
+        if (min_x >= 0 && max_x > min_x) {
+            visible_area.SetLeft(min_x);
+            visible_area.SetRight(max_x);
+        }
+        if (min_y >= 0 && max_y > min_y) {
+            visible_area.SetTop(min_y);
+            visible_area.SetBottom(max_y);
+        }
         recalculate_line();
     }
     void  set_manual_points_manipulation(bool manip) { m_manual_points_manipulation = manip; }
@@ -49,20 +54,8 @@ public:
     void mouse_right_button_clicked(wxMouseEvent& event);
     void mouse_moved(wxMouseEvent& event);
     void mouse_double_clicked(wxMouseEvent& event);
-    void mouse_left_window(wxMouseEvent &)
-    {
-        if (m_dragged != nullptr) {
-            m_dragged = nullptr;
-            Refresh();
-        }
-    }        
-    void mouse_released(wxMouseEvent &)
-    {
-        if (m_dragged != nullptr) {
-            m_dragged = nullptr;
-            Refresh();
-        }
-    }
+    void mouse_left_window(wxMouseEvent &);
+    void mouse_released(wxMouseEvent &);
     void paint_event(wxPaintEvent&) { draw(); }
     DECLARE_EVENT_TABLE()
     

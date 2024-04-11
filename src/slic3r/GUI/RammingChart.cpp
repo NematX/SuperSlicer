@@ -75,7 +75,11 @@ void Chart::draw() {
         if (m_x_legend_incr == int(m_x_legend_incr)) {
             dc.DrawText(wxString()<<int(math_x), wxPoint(x - scale_unit, y + 0.5 * scale_unit));
         } else if (m_x_legend_incr*10 == int(m_x_legend_incr*10)){
-            dc.DrawText(wxString().Format(wxT("%.1f"), math_x), wxPoint(x - scale_unit, y + 0.5 * scale_unit));
+            dc.DrawText(Slic3r::to_string_nozero(math_x, 1), wxPoint(x - scale_unit, y + 0.5 * scale_unit));
+        } else if (m_x_legend_incr*100 == int(m_x_legend_incr*100)){
+            dc.DrawText(Slic3r::to_string_nozero(math_x, 2), wxPoint(x - scale_unit, y + 0.5 * scale_unit));
+        } else if (m_x_legend_incr*1000 == int(m_x_legend_incr*1000)){
+            dc.DrawText(Slic3r::to_string_nozero(math_x, 3), wxPoint(x - scale_unit, y + 0.5 * scale_unit));
         } else {
             dc.DrawText(wxString().Format(wxT("%f"), math_x), wxPoint(x - scale_unit, y + 0.5 * scale_unit));
         }
@@ -92,9 +96,13 @@ void Chart::draw() {
         if (m_y_legend_incr == int(m_y_legend_incr)) {
             dc.DrawText(wxString()<<int(math_y), wxPoint(x - 2 * scale_unit, y - 0.5 * scale_unit));
         } else if (m_y_legend_incr*10 == int(m_y_legend_incr*10)){
-            dc.DrawText(wxString().Format(wxT("%.1f"), math_y), wxPoint(x - 2 * scale_unit, y - 0.5 * scale_unit));
+            dc.DrawText(Slic3r::to_string_nozero(math_y, 1), wxPoint(x - 2 * scale_unit, y - 0.5 * scale_unit));
+        } else if (m_y_legend_incr*100 == int(m_y_legend_incr*100)){
+            dc.DrawText(Slic3r::to_string_nozero(math_y, 2), wxPoint(x - 2.5 * scale_unit, y - 0.5 * scale_unit));
+        } else if (m_y_legend_incr*1000 == int(m_y_legend_incr*1000)){
+            dc.DrawText(Slic3r::to_string_nozero(math_y, 3), wxPoint(x - 3 * scale_unit, y - 0.5 * scale_unit));
         } else {
-            dc.DrawText(wxString().Format(wxT("%f"), math_y), wxPoint(x - 2 * scale_unit, y - 0.5 * scale_unit));
+            dc.DrawText(wxString().Format(wxT("%f"), math_y), wxPoint(x - 4 * scale_unit, y - 0.5 * scale_unit));
         }
         last_mark = y;
     }
@@ -120,8 +128,8 @@ void Chart::draw() {
         ptx.y -= 1*legend_side;
         pty.x -= 1*legend_side;
         pty.y -= 0.5*legend_side;
-        dc.DrawText(wxString().Format(wxT("x: %.2f"), pos_x), ptx);
-        dc.DrawText(wxString().Format(wxT("y: %.2f"), pos_y), pty);
+        dc.DrawText(wxString().Format(wxT("x: %.3f"), pos_x), ptx);
+        dc.DrawText(wxString().Format(wxT("y: %.3f"), pos_y), pty);
     }
 }
 
@@ -140,8 +148,12 @@ void Chart::mouse_right_button_clicked(wxMouseEvent& event) {
             return;
         wxPoint2DDouble dblpoint = screen_to_math(point);
         // trunc by precision
-        dblpoint.m_x = int(dblpoint.m_x / this->m_x_legend_incr) * this->m_x_legend_incr;
-        dblpoint.m_y = int(dblpoint.m_y / this->m_y_legend_incr) * this->m_y_legend_incr;
+        dblpoint.m_x = int((dblpoint.m_x + this->m_x_legend_incr / 2) / this->m_x_legend_incr) * this->m_x_legend_incr;
+        dblpoint.m_y = int((dblpoint.m_y + this->m_y_legend_incr / 2) / this->m_y_legend_incr) * this->m_y_legend_incr;
+        //check it doesn't exist
+        for (const ButtonToDrag &bt : m_buttons)
+            if(bt.get_pos().m_x == dblpoint.m_x)
+                return;
         m_buttons.push_back(dblpoint);
         std::sort(m_buttons.begin(), m_buttons.end());
         recalculate_line();
@@ -169,7 +181,8 @@ void Chart::mouse_moved(wxMouseEvent& event) {
     }
     int delta_x = pos.x - m_previous_mouse.x;
     int delta_y = pos.y - m_previous_mouse.y;
-    m_dragged->move(fixed_x?0:double(delta_x)/m_rect.GetWidth() * visible_area.m_width,-double(delta_y)/m_rect.GetHeight() * visible_area.m_height); 
+    m_dragged->move(fixed_x ? 0 : double(delta_x) / m_rect.GetWidth() * visible_area.m_width,
+                    -double(delta_y) / m_rect.GetHeight() * visible_area.m_height); 
     m_previous_mouse = pos;
     recalculate_line();
 }
@@ -184,6 +197,24 @@ void Chart::mouse_double_clicked(wxMouseEvent& event) {
     std::sort(m_buttons.begin(),m_buttons.end());
     recalculate_line();
     return;
+}
+
+void Chart::mouse_left_window(wxMouseEvent &e)
+{
+    mouse_released(e);
+}        
+void Chart::mouse_released(wxMouseEvent &)
+{
+    if (m_dragged != nullptr) {
+        if (!fixed_x) {
+            float m_x = int((m_dragged->get_pos().m_x + this->m_x_legend_incr / 2) / this->m_x_legend_incr) * this->m_x_legend_incr;
+            m_dragged->move(m_x - m_dragged->get_pos().m_x, 0);
+        }
+        float m_y = int((m_dragged->get_pos().m_y + this->m_y_legend_incr / 2) / this->m_y_legend_incr) * this->m_y_legend_incr;
+        m_dragged->move(0, m_y - m_dragged->get_pos().m_y);
+        m_dragged = nullptr;
+        recalculate_line();
+    }
 }
 
 void Chart::recalculate_line() {
@@ -275,6 +306,15 @@ void Chart::recalculate_line() {
                 m_line_to_draw.push_back(math_to_screen(wxPoint2DDouble(x_math,m_buttons[i].get_pos().m_y)).y);
             }
 
+            m_line_to_draw.back() = std::max(m_line_to_draw.back(), m_rect.GetTop()-1);
+            m_line_to_draw.back() = std::min(m_line_to_draw.back(), m_rect.GetBottom()-1);
+            m_total_volume += (m_rect.GetBottom() - m_line_to_draw.back()) * (visible_area.m_width / m_rect.GetWidth()) * (visible_area.m_height / m_rect.GetHeight());
+        }
+    } else if (points.size() == 1) {
+        
+        for (int x=m_rect.GetLeft(); x<=m_rect.GetRight() ; ++x) {
+            float x_math = screen_to_math(wxPoint(x,0)).m_x;
+            m_line_to_draw.push_back(math_to_screen(wxPoint2DDouble(x_math,m_buttons[0].get_pos().m_y)).y);
             m_line_to_draw.back() = std::max(m_line_to_draw.back(), m_rect.GetTop()-1);
             m_line_to_draw.back() = std::min(m_line_to_draw.back(), m_rect.GetBottom()-1);
             m_total_volume += (m_rect.GetBottom() - m_line_to_draw.back()) * (visible_area.m_width / m_rect.GetWidth()) * (visible_area.m_height / m_rect.GetHeight());

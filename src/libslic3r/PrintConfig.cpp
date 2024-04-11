@@ -1760,11 +1760,8 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("This string is edited by a Dialog and contains extusion multiplier for different speeds.");
     def->mode = comExpert | comPrusa;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionStrings { "0 1 1 1 1 1 1 1|"
-       " 5 1. 10 1. 15 1. 20 1. 30 1. 40 1. 60 1. 80 1. 120 1. 160 1. 240 1. 320 1. 480 1. 640 1. 960 1. 1280 1." });
-    /*
-    def->set_default_value(new ConfigOptionStrings { "120 100 6.6 6.8 7.2 7.6 7.9 8.2 8.7 9.4 9.9 10.0|"
-       " 0.05 6.6 0.45 6.8 0.95 7.8 1.45 8.3 1.95 9.7 2.45 10 2.95 7.6 3.45 7.6 3.95 7.6 4.45 7.6 4.95 7.6" });*/
+    def->set_default_value(new ConfigOptionStrings { "0 1 1 1 1 1 1 1 1 1 1 1|"
+       " 10 1. 20 1. 30 1. 40 1. 60 1. 80 1. 120 1. 160 1. 240 1. 320 1. 480 1. 640 1. 960 1. 1280 1." });
 
     def = this->add("extruder_offset", coPoints);
     def->label = L("Extruder offset");

@@ -8,6 +8,7 @@
 #include "MsgDialog.hpp"
 
 #include <wx/sizer.h>
+#include <wx/spinctrl.h>
 
 namespace Slic3r { namespace GUI {
 
@@ -51,7 +52,9 @@ GraphDialog::GraphDialog(wxWindow *parent, const std::string &parameters)
     update_ui(static_cast<wxButton *>(this->FindWindowById(wxID_OK, this)));
     update_ui(static_cast<wxButton *>(this->FindWindowById(wxID_CANCEL, this)));
 
-    this->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent &e) { EndModal(wxCANCEL); });
+    this->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent &e) { 
+        EndModal(wxCANCEL);
+    });
 
     this->Bind(
         wxEVT_BUTTON,
@@ -71,6 +74,8 @@ GraphDialog::GraphDialog(wxWindow *parent, const std::string &parameters)
 #define style wxSP_ARROW_KEYS
 #endif
 
+
+
 GraphPanel::GraphPanel(wxWindow *parent, const std::string &parameters)
     : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize /*,wxPoint(50,50), wxSize(800,350),wxBORDER_RAISED*/)
 {
@@ -81,13 +86,25 @@ GraphPanel::GraphPanel(wxWindow *parent, const std::string &parameters)
     //stream >> m_graph_line_width_multiplicator >> m_graph_step_multiplicator;
     int   Graph_speed_size = 0;
     float dummy            = 0.f;
-    while (stream >> dummy) ++Graph_speed_size;
+    float min              = 2.f;
+    float max              = 0.f;
+    while (stream >> dummy) {
+        ++Graph_speed_size;
+        if (dummy > 0 && dummy <= 2) {
+            min = std::min(min, dummy);
+            max = std::max(max, dummy);
+        }
+    }
     stream.clear();
     stream.get();
 
-    int nb_points = int(std::log2(Graph_speed_size));
-    assert(Graph_speed_size == std::pow(2, nb_points));
-    assert(nb_points > 1);
+    if (min >= max) {
+        max = 1.2f;
+        min = 0.9f;
+    } else {
+        min = int(min * 10 - 1 + EPSILON) / 10.f;
+        max = int(1.9f + max * 10 - EPSILON) / 10.f;
+    }
 
     std::vector<std::pair<float, float>> buttons;
     float                                x = 0.f;
@@ -96,9 +113,9 @@ GraphPanel::GraphPanel(wxWindow *parent, const std::string &parameters)
 
     m_chart = new Chart(this, wxRect(scale(1), scale(1), scale(64), scale(36)), buttons, scale(1));
     m_chart->set_manual_points_manipulation(true);
-    m_chart->set_xy_range(Graph_speed_size * 10.f, 2.f);
+    m_chart->set_xy_range(0, min, Graph_speed_size * 10.f, max);
     m_chart->set_x_label(_L("Print speed") + " ("+_L("mm/s")+")", 1.f);
-    m_chart->set_y_label(_L("Extrusion multiplier"), 0.1f);
+    m_chart->set_y_label(_L("Extrusion multiplier"), 0.001f);
     m_chart->set_no_point_label(_L("No compensation"));
 #ifdef _WIN32
     update_ui(m_chart);
@@ -108,26 +125,42 @@ GraphPanel::GraphPanel(wxWindow *parent, const std::string &parameters)
     sizer_chart->Add(new wxStaticText(this, wxID_ANY, 
         _L("Choose the extrusion multipler value for multiple speeds.\nYou can add/remove points with a right clic.")));
     sizer_chart->Add(m_chart, 0, wxALL, 5);
+    
+    m_last_speed   = Graph_speed_size * 10;
+    m_widget_speed = new wxSpinCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(ITEM_WIDTH(), -1),
+                                    style | wxTE_PROCESS_ENTER, 10, 2000, m_last_speed);
+    // note: wxTE_PROCESS_ENTER allow the wxSpinCtrl to receive wxEVT_TEXT_ENTER events
 
-    m_widget_speed   = new wxSpinCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(ITEM_WIDTH(), -1),
-                                         style, 2, 20, nb_points);
+    
+    m_widget_min_flow = new wxSpinCtrlDouble(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(ITEM_WIDTH(), -1),
+                                    style, 0.1, 2, min, 0.1f);
+    m_widget_max_flow = new wxSpinCtrlDouble(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(ITEM_WIDTH(), -1),
+                                    style, 0.1, 2, max, 0.1f);
 
 #ifdef _WIN32
     update_ui(m_widget_speed);
+    update_ui(m_widget_min_flow);
+    update_ui(m_widget_max_flow);
 #endif
-
-    auto size_line = new wxBoxSizer(wxHORIZONTAL);
-    size_line->Add(new wxStaticText(this, wxID_ANY, wxString(_L("Graph max speed zoom") + " :")),
-                      0, wxALIGN_CENTER_VERTICAL);
+    // line for speed max & reset
+    wxBoxSizer *size_line = new wxBoxSizer(wxHORIZONTAL);
+    size_line->Add(new wxStaticText(this, wxID_ANY, wxString(_L("Graph max speed") + " :")), 0, wxALIGN_CENTER_VERTICAL);
     size_line->Add(m_widget_speed);
     size_line->AddSpacer(80);
     wxButton *bt_reset = new wxButton(this, wxID_ANY, _L("Reset"));
     bt_reset->SetToolTip(_L("Reset all values to 1. Also reset all points to defaults."));
     size_line->Add(bt_reset);
-
-    m_widget_speed->SetValue(nb_points);
-    
     sizer_chart->Add(size_line);
+
+    //line for y min & max
+    size_line = new wxBoxSizer(wxHORIZONTAL);
+    size_line->Add(new wxStaticText(this, wxID_ANY, wxString(_L("Minimum flow") + " :")), 0, wxALIGN_CENTER_VERTICAL);
+    size_line->Add(m_widget_min_flow);
+    size_line->AddSpacer(20);
+    size_line->Add(new wxStaticText(this, wxID_ANY, wxString(_L("Maximum flow") + " :")), 0, wxALIGN_CENTER_VERTICAL);
+    size_line->Add(m_widget_max_flow);
+    sizer_chart->Add(size_line);
+    
     sizer_chart->SetSizeHints(this);
     SetSizer(sizer_chart);
 
@@ -136,8 +169,9 @@ GraphPanel::GraphPanel(wxWindow *parent, const std::string &parameters)
         //for (std::pair<float, float> &button : buttons) {
         //    button.second = 1.f;
         //}
-        buttons.emplace_back(5,1.f);
+        //buttons.emplace_back(5,1.f);
         buttons.emplace_back(10,1.f);
+        //buttons.emplace_back(15,1.f);
         buttons.emplace_back(20,1.f);
         buttons.emplace_back(30,1.f);
         buttons.emplace_back(40,1.f);
@@ -153,14 +187,74 @@ GraphPanel::GraphPanel(wxWindow *parent, const std::string &parameters)
         m_chart->set_buttons(buttons);
     }));
 
-    m_widget_speed->Bind(wxEVT_TEXT,
-                        [this](wxCommandEvent &) { m_chart->set_xy_range(10.f * std::pow(2, m_widget_speed->GetValue()), -1); });
-    m_widget_speed->Bind(wxEVT_CHAR, [](wxKeyEvent &) {});   // do nothing - prevents the user to change the value
-    //m_widget_volume->Bind(wxEVT_CHAR, [](wxKeyEvent &) {}); // do nothing - prevents the user to change the value
+    m_widget_speed->Bind(wxEVT_TEXT_ENTER, [this](wxCommandEvent &) {
+        int old_speed = m_last_speed;
+        m_last_speed = 10 * ((m_widget_speed->GetValue() + 5) / 10);
+        m_last_speed = std::min(std::max(m_last_speed, 20), 2000);
+        m_widget_speed->SetValue(m_last_speed);
+        if (old_speed < m_last_speed) {
+            if (old_speed < 1000 && m_last_speed >= 1000)
+                m_chart->set_x_label(_L("Print speed") + " (" + _L("mm/s") + ")", 100.f);
+            else if (old_speed < 100 && m_last_speed >= 100)
+                m_chart->set_x_label(_L("Print speed") + " (" + _L("mm/s") + ")", 10.f);
+        } else {
+            if (old_speed >= 100 && m_last_speed < 100)
+                m_chart->set_x_label(_L("Print speed") + " (" + _L("mm/s") + ")", 1.f);
+            else if (old_speed >= 1000 && m_last_speed < 1000)
+                m_chart->set_x_label(_L("Print speed") + " (" + _L("mm/s") + ")", 10.f);
+        }
+        m_chart->set_xy_range(0, -1, m_last_speed, -1);
+    });
+    m_widget_speed->Bind(wxEVT_SPINCTRL, [this](wxSpinEvent &evt) {
+        assert(evt.GetInt() != m_last_speed);
+        int incr = 10;
+        if (m_last_speed >= 60)
+            incr = 20;
+        if (m_last_speed >= 100)
+            incr = 50;
+        if (m_last_speed >= 300)
+            incr = 100;
+        if (m_last_speed >= 600)
+            incr = 200;
+        if (m_last_speed >= 1000)
+            incr = 500;
+        if (evt.GetInt() > m_last_speed) {
+            if (m_last_speed < 100 && m_last_speed + incr >= 100)
+                m_chart->set_x_label(_L("Print speed") + " (" + _L("mm/s") + ")", 10.f);
+            else if (m_last_speed < 1000 && m_last_speed + incr >= 1000)
+                m_chart->set_x_label(_L("Print speed") + " (" + _L("mm/s") + ")", 100.f);
+            m_last_speed += incr;
+        } else {
+            if (m_last_speed >= 100 && m_last_speed - incr < 100)
+                m_chart->set_x_label(_L("Print speed") + " (" + _L("mm/s") + ")", 1.f);
+            else if (m_last_speed >= 1000 && m_last_speed - incr < 1000)
+                m_chart->set_x_label(_L("Print speed") + " (" + _L("mm/s") + ")", 10.f);
+            m_last_speed -= incr;
+        }
+        m_last_speed = std::min(std::max(m_last_speed, 20), 2000);
+        m_widget_speed->SetValue(m_last_speed);
+        m_chart->set_xy_range(0, 0, m_last_speed, -1);
+    });
+    // thses don't work, i don't know why.
+    //m_widget_speed->Bind(wxEVT_SPIN_UP, [this](wxSpinEvent &evt) {
+    //        std::cout<<"up";
+    //    });
+    //m_widget_speed->Bind(wxEVT_SPIN_DOWN, [this](wxSpinEvent &evt) {
+    //        std::cout<<"down";
+    //    });
+    
+    m_widget_min_flow->Bind(wxEVT_TEXT, [this](wxCommandEvent &) {
+        m_chart->set_xy_range(-1, m_widget_min_flow->GetValue(), -1, m_widget_max_flow->GetValue());
+    });
+    m_widget_min_flow->Bind(wxEVT_CHAR, [](wxKeyEvent &) {});   // do nothing - prevents the user to change the value
+    m_widget_max_flow->Bind(wxEVT_TEXT, [this](wxCommandEvent &) {
+        m_chart->set_xy_range(-1, m_widget_min_flow->GetValue(), -1, m_widget_max_flow->GetValue());
+    });
+    m_widget_max_flow->Bind(wxEVT_CHAR, [](wxKeyEvent &) {});   // do nothing - prevents the user to change the value
     Bind(EVT_WIPE_TOWER_CHART_CHANGED, [this](wxCommandEvent &) {
-        //m_widget_volume->SetValue(m_chart->get_volume());
         int nb_samples = m_chart->get_speed(10.f).size();
-        m_widget_speed->SetValue(int(std::log2(nb_samples)));
+        m_last_speed = 10 * nb_samples;
+        m_widget_speed->SetValue(m_last_speed);
     });
     Refresh(true); // erase background
 }
@@ -169,11 +263,6 @@ std::string GraphPanel::get_parameters()
 {
     std::vector<float>                   flow_rates  = m_chart->get_speed(10.f);
     std::vector<std::pair<float, float>> buttons = m_chart->get_buttons();
-    
-    //check values
-    int nb_points = int(std::log2(flow_rates.size()));
-    assert(flow_rates.size() == std::pow(2, nb_points));
-    assert(nb_points > 1);
 
     //write string
     std::stringstream                    stream;

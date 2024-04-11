@@ -18,8 +18,11 @@ public:
     std::string get_parameters();
 
 private:
-    Chart *           m_chart                                 = nullptr;
-    wxSpinCtrl       *m_widget_speed                           = nullptr;
+    Chart *           m_chart           = nullptr;
+    wxSpinCtrl *      m_widget_speed    = nullptr;
+    wxSpinCtrlDouble *m_widget_min_flow = nullptr;
+    wxSpinCtrlDouble *m_widget_max_flow = nullptr;
+    int               m_last_speed      = 120;
 };
 
 class GraphDialog : public wxDialog
