@@ -911,6 +911,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat,                milling_speed))
     ((ConfigOptionFloatOrPercent,       min_width_top_surface))
     // Detect bridging perimeters
+    ((ConfigOptionFloatOrPercent,       overhangs_max_slope))
     ((ConfigOptionFloatOrPercent,       overhangs_speed))
     ((ConfigOptionInt,                  overhangs_speed_enforce))
     ((ConfigOptionFloatOrPercent,       overhangs_width))

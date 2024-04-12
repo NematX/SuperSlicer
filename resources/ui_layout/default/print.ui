@@ -151,6 +151,7 @@ group:Modifying slices
 		setting:sidetext_width$5:hole_to_polyhole_threshold
 		setting:hole_to_polyhole_twisted
 	end_line
+    setting:overhangs_max_slope
 group:Other
 	setting:slicing_mode
 	setting:clip_multipart_objects
