@@ -103,6 +103,7 @@ group:External perimeter first
 		setting:external_perimeters_nothole
 		setting:external_perimeters_hole
 	end_line
+    setting:hole_perimeters_last
 	setting:external_perimeters_vase
 	setting:perimeter_bonding
 group:Arachne perimeter generator (variable width)

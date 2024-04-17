@@ -178,6 +178,7 @@ void Layer::make_perimeters()
                 && config.external_perimeters_hole  == other_config.external_perimeters_hole
                 && config.external_perimeters_nothole == other_config.external_perimeters_nothole
                 && config.external_perimeters_vase == other_config.external_perimeters_vase
+                && config.hole_perimeters_last == other_config.hole_perimeters_last
                 && config.extra_perimeters_odd_layers == other_config.extra_perimeters_odd_layers
                 && config.extra_perimeters_overhangs == other_config.extra_perimeters_overhangs
                 && config.gap_fill_enabled          == other_config.gap_fill_enabled

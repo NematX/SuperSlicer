@@ -1638,15 +1638,15 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Only for outer side");
     def->full_label = L("Ext peri first for outer side");
     def->category = OptionCategory::perimeter;
-    def->tooltip = L("Only do the vase trick on the external side. Useful when the thickness is too low.");
+    def->tooltip = L("If vase mode is activated, it only do the vase trick on the external side. Useful when the thickness is too low.");
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionBool(true));
 
     def = this->add("external_perimeters_hole", coBool);
     def->label = L("Only for inner side");
-    def->full_label = L("ext peri first for inner side");
+    def->full_label = L("Ext peri first for inner side");
     def->category = OptionCategory::perimeter;
-    def->tooltip = L("Only do the vase trick on the external side. Useful when you only want to remove seam from screw hole.");
+    def->tooltip = L("If vase mode is activated, it only do the vase trick on the external side. Useful when you only want to remove seam from screw hole.");
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionBool(true));
 
@@ -2999,6 +2999,13 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comPrusa;
     def->set_default_value(new ConfigOptionBool(0));
 
+    def = this->add("hole_perimeters_last", coBool);
+    def->label = L("Holes after contour");
+    def->category = OptionCategory::perimeter;
+    def->tooltip = L("Print contour perimeters first instead of last.");
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionBool(false));
+
     def = this->add("infill_acceleration", coFloatOrPercent);
     def->label = L("Sparse");
     def->full_label = L("Infill acceleration");
@@ -4023,7 +4030,7 @@ void PrintConfigDef::init_fff_params()
     def = this->add("overhangs_max_slope", coFloatOrPercent);
     def->label = L("Overhangs max slope");
     def->full_label = L("Overhangs max slope");
-    def->category = OptionCategory::speed;
+    def->category = OptionCategory::slicing;
     def->tooltip = L("Maximum slope for overhangs. if at each layer, the overhangs hangs by more than this value, then the geometry will be cut."
                     " It doesn't cut into detected bridgeable areas."
                     "\nCan be a % of the highest nozzle diameter."
@@ -8307,6 +8314,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "gcode_no_comment",
 "gcode_precision_e",
 "gcode_precision_xyz",
+"hole_perimeters_last",
 "hole_size_compensation",
 "hole_size_threshold",
 "hole_to_polyhole_threshold",

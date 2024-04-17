@@ -704,6 +704,7 @@ bool PrintObject::invalidate_state_by_config_options(
                 || opt_key == "gap_fill_min_area"
                 || opt_key == "gap_fill_min_length"
                 || opt_key == "gap_fill_min_width"
+                || opt_key == "hole_perimeters_last"
                 || opt_key == "only_one_perimeter_first_layer"
                 || opt_key == "only_one_perimeter_top"
                 || opt_key == "only_one_perimeter_top_other_algo"

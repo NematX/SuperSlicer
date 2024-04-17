@@ -494,6 +494,7 @@ static std::vector<std::string> s_Preset_print_options {
         "external_perimeters_vase",
         "external_perimeters_nothole",
         "external_perimeters_hole",
+        "hole_perimeters_last",
         // fill pattern
         "fill_density",
         "fill_pattern",
