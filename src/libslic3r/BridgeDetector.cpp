@@ -8,13 +8,14 @@ namespace Slic3r {
 BridgeDetector::BridgeDetector(
     ExPolygon         _expolygon,
     const ExPolygons &_lower_slices, 
-    coord_t           _spacing) :
+    coord_t           _spacing, int layer_idx) :
     // The original infill polygon, not inflated.
     expolygons(expolygons_owned),
     // All surfaces of the object supporting this region.
     lower_slices(_lower_slices),
     spacing(_spacing)
 {
+    layer_id = layer_idx;
     this->expolygons_owned.push_back(std::move(_expolygon));
     initialize();
 }
@@ -22,13 +23,14 @@ BridgeDetector::BridgeDetector(
 BridgeDetector::BridgeDetector(
     const ExPolygons  &_expolygons,
     const ExPolygons  &_lower_slices,
-    coord_t            _spacing) : 
+    coord_t            _spacing, int layer_idx) : 
     // The original infill polygon, not inflated.
     expolygons(_expolygons),
     // All surfaces of the object supporting this region.
     lower_slices(_lower_slices),
     spacing(_spacing)
 {
+    layer_id = layer_idx;
     initialize();
 }
 
@@ -60,6 +62,16 @@ void BridgeDetector::initialize()
     // safety offset required to avoid Clipper from detecting empty intersection while Boost actually found some edges
     this->_anchor_regions = intersection_ex(grown, union_safety_offset(this->lower_slices));
     
+            if(layer_id>=0){
+                static int aodfjiaz = 0;
+                std::stringstream stri;
+                stri << layer_id << "_init_bridges_" << "_" << (aodfjiaz++) << ".svg";
+                SVG svg(stri.str());
+                svg.draw(this->expolygons, "grey");
+                svg.draw(this->lower_slices, "green");
+                svg.draw(to_polylines(_anchor_regions), "yellow");
+                svg.Close();
+            }
     /*
     if (0) {
         require "Slic3r/SVG.pm";
@@ -88,6 +100,16 @@ bool BridgeDetector::detect_angle(double bridge_direction_override)
         we'll use this one to clip our test lines and be sure that their endpoints
         are inside the anchors and not on their contours leading to false negatives. */
     Polygons clip_area = offset(this->expolygons, 0.5f * float(this->spacing));
+    // union with offseted anchor before un-offset to get the good clip area with anchor added.
+    ExPolygons unoffset_clip = offset_ex(this->_anchor_regions, 0.5f * float(this->spacing));
+    for (Polygon &poly : clip_area) {
+        unoffset_clip.emplace_back(poly);
+    }
+    unoffset_clip = union_ex(unoffset_clip);
+    unoffset_clip = offset_ex(unoffset_clip, -0.5f * float(this->spacing));
+    // now clip the clip with not-offset merged anchor + expolygons, so it's enlarged only inside the anchor.
+    clip_area = intersection(unoffset_clip, clip_area);
+
     
     /*  we'll now try several directions using a rudimentary visibility check:
         bridge in several directions and then sum the length of lines having both
@@ -121,7 +143,7 @@ bool BridgeDetector::detect_angle(double bridge_direction_override)
         }
 
         //compute stat on line with anchors, and their lengths.
-        BridgeDirection& c = candidates[i_angle];
+        BridgeDirection& bridge_dir_candidate = candidates[i_angle];
         std::vector<coordf_t> dist_anchored;
         {
             Lines clipped_lines = intersection_ln(lines, clip_area);
@@ -186,33 +208,34 @@ bool BridgeDetector::detect_angle(double bridge_direction_override)
                         if (!good_line && len > this->spacing * 40) {
                             //now test with intersection_ln
                             Lines lines = intersection_ln(line, to_polygons(this->_anchor_regions));
-                            good_line = lines.size() > 1;
+                            // if < 2, not anchored at both end
+                            good_line = lines.size() >= 2;
                         }
                     }
                 }
                 if(good_line) {
                     // This line could be anchored at both side and goes over the void to bridge it in its middle.
                     //store stats
-                    c.total_length_anchored += len;
-                    c.max_length_anchored = std::max(c.max_length_anchored, len);
-                    c.nb_lines_anchored++;
+                    bridge_dir_candidate.total_length_anchored += len;
+                    bridge_dir_candidate.max_length_anchored = std::max(bridge_dir_candidate.max_length_anchored, len);
+                    bridge_dir_candidate.nb_lines_anchored++;
                     dist_anchored.push_back(len);
                 } else {
                     // this line could NOT be anchored.
-                    c.total_length_free += len;
-                    c.max_length_free = std::max(c.max_length_free, len);
-                    c.nb_lines_free++;
+                    bridge_dir_candidate.total_length_free += len;
+                    bridge_dir_candidate.max_length_free = std::max(bridge_dir_candidate.max_length_free, len);
+                    bridge_dir_candidate.nb_lines_free++;
                 }
             }        
         }
-        if (c.total_length_anchored == 0. || c.nb_lines_anchored == 0) {
+        if (bridge_dir_candidate.total_length_anchored == 0. || bridge_dir_candidate.nb_lines_anchored == 0) {
             continue;
         } else {
             have_coverage = true;
             // compute median
             if (!dist_anchored.empty()) {
                 std::sort(dist_anchored.begin(), dist_anchored.end());
-                c.median_length_anchor = dist_anchored[dist_anchored.size() / 2];
+                bridge_dir_candidate.median_length_anchor = dist_anchored[dist_anchored.size() / 2];
             }
 
 
@@ -453,7 +476,7 @@ void ExPolygon::get_trapezoids(ExPolygon clone, Polygons* polygons, double angle
 // This algorithm may return more trapezoids than necessary
 // (i.e. it may break a single trapezoid in several because
 // other parts of the object have x coordinates in the middle)
-static void get_trapezoids2(const ExPolygon& expoly, Polygons* polygons)
+static void get_trapezoids2(const ExPolygon& expoly, Polygons* polygons, coord_t offset_top_bottom)
 {
     Polygons     src_polygons = to_polygons(expoly);
     // get all points of this ExPolygon
@@ -477,24 +500,27 @@ static void get_trapezoids2(const ExPolygon& expoly, Polygons* polygons)
         if (*x != next_x) {
             // intersect with rectangle
             // append results to return value
-            rectangle.front() = { { *x, bb.min.y() }, { next_x, bb.min.y() }, { next_x, bb.max.y() }, { *x, bb.max.y() } };
-            polygons_append(*polygons, intersection(rectangle, src_polygons));
+            rectangle.front() = {{*x, bb.min.y() - offset_top_bottom},
+                                 {next_x, bb.min.y() - offset_top_bottom},
+                                 {next_x, bb.max.y() + offset_top_bottom},
+                                 {*x, bb.max.y() + offset_top_bottom}};
+            append(*polygons, intersection(rectangle, src_polygons));
         }
     }
 }
 
-static void get_trapezoids2(const ExPolygon &expoly, Polygons* polygons, double angle)
+static void get_trapezoids2(const ExPolygon &expoly, Polygons* polygons, double angle, coord_t offset_top_bottom)
 {
     ExPolygon clone = expoly;
     clone.rotate(PI/2 - angle, Point(0,0));
-    get_trapezoids2(clone, polygons);
+    get_trapezoids2(clone, polygons, offset_top_bottom);
     for (Polygon &polygon : *polygons)
         polygon.rotate(-(PI/2 - angle), Point(0,0));
 }
 
 
 
-void get_trapezoids3_half(const ExPolygon& expoly, Polygons* polygons, float spacing)
+void get_trapezoids3_half(const ExPolygon& expoly, Polygons* polygons, coord_t spacing, int layer_id, ExPolygons anchorage)
 {
 
     // get all points of this ExPolygon
@@ -512,71 +538,150 @@ void get_trapezoids3_half(const ExPolygon& expoly, Polygons* polygons, float spa
         if (min_x > p->x()) min_x = p->x();
         if (max_x < p->x()) max_x = p->x();
     }
-    for (coord_t x = min_x; x < max_x - (coord_t)(spacing / 2); x += (coord_t)spacing) {
+    for (coord_t x = min_x; x < max_x - (spacing / 2); x += spacing) {
         xx.push_back(x);
     }
     xx.push_back(max_x);
     //std::sort(xx.begin(), xx.end());
-
+    
+    std::unique_ptr<SVG> svg;
+    if (layer_id >= 0) {
+        static int        aodfjiaz = 0;
+        std::stringstream stri;
+        stri << layer_id << "_create_trap_" << "_" << (aodfjiaz++) << ".svg";
+        svg = std::make_unique<SVG>(stri.str());
+        svg->draw(expoly, "grey");
+        svg->draw(to_polylines(anchorage), "pink");
+    }
     // find trapezoids by looping from first to next-to-last coordinate
     for (std::vector<coord_t>::const_iterator x = xx.begin(); x != xx.end() - 1; ++x) {
         coord_t next_x = *(x + 1);
         if (*x == next_x) continue;
 
         // build rectangle
-        Polygon poly;
-        poly.points.resize(4);
-        poly[0].x() = *x + (coord_t)spacing / 4;
-        poly[0].y() = bb.min(1);
-        poly[1].x() = next_x - (coord_t)spacing / 4;
-        poly[1].y() = bb.min(1);
-        poly[2].x() = next_x - (coord_t)spacing / 4;
-        poly[2].y() = bb.max(1);
-        poly[3].x() = *x + (coord_t)spacing / 4;
-        poly[3].y() = bb.max(1);
+        ExPolygon poly;
+        poly.contour.points.resize(4);
+        poly.contour[0].x() = *x + (spacing / 4);
+        poly.contour[0].y() = bb.min(1) - spacing / 2; // (-spacing/2) to move into the anchor
+        poly.contour[1].x() = next_x - (spacing / 4);
+        poly.contour[1].y() = bb.min(1) - spacing / 2;
+        poly.contour[2].x() = next_x - (spacing / 4);
+        poly.contour[2].y() = bb.max(1) + spacing / 2;
+        poly.contour[3].x() = *x + (spacing / 4);
+        poly.contour[3].y() = bb.max(1) + spacing / 2;
+        
+        append(*polygons, intersection(expoly, poly));
 
-        // intersect with this expolygon
-        // append results to return value
-        polygons_append(*polygons, intersection(Polygons{ poly }, to_polygons(expoly)));
+        //ExPolygons polys = intersection_ex(expoly, poly);
+        ////check that the polys are stills strait
+        //if (layer_id >= 0)
+        //    svg->draw(poly.contour.split_at_first_point(), "teal", scale_(0.04));
+        //for(ExPolygon& poly : polys) {
+        //    if (poly.contour.size() == 4 && poly.holes.empty()) {
+        //        if (layer_id >= 0)
+        //            svg->draw(poly.contour.split_at_first_point(), "green", scale_(0.03));
+        //        polygons->push_back(poly.contour);
+        //    }else if (layer_id >= 0)
+        //        svg->draw(to_polylines({poly}), "red", scale_(0.03));
+        //    //TODO: else, cehck if all points are inside anchors to be able to add it as bridge.
+        //}
+    }
+    if (layer_id >= 0) {
+        svg->Close();
     }
 }
 
-Polygons BridgeDetector::coverage(double angle, bool precise) const
+Polygons BridgeDetector::coverage(double angle, bool precise, bool strait_bridges) const
 {
     if (angle == -1)
         angle = this->angle;
 
     Polygons covered;
-
+    
+    static int create_bridge_idx = 0;
+    create_bridge_idx++;
     if (angle != -1) {
         // Get anchors, convert them to Polygons and rotate them.
-        Polygons anchors = to_polygons(this->_anchor_regions);
-        polygons_rotate(anchors, PI / 2.0 - angle);
+        ExPolygons anchors = this->_anchor_regions;
+        expolygons_rotate(anchors, PI / 2.0 - angle);
         //same for region which do not need bridging
         //Polygons supported_area = diff(this->lower_slices.expolygons, this->_anchor_regions, true);
         //polygons_rotate(anchors, PI / 2.0 - angle);
+        
+        // create bb (if needed)
+        std::vector<BoundingBox> bbs;
+        if (strait_bridges) {
+            for (const ExPolygon &p : anchors) {
+                bbs.emplace_back(p.contour.points);
+            }
+        }
 
-        for (ExPolygon expolygon : this->expolygons) {
+        for (ExPolygon unsupported : this->expolygons) {
             // Clone our expolygon and rotate it so that we work with vertical lines.
-            expolygon.rotate(PI / 2.0 - angle);
+            unsupported.rotate(PI / 2.0 - angle);
             // Outset the bridge expolygon by half the amount we used for detecting anchors;
             // we'll use this one to generate our trapezoids and be sure that their vertices
             // are inside the anchors and not on their contours leading to false negatives.
-            for (ExPolygon &expoly : offset_ex(expolygon, 0.5f * float(this->spacing))) {
+            if(layer_id>=0){
+                static int aodfjiaz = 0;
+                std::stringstream stri;
+                stri << layer_id << "_bridges_create_area_" << create_bridge_idx << "_" << (aodfjiaz++) << ".svg";
+                SVG svg(stri.str());
+                svg.draw(unsupported, "grey");
+                svg.draw(anchors, "green");
+            ExPolygons unsupported_bigger = offset_ex(unsupported, 0.5f * float(this->spacing));
+                svg.draw(to_polylines(unsupported_bigger), "red", scale_(0.06));
+            assert(unsupported_bigger.size() == 1); // growing don't split
+            ExPolygons small_anchors = intersection_ex(unsupported_bigger.front(), anchors);
+                svg.draw(to_polylines(small_anchors), "orange", scale_(0.04));
+            unsupported_bigger = small_anchors;
+            unsupported_bigger.push_back(unsupported);
+            unsupported_bigger = union_safety_offset_ex(unsupported_bigger);
+                svg.draw(to_polylines(unsupported_bigger), "yellow", scale_(0.02));
+                svg.Close();
+            }
+            ExPolygons unsupported_bigger = offset_ex(unsupported, 0.5f * float(this->spacing));
+            assert(unsupported_bigger.size() == 1); // growing don't split
+            ExPolygons small_anchors = intersection_ex(unsupported_bigger.front(), anchors);
+            unsupported_bigger = small_anchors;
+            unsupported_bigger.push_back(unsupported);
+            unsupported_bigger = union_safety_offset_ex(unsupported_bigger);
+            //now unsupported_bigger is unsupported but with a little extra inside the anchors
+            //clean it up if needed (remove bits unlinked to 'unsupported'
+            if(unsupported_bigger.size() >1){
+                double biggest_area = 0;
+                for (auto it = unsupported_bigger.begin(); it != unsupported_bigger.end(); ++it) {
+                    biggest_area = std::max(biggest_area, it->area());
+                }
+                auto it = unsupported_bigger.begin();
+                while ( it != unsupported_bigger.end()) {
+                    if (it->area() >= biggest_area - 1) {
+                        ++it;
+                    } else {
+                        it = unsupported_bigger.erase(it);
+                    }
+                }
+            }
+            assert(unsupported_bigger.size() ==1);
+            {
                 // Compute trapezoids according to a vertical orientation
                 Polygons trapezoids;
-                if (!precise) get_trapezoids2(expoly, &trapezoids, PI / 2);
-                else get_trapezoids3_half(expoly, &trapezoids, float(this->spacing));
+                if (!precise) {
+                    get_trapezoids2(unsupported_bigger.front(), &trapezoids, this->spacing / 2);
+                } else {
+                    get_trapezoids3_half(unsupported_bigger.front(), &trapezoids, this->spacing, layer_id, anchors);
+                }
                 for (Polygon &trapezoid : trapezoids) {
                     size_t n_supported = 0;
                     if (!precise) {
                         // not nice, we need a more robust non-numeric check
                         // imporvment 1: take into account when we go in the supported area.
-                        for (const Line &supported_line : intersection_ln(trapezoid.lines(), anchors))
+                        Polygons anchors_polys = to_polygons(anchors);
+                        for (const Line &supported_line : intersection_ln(trapezoid.lines(), anchors_polys))
                             if (supported_line.length() >= this->spacing)
                                 ++n_supported;
                     } else {
-                        Polygons intersects = intersection(Polygons{trapezoid}, anchors);
+                        Polygons intersects = intersection(anchors, Polygons{trapezoid});
                         n_supported = intersects.size();
 
                         if (n_supported >= 2) {
@@ -607,8 +712,47 @@ Polygons BridgeDetector::coverage(double angle, bool precise) const
                     }
 
                     if (n_supported >= 2) {
-                        //add it
-                        covered.push_back(std::move(trapezoid));
+                        //remove points that aren't in anchors
+                        //if (strait_bridges) {
+                        //    //be sure it doesn't go over the expolygon
+                        //    Polygons trapezoid_stamped = intersection(unsupported, ExPolygon(trapezoid));
+                        //    //should be only one
+                        //    if (trapezoid_stamped.size() == 1) {
+                        //        trapezoid = trapezoid_stamped[0];
+                        //    }
+                        //    assert(bbs.size() == anchors.size());
+                        //    //for each points of covered, check if in an anchor
+                        //    for (size_t idx = 0; idx < trapezoid.size(); idx++) {
+                        //        bool found = false;
+                        //        for (size_t anchor_idx = 0; anchor_idx < bbs.size(); anchor_idx++) {
+                        //            if(bbs[anchor_idx].contains(trapezoid.points[idx]) && !anchors[anchor_idx].contains(trapezoid.points[idx])){
+                        //                found = true; break;
+                        //            }
+                        //        }
+                        //        if (!found) {
+                        //            // point not in anchor: remove
+                        //            trapezoid.points.erase(trapezoid.points.begin() + idx);
+                        //            idx--;
+                        //        }
+                        //    }
+                        //}
+                        if (trapezoid.size() > 3) {
+                            //create svg
+                            
+            if(layer_id>=0){
+                static int aodfjiaz = 0;
+                std::stringstream stri;
+                stri << layer_id << "_bridges_trapezoid_" << create_bridge_idx << "_" << (aodfjiaz++) << ".svg";
+                SVG svg(stri.str());
+                svg.draw(unsupported, "grey");
+                svg.draw(anchors, "green");
+                svg.draw(trapezoid.split_at_first_point(), "yellow");
+                svg.Close();
+            }
+
+                            // add it
+                            covered.push_back(std::move(trapezoid));
+                        }
                     }
                 }
             }
@@ -617,9 +761,21 @@ Polygons BridgeDetector::coverage(double angle, bool precise) const
         // Unite the trapezoids before rotation, as the rotation creates tiny gaps and intersections between the trapezoids
         // instead of exact overlaps.
         covered = union_(covered);
+
         // Intersect trapezoids with actual bridge area to remove extra margins and append it to result.
         polygons_rotate(covered, -(PI/2.0 - angle));
         //covered = intersection(this->expolygons, covered);
+                            
+            if(layer_id>=0){
+                static int aodfjiaz = 0;
+                std::stringstream stri;
+                stri << layer_id << "_bridges_finished_" << create_bridge_idx << "_" << (aodfjiaz++) << ".svg";
+                SVG svg(stri.str());
+                svg.draw(this->expolygons, "grey");
+                svg.draw(this->_anchor_regions, "green");
+                svg.draw(to_polylines(covered), "blue");
+                svg.Close();
+            }
 #if 0
         {
             my @lines = map @{$_->lines}, @$trapezoids;

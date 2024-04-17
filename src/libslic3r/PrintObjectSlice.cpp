@@ -592,32 +592,56 @@ void PrintObject::_min_overhang_threshold() {
         Layer* lower_layer = this->get_layer(layer_idx - 1);
         assert(lower_layer == my_layer->lower_layer);
         ExPolygons supported_area = intersection_ex(my_layer->lslices, lower_layer->lslices);
+        ExPolygons bridged_area;
 
         // get bridgeable area
         ExPolygons unsupported = diff_ex(my_layer->lslices, lower_layer->lslices, ApplySafetyOffset::Yes);
         ExPolygons unsupported_filtered;
         if (!unsupported.empty()) {
             // remove small overhangs
-            unsupported_filtered = offset2_ex(unsupported, double(max_nz_diam), double(max_nz_diam));
-            for (ExPolygon unsupported : unsupported_filtered) {
-                BridgeDetector detector{ unsupported,
+            unsupported_filtered = offset2_ex(unsupported, double(-max_nz_diam), double(max_nz_diam));
+                static int aodfjiaz = 0;
+                std::stringstream stri;
+                stri << layer_idx << "create_unsup_" << "_" << (aodfjiaz++) << ".svg";
+                SVG svg(stri.str());
+                svg.draw(my_layer->lslices, "grey");
+                svg.draw(lower_layer->lslices, "green");
+                svg.draw(to_polylines(supported_area), "teal", scale_(0.08));
+                svg.draw(to_polylines(unsupported), "orange", scale_(0.06));
+                svg.draw(to_polylines(unsupported_filtered), "red", scale_(0.04));
+                svg.Close();
+            for (const ExPolygon & to_bridge: unsupported_filtered) {
+                BridgeDetector detector( to_bridge,
                     lower_layer->lslices,
-                    max_nz_diam};
+                    max_nz_diam, layer_idx);
+                detector.layer_id = layer_idx;
                 if (detector.detect_angle(0))
-                    append(supported_area, union_ex(detector.coverage(-1, true)));
+                    append(bridged_area, union_ex(detector.coverage(-1, true)));
             }
-
-            // put bridgeable into supported area
-            supported_area = union_safety_offset_ex(supported_area);
-
+                
             // enlarge supported area & intersect it with full area
-
             //also modify region surfaces
             ExPolygons modified;
+            //std::map<coord_t, ExPolygons> enlargement_2_support_area;
             for (size_t region_idx = 0; region_idx < my_layer->m_regions.size(); ++region_idx) {
+                // TODO: fuse region with same enlargement
                 coord_t enlargement = scale_t(my_layer->get_region(region_idx)->region().config().overhangs_max_slope.get_abs_value(unscaled(max_nz_diam)));
                 if (enlargement > 0) {
                     ExPolygons enlarged_support = offset_ex(supported_area, double(enlargement));
+                    // put bridgeable into supported area (bridges are not enlarged)
+                                
+                    static int aodfjiaz = 0;
+                    std::stringstream stri;
+                    stri << layer_idx << "_overhang_slope_" << (aodfjiaz++) << ".svg";
+                    SVG svg(stri.str());
+                    svg.draw(my_layer->lslices, "grey");
+                    svg.draw(lower_layer->lslices, "green");
+                    svg.draw(to_polylines(supported_area), "teal");
+                    svg.draw(to_polylines(enlarged_support), "orange");
+                    svg.draw(to_polylines(bridged_area), "blue");
+                    append(enlarged_support, bridged_area);
+                    enlarged_support = union_safety_offset_ex(enlarged_support);
+                    // modify geometry
                     Surfaces to_add;
                     Surfaces &my_surfaces = my_layer->m_regions[region_idx]->m_slices.surfaces;
                     for (size_t surf_idx = 0; surf_idx < my_surfaces.size(); surf_idx++) {
@@ -635,6 +659,8 @@ void PrintObject::_min_overhang_threshold() {
                     }
                     append(my_surfaces, std::move(to_add));
                     append(modified, std::move(enlarged_support));
+                    svg.draw(to_polylines(intersection_ex(my_layer->lslices, union_ex(modified), ApplySafetyOffset::Yes)), "red");
+                    svg.Close();
                 }
             }
 
