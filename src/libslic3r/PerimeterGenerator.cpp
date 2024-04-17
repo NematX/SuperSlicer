@@ -1203,22 +1203,33 @@ void grow_holes_only(std::vector<ExPolygonAsynch> &unmoveable_contours,
         computed_offset -= overlap_spacing;
         Polygons ex_contour_offset = offset(Polygons{expoly.contour}, computed_offset);
         bool ex_contour_offset_now_fake_hole = false;
-        for (size_t idx_hole = 0; idx_hole< ok_holes.size() ; ++idx_hole) {
+        for (size_t idx_hole = 0; idx_hole < ok_holes.size(); ++idx_hole) {
             const Polygon &hole = ok_holes[idx_hole];
             assert(hole.is_counter_clockwise());
             // Check if it can fuse with contour
-            ExPolygons result = diff_ex(ex_contour_offset, Polygons{hole});
-            // Only two options here, it can fuse and then there is 1 or more contour, no holes.
-            // Or it don't touch the contour and so nothing happen.
-            if (result.size() > 1 || (!result.empty() && result.front().holes.empty())) {
-                for (ExPolygon &expoly : result) assert(expoly.holes.empty());
-                // now use this one.
-                ex_contour_offset = to_polygons(result);
-                ex_contour_offset_now_fake_hole = true;
-                //remove from useful holes
-                ok_holes.erase(ok_holes.begin() + idx_hole);
-                idx_hole--;
+            // TODO: bounding box for quicker cut search
+            auto it_contour_candidate_for_fuse = ex_contour_offset.begin();
+            Polygons fused_contour;
+            while (it_contour_candidate_for_fuse != ex_contour_offset.end()) {
+                ExPolygons result = diff_ex(Polygons{*it_contour_candidate_for_fuse}, Polygons{hole});
+                // Only two options here, it can fuse and then there is 1 or more contour, no holes.
+                // Or it don't touch the contour and so nothing happen. (the hole can be inside or outside)
+                // SO, we can check it it slip or if the contour has been modified
+                if (result.size() > 1 || (result.size() == 1 && result.front().contour != *it_contour_candidate_for_fuse)) {
+                    for (ExPolygon &expoly : result) assert(expoly.holes.empty());
+                    // now use this one.
+                    append(fused_contour, to_polygons(result));
+                    ex_contour_offset_now_fake_hole = true;
+                    // remove from useful holes
+                    ok_holes.erase(ok_holes.begin() + idx_hole);
+                    idx_hole--;
+                    it_contour_candidate_for_fuse = ex_contour_offset.erase(it_contour_candidate_for_fuse);
+                } else {
+                    ++it_contour_candidate_for_fuse;
+                }
             }
+            if(!fused_contour.empty())
+                append(ex_contour_offset, std::move(fused_contour));
         }
         // if moved from unmoveable_contours to growing_contours, then move the expoly
         if (ex_contour_offset_now_fake_hole) {
