@@ -997,6 +997,7 @@ namespace DoExport {
             excluded.insert(erMixed);
             excluded.insert(erNone);
             excluded.insert(erTravel);
+            excluded.insert(erRectilinearAroundHoleInfillTravel);
             excluded.insert(erWipeTower);
             if (config->option("perimeter_speed") != nullptr && config->get_computed_value("perimeter_speed") != 0)
                 excluded.insert(erPerimeter);
@@ -5491,6 +5492,8 @@ double_t GCode::_compute_speed_mm_per_sec(const ExtrusionPath& path, double spee
         } else if (path.role() == erNone || path.role() == erTravel) {
             assert(path.role() != erNone);
             speed = m_config.get_computed_value("travel_speed");
+        } else if (path.role() == erRectilinearAroundHoleInfillTravel) {
+            speed = m_config.get_computed_value("fill_rectilinearholes_travel_speed");
         } else if (path.role() == erMilling) {
             speed = m_config.get_computed_value("milling_speed");
         } else if (path.role() == erSupportMaterial) {
@@ -5619,6 +5622,7 @@ void GCode::cooldown_marker_init() {
         _cooldown_marker_speed[erCustom] = maybe_allow_speed_change;
         _cooldown_marker_speed[erMixed] = maybe_allow_speed_change;
         _cooldown_marker_speed[erTravel] = maybe_allow_speed_change;
+        _cooldown_marker_speed[erRectilinearAroundHoleInfillTravel] = maybe_allow_speed_change;
     }
 }
 
@@ -5772,6 +5776,7 @@ std::string GCode::_before_extrude(const ExtrusionPath &path, const std::string 
             case erCustom:
             case erMixed:
             case erTravel:
+            case erRectilinearAroundHoleInfillTravel:
             case erCount:
             default:
                 break;

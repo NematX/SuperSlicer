@@ -342,6 +342,7 @@ std::string ExtrusionEntity::role_to_string(ExtrusionRole role)
         case erCustom                       : return L("Custom");
         case erMixed                        : return L("Mixed");
         case erTravel                       : return L("Travel");
+        case erRectilinearAroundHoleInfillTravel : return L("Travel");
         default                             : assert(false);
     }
 
@@ -387,6 +388,8 @@ ExtrusionRole ExtrusionEntity::string_to_role(const std::string_view role)
         return erCustom;
     else if (role == L("Mixed"))
         return erMixed;
+    else if (role == L("Travel"))
+        return erTravel;
     else
         return erNone;
 }
@@ -415,6 +418,7 @@ std::string role_to_code(ExtrusionRole role)
         case erCustom                       : return L("Custom");
         case erMixed                        : return L("Mixed");
         case erTravel                       : return L("Travel");
+        case erRectilinearAroundHoleInfillTravel: return L("Travel");
         default                             : assert(false);
     }
 

@@ -2497,9 +2497,35 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvancedE | comSuSi;
     def->set_default_value(new ConfigOptionInt(1));
 
+    def = this->add("fill_rectilinearholes_travel_speed", coFloatOrPercent);
+    def->label = L("Travel speed");
+    def->full_label = L("Rectilinear around holes infill: travel speed");
+    def->category = OptionCategory::infill;
+    def->tooltip = L("The 'rectilinear around holes' infill has some travel around the holes of the surfaces to fill."
+                    " This setting allow to set this travel speed, in mm/s or in a percentage of the current generic travel speed."
+                    "\nIf set to 0, the general travel speed is used (same as 100%)");
+    def->ratio_over = "travel_speed";
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->sidetext = L("mm/s or %");
+    def->set_default_value(new ConfigOptionFloatOrPercent(100, true));
+
+    def = this->add("fill_rectilinearholes_travel_flow_ratio", coPercent);
+    def->label = L("Travel flow ratio");
+    def->full_label = L("Rectilinear around holes infil;kl: travel flow ratio");
+    def->category = OptionCategory::infill;
+    def->tooltip = L("The 'rectilinear around holes' infill has some travel around the holes of the surfaces to fill."
+                    " This setting allow to still extrude a little bit when doing the travel, to not loose too much pressure in the hotend."
+                    " It's a percentage of the current flow.");
+    def->ratio_over = "top_infill_extrusion_width";
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->sidetext = L("%");
+    def->set_default_value(new ConfigOptionPercent(1));
+
     def = this->add("fill_smooth_width", coFloatOrPercent);
     def->label = L("Width");
-    def->full_label = L("Ironing width");
+    def->full_label = L("Ironing infill: width");
     def->category = OptionCategory::infill;
     def->tooltip = L("This is the width of the ironing pass, in a % of the top infill extrusion width, should not be more than 50%"
         " (two times more lines, 50% overlap). It's not necessary to go below 25% (four times more lines, 75% overlap). \nIf you have problems with your ironing process,"
@@ -2514,7 +2540,7 @@ void PrintConfigDef::init_fff_params()
 
     def = this->add("fill_smooth_distribution", coPercent);
     def->label = L("Distribution");
-    def->full_label = L("Ironing flow distribution");
+    def->full_label = L("Ironing infill: flow distribution");
     def->category = OptionCategory::infill;
     def->tooltip = L("This is the percentage of the flow that is used for the second ironing pass. Typical 10-20%. "
         "Should not be higher than 20%, unless you have your top extrusion width greatly superior to your nozzle width. "
@@ -8256,6 +8282,8 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "fill_angle_increment",
 "fill_angle_cross",
 "fill_angle_template",
+"fill_rectilinearholes_travel_flow_ratio",
+"fill_rectilinearholes_travel_speed",
 "fill_smooth_distribution",
 "fill_smooth_width",
 "fill_top_flow_ratio",
@@ -8446,6 +8474,7 @@ std::unordered_set<std::string> prusa_export_to_change_keys =
 "default_fan_speed", // used to convert to min_fan_speed & fan_always_on
 "overhangs_width",
 "overhangs_speed",
+"inherits_cumulative",
 };
 
 std::map<std::string, std::string> PrintConfigDef::to_prusa(t_config_option_key& opt_key, std::string& value, const DynamicConfig& all_conf) {

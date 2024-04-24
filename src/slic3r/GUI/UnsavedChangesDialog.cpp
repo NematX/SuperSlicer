@@ -1309,9 +1309,10 @@ void UnsavedChangesDialog::update_tree(Preset::Type type, PresetCollection* pres
 
         for (const std::string& opt_key : dirty_options) {
             const Search::Option& option = searcher.get_option(opt_key, type);
-            if (option.opt_key_with_idx() != opt_key) {
+            if (option.opt_key_with_idx() != opt_key && boost::nowide::narrow(option.key) != opt_key) {
                 // When founded option isn't the correct one.
-                // It can be for dirty_options: "default_print_profile", "printer_model", "printer_settings_id",
+                // It can be for dirty_options: "default_print_profile", "printer_model", "printer_settings_id", "filament_settings_id", "print_settings_id", "inherits"
+                searcher.get_option(opt_key, type);
                 // because of they don't exist in searcher
                 continue;
             }

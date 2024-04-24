@@ -74,6 +74,7 @@ enum ExtrusionRole : uint8_t {
     erMixed,
     //extrusion role when there is no extrusion
     erTravel,
+    erRectilinearAroundHoleInfillTravel,
     erCount
 };
 

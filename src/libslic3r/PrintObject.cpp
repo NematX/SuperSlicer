@@ -1003,6 +1003,8 @@ bool PrintObject::invalidate_state_by_config_options(
                 || opt_key == "fill_angle_increment"
                 || opt_key == "fill_angle_template"
                 || opt_key == "fill_top_flow_ratio"
+                || opt_key == "fill_rectilinearholes_travel_flow_ratio"
+                || opt_key == "fill_rectilinearholes_travel_speed"
                 || opt_key == "fill_smooth_width"
                 || opt_key == "fill_smooth_distribution"
                 || opt_key == "infill_anchor"

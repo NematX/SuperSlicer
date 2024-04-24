@@ -3318,13 +3318,11 @@ std::vector<SegmentedIntersectionLine> FillScatteredRectilinear::_vert_lines_for
     return segs;
 }
 
-std::mutex mut;
 void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, const FillParams& params, ExtrusionEntitiesPtr& out) const
 //Polylines FillRectilinearAroundHoles::fill_surface(const Surface *surface, const FillParams &params) const
 {
-    std::unique_lock<std::mutex> lck(mut);
     std::unique_ptr<ExtrusionEntityCollection> coll = std::make_unique<ExtrusionEntityCollection>();
-    coll->set_can_sort_reverse(true, true);
+    coll->set_can_sort_reverse(false, true);
     // Shrink the input polygon a bit first to not push the infill lines out of the perimeters.
 //    const float INFILL_OVERLAP_OVER_SPACING = 0.3f;
     //const float INFILL_OVERLAP_OVER_SPACING = 0.45f; //merill: what is this value???
@@ -3412,155 +3410,348 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
         svg.Close();
     }
 #endif /* SLIC3R_DEBUG */
-        //static int iRun = 0;
-        //std::stringstream filename;
-        //filename << this->layer_id<<"_" << iRun++<<"_";
-        //filename << "FillPerso.svg";
-        //::Slic3r::SVG svg(filename.str()); // , scale_(1.));
-        //svg.draw(poly_with_offset.polygons_src.contour, "black");
-        //svg.draw(union_ex(poly_with_offset.polygons_outer)[0].contour, "brown");
-        //svg.draw(union_ex(poly_with_offset.polygons_inner)[0].contour, "grey");
-        //svg.draw(union_ex(poly_with_offset.polygons_inner)[0].holes, "white");
-        //svg.draw(union_ex(poly_with_offset.polygons_outer)[0].holes, "orange");
-        //svg.draw(poly_with_offset.polygons_src.holes, "#333333");
-        
-
-    //use a simple pattern. TODO: conenctions over contour if possible
+   
+    //use a simple pattern. TODO: connections over contour if possible
     std::vector<ExtrusionEntityCollection*> all_multipaths;
     std::unique_ptr<ExtrusionEntityCollection> current_paths = std::make_unique<ExtrusionEntityCollection>();
     current_paths->set_can_sort_reverse(false, true);
     ExtrusionRole good_role = getRoleFromSurfaceType(params, surface);
-    // Paint the segments and finalize the SVG file.
-    for (size_t i_seg = 0; i_seg < segs.size(); ++i_seg) {
-        SegmentedIntersectionLine &sil = segs[i_seg];
-        Polyline                   poly;
-        bool contour = false;
-        for (size_t i = 0; i < sil.intersections.size(); i++) {
-            SegmentIntersection &intersec = sil.intersections[i];
-            bool  is_on_ply = i > 0 && i + 1 < sil.intersections.size();
-            is_on_ply = is_on_ply && sil.intersections[i + 1].iContour == intersec.iContour;
-            is_on_ply = is_on_ply && intersec.type == intersec.OUTER_HIGH;
-            //if(intersec.type == intersec.INNER_LOW)
-            //    svg.draw(Point(sil.pos, intersec.pos()), "cyan", scale_t(0.05));
-            //else if (intersec.type == intersec.INNER_HIGH)
-            //    svg.draw(Point(sil.pos, intersec.pos()), "blue", scale_t(0.05));
-            //else if (intersec.type == intersec.OUTER_LOW)
-            //    svg.draw(Point(sil.pos, intersec.pos()), "orange", scale_t(0.05));
-            //else if (intersec.type == intersec.OUTER_HIGH)
-            //    svg.draw(Point(sil.pos, intersec.pos()), "red", scale_t(0.05));
-            //else if (intersec.prev_on_contour_type == SegmentIntersection::LinkType::Down || intersec.prev_on_contour_type == SegmentIntersection::LinkType::Up
-            //        || intersec.next_on_contour_type == SegmentIntersection::LinkType::Down || intersec.next_on_contour_type == SegmentIntersection::LinkType::Up)
-            //    svg.draw(Point(sil.pos, intersec.pos()), "green", scale_t(0.02));
-            //&&
-                //(intersec.prev_on_contour_type == SegmentIntersection::LinkType::Down || intersec.prev_on_contour_type == SegmentIntersection::LinkType::Up
-                    //|| intersec.next_on_contour_type == SegmentIntersection::LinkType::Down || intersec.next_on_contour_type == SegmentIntersection::LinkType::Up);
-            if (is_on_ply) {
-                assert(i > 0);
-                // Save current path
-                if (poly.size() > 1) {
-                    poly.append(Point(sil.pos, intersec.pos()));
-                    //svg.draw(poly, "cyan", scale_t(0.01));
-                    std::unique_ptr<ExtrusionPath> path(
-                        new ExtrusionPath(good_role, params.flow.mm3_per_mm() * params.flow_mult,
-                                          (float) (params.flow.width() * params.flow_mult),
-                                          (float) params.flow.height(), true));
-                    path->polyline = std::move(poly);
-                    current_paths->append(path);
-                    poly.clear();
-                }
 
-                // Create travel
-                SegmentIntersection &intersec_next = sil.intersections[i + 1];
-                assert(intersec.is_hole == intersec_next.is_hole);
-                assert(! intersec.is_hole  || (sil.intersections[i - 1].iContour != intersec.iContour));
-                // use intersec.iContour instead of intersec.iContour, to be abit farther away from the real contour
-                const coord_t scaled_spacing = params.flow.scaled_spacing();
-                bool previous_is_near_enough = sil.intersections[i - 1].iContour != intersec.iContour &&
-                                               std::abs(sil.intersections[i - 1].pos() - intersec.pos()) < scaled_spacing
-                                               && poly_with_offset.contour(sil.intersections[i - 1].iContour).size() == poly_with_offset.contour(intersec.iContour).size();
-                if (previous_is_near_enough) {
-                    assert(poly_with_offset.contour(sil.intersections[i - 1].iContour).size() > intersec.iSegment && poly_with_offset.contour(sil.intersections[i - 1].iContour).size() > intersec_next.iSegment);
-                    assert(poly_with_offset.contour(intersec.iContour).size() > intersec.iSegment && poly_with_offset.contour(intersec.iContour).size() > intersec_next.iSegment);
-                    previous_is_near_enough = previous_is_near_enough &&
-                                              poly_with_offset.contour(sil.intersections[i - 1].iContour)[intersec.iSegment].distance_to_square(poly_with_offset.contour(intersec.iContour)[intersec.iSegment])
-                                                  < scaled_spacing * scaled_spacing;
+    struct VerticalSegments
+    {
+        SegmentedIntersectionLine &sil;
+        Polylines segments;
+        // has segments*2 idx, one for each in/out of segment.
+        std::vector<size_t> segment_end_idx;
+
+        VerticalSegments(SegmentedIntersectionLine &s) : sil(s) {}
+    };
+    
+#ifdef _DEBUG
+        static int iRun = 0;
+        std::stringstream filename;
+        filename << this->layer_id<<"_" << iRun++<<"_";
+        filename << "FillPersoV2.svg";
+        ::Slic3r::SVG svg(filename.str()); // , scale_(1.));
+        svg.draw(poly_with_offset.polygons_src.contour, "black");
+        svg.draw(union_ex(poly_with_offset.polygons_outer)[0].contour, "brown");
+        svg.draw(union_ex(poly_with_offset.polygons_inner)[0].contour, "grey");
+        svg.draw(union_ex(poly_with_offset.polygons_inner)[0].holes, "white");
+        svg.draw(union_ex(poly_with_offset.polygons_outer)[0].holes, "orange");
+        svg.draw(poly_with_offset.polygons_src.holes, "#333333");
+#endif
+    // gather segments
+    std::vector<VerticalSegments> polylines_segs;
+    for (size_t i_seg = 0; i_seg < segs.size(); ++i_seg) {
+        polylines_segs.emplace_back(segs[i_seg]);
+        VerticalSegments &sil = polylines_segs.back();
+        sil.segment_end_idx.push_back(0);
+        sil.segments.emplace_back();
+        bool contour = false;
+        for (size_t i_intersec = 0; i_intersec < sil.sil.intersections.size(); i_intersec++) {
+            SegmentIntersection &intersec = sil.sil.intersections[i_intersec];
+            bool  is_on_poly = i_intersec > 0 && i_intersec + 1 < sil.sil.intersections.size();
+            is_on_poly = is_on_poly && sil.sil.intersections[i_intersec + 1].iContour == intersec.iContour;
+            is_on_poly = is_on_poly && intersec.type == intersec.OUTER_HIGH;
+            if (is_on_poly) {
+                assert(i_intersec > 0);
+                // Save current path
+                if (!sil.segments.empty()) {
+                    sil.segments.back().append(Point(sil.sil.pos, intersec.pos()));
+                    sil.segment_end_idx.push_back(i_intersec);
+                    sil.segment_end_idx.push_back(i_intersec);
+#ifdef _DEBUG
+                    svg.draw(sil.segments.back(), "cyan", scale_t(0.04));
+#endif
+                    sil.segments.emplace_back();
                 }
-                const Polygon &hole_poly = previous_is_near_enough ?
-                                               poly_with_offset.contour(sil.intersections[i - 1].iContour) :
-                                               poly_with_offset.contour(intersec.iContour);
+            } else {
+                sil.segments.back().append(Point(sil.sil.pos, intersec.pos()));
+            }
+        }
+        if (sil.segments.back().size() > 1) {
+#ifdef _DEBUG
+            svg.draw(sil.segments.back(), "lime", scale_t(0.01));
+#endif
+            sil.segment_end_idx.push_back(sil.sil.intersections.size()-1);
+        } else {
+            assert(sil.segments.back().empty());
+            sil.segments.erase(sil.segments.end()-1);
+            sil.segment_end_idx.erase(sil.segment_end_idx.end()-1);
+        }
+        assert(sil.segment_end_idx.size() == sil.segments.size() * 2);
+    }
+#ifdef _DEBUG
+    svg.Close();
+#endif
+    
+    const coord_t scaled_spacing = params.flow.scaled_spacing();
+
+    // remove empty polylines (and too short ones)
+    for (VerticalSegments &vseg : polylines_segs) {
+        // remove empty & too small bits
+        for (size_t i_seg = 0; i_seg < vseg.segments.size(); i_seg++) {
+            Polyline &poly = vseg.segments[i_seg];
+            assert(poly.size() != 1);
+            if (poly.size() < 2 || poly.length() < scaled_spacing) {
+                vseg.segments.erase(vseg.segments.begin() + i_seg);
+                vseg.segment_end_idx.erase(vseg.segment_end_idx.begin() + i_seg * 2);
+                vseg.segment_end_idx.erase(vseg.segment_end_idx.begin() + i_seg * 2);
+                i_seg--;
+            }
+        }
+        assert(vseg.segments.empty() || vseg.segments.size() * 2 == vseg.segment_end_idx.size());
+    }
+
+    //cache
+    std::map<const Polygon*, Polygon> polygon_2_offseted;
+
+    // create paths
+    for (size_t i_vseg = 0; i_vseg < polylines_segs.size(); i_vseg++) {
+        VerticalSegments &vseg = polylines_segs[i_vseg];
+        // remove empty & too small bits
+        for (size_t i_seg = 0; i_seg < vseg.segments.size(); i_seg++) {
+            Polyline &poly = vseg.segments[i_seg];
+            assert(poly.size() != 1);
+            if (poly.size() < 2 || poly.length() < scaled_spacing) {
+                vseg.segments.erase(vseg.segments.begin() + i_seg);
+                vseg.segment_end_idx.erase(vseg.segment_end_idx.begin() + i_seg * 2);
+                vseg.segment_end_idx.erase(vseg.segment_end_idx.begin() + i_seg * 2);
+                i_seg--;
+            }
+        }
+        assert(vseg.segments.empty() || vseg.segments.size() * 2 == vseg.segment_end_idx.size());
+        //this is the number of vertical line we can aggregate in a zig-zag. as we move through, we can aggregate it by pair 
+        size_t current_max_vseg_bunch = polylines_segs.size() - i_vseg;
+        for (size_t i_seg = 0; i_seg < vseg.segments.size(); i_seg++) {
+            Polyline &poly = vseg.segments[i_seg];
+            assert(poly.size() > 1);
+            std::unique_ptr<ExtrusionPath> path(new ExtrusionPath(good_role,
+                                                                  params.flow.mm3_per_mm() * params.flow_mult,
+                                                                  (float) (params.flow.width() * params.flow_mult),
+                                                                  (float) params.flow.height(), true));
+            path->polyline = poly;
+            current_paths->append(path);
+            // Create travel
+            SegmentIntersection &intersec_start = vseg.sil.intersections[vseg.segment_end_idx[i_seg * 2]];
+            SegmentIntersection &intersec_end   = vseg.sil.intersections[vseg.segment_end_idx[i_seg * 2 + 1]];
+            bool previous_is_near_enough = false;
+            if (i_seg < vseg.segments.size() - 1) {
+                assert(vseg.segment_end_idx[i_seg * 2 + 1] > 0);
+                assert(vseg.segment_end_idx[i_seg * 2 + 1] + 1 < vseg.sil.intersections.size());
+                SegmentIntersection &intersec_end_previous = vseg.sil
+                                                                 .intersections[vseg.segment_end_idx[i_seg * 2 + 1] - 1];
+                SegmentIntersection &intersec_end_next = vseg.sil.intersections[vseg.segment_end_idx[i_seg * 2 + 1] + 1];
+                assert(intersec_end.pos() < intersec_end_next.pos());
+                assert(intersec_end.is_hole == intersec_end_next.is_hole);
+                assert(!intersec_end.is_hole || (intersec_end_previous.iContour != intersec_end.iContour));
+                // use intersec.iContour instead of intersec.iContour, to be abit farther away from the real contour
+                previous_is_near_enough = intersec_end_previous.iContour != intersec_end.iContour &&
+                                          std::abs(intersec_end_previous.pos() - intersec_end.pos()) < scaled_spacing &&
+                                          poly_with_offset.contour(intersec_end_previous.iContour).size() ==
+                                              poly_with_offset.contour(intersec_end.iContour).size();
+
+                Point end_print_point = poly.back();
+                assert(end_print_point == Point(vseg.sil.pos, intersec_end.pos()));
+                if (previous_is_near_enough) {
+                    assert(poly_with_offset.contour(intersec_end_previous.iContour).size() > intersec_end.iSegment &&
+                           poly_with_offset.contour(intersec_end_previous.iContour).size() > intersec_end_next.iSegment);
+                    assert(poly_with_offset.contour(intersec_end.iContour).size() > intersec_end.iSegment &&
+                           poly_with_offset.contour(intersec_end.iContour).size() > intersec_end_next.iSegment);
+                    previous_is_near_enough =
+                        previous_is_near_enough &&
+                        poly_with_offset.contour(intersec_end_previous.iContour)[intersec_end.iSegment].distance_to_square(
+                            poly_with_offset.contour(intersec_end.iContour)[intersec_end.iSegment]) <
+                            scaled_spacing * scaled_spacing;
+                }
+                //bunching, wip
+                if(false) {
+                    //std::cout<<"not previous_is_near_enough "<<"\n";
+                    // find other lines touching me that weren't printed yet.
+                    // if they are shorter, continue to print them before going back to the travel.
+                    std::unique_ptr<ExtrusionEntityCollection> bunch_paths = std::make_unique<ExtrusionEntityCollection>();
+                    current_paths->set_can_sort_reverse(false, true);
+                    //  check next lines
+                    coordf_t last_length = poly.length();
+                    for (size_t i_vseg_other = i_vseg + 1; i_vseg_other < polylines_segs.size(); i_vseg_other++) {
+                        VerticalSegments &vseg_other = polylines_segs[i_vseg_other];
+                        // find a line near our intersects
+                        bool found_line = false;
+                        for (size_t i_seg_other = 0; i_seg_other < vseg_other.segments.size(); i_seg_other++) {
+                            Polyline &poly_other = vseg_other.segments[i_seg_other];
+                            if (poly_other.empty()) {
+                                std::cout<<"empty "<<i_seg_other<<"\n";
+                                continue;
+                            }
+                            if (poly_other.length() <= last_length) {
+                                assert(poly.front().y() < poly.back().y());
+                                assert(poly_other.front().y() < poly_other.back().y());
+                                // check if one intersec pos (y) is between our y
+                                // or just inside ours
+                                if ((poly_other.front().y() > poly.front().y() && poly_other.front().y() < poly.back().y()) ||
+                                    (poly_other.back().y() > poly.front().y() && poly_other.back().y() < poly.back().y()) ||
+                                    (poly_other.front().y() > poly.front().y() && poly_other.back().y() < poly.back().y())
+                                    ) {
+                                    // found one, add it
+                                    std::unique_ptr<ExtrusionPath> path(
+                                        new ExtrusionPath(good_role, params.flow.mm3_per_mm() * params.flow_mult,
+                                                          (float) (params.flow.width() * params.flow_mult),
+                                                          (float) params.flow.height(), true));
+                                    last_length    = poly_other.length();
+                                    path->polyline = std::move(poly_other);
+                                    bunch_paths->append(path);
+                                    poly_other.clear();
+                                    end_print_point = poly.back();
+                                    found_line = true;
+                                    std::cout<<"ADD "<<i_vseg_other<<":"<<i_seg_other <<" into "<<i_vseg<<":"<<i_seg<<"\n";
+                                    break;
+                                } else {
+                                    std::cout<<"Can't merge "<<i_vseg<<":"<<i_seg<<" again with "<<i_vseg_other<<":"<<i_seg_other<<"/"<<vseg_other.segments.size()<<" : pos is "<<poly_other.front().y() <<" -> "<< poly_other.back().y()<< " not in "<<poly.front().y() <<" -> "<< poly.back().y()<<"\n";
+                                }
+                            } else {
+                                std::cout<<"can't merge "<<i_vseg<<":"<<i_seg<<" with "<<i_vseg_other<<":"<<i_seg_other<<"/"<<vseg_other.segments.size()<<" : size is "<<unscaled(poly_other.length()) <<" > "<< unscaled(last_length)<<"\n";
+                            }
+                        }
+                        // if none, don't bother to continue;
+                        if (!found_line) {
+                            std::cout<<"stop search "<<"\n";
+                            break;
+                        } else {
+                            std::cout<<"merged with lines ("<<bunch_paths->entities().size()<<"), continue with next vseg "<<(i_vseg_other+1)<<"\n";
+                        }
+                    }
+                    if (!bunch_paths->empty()) {
+                        bunch_paths->set_entities().insert(bunch_paths->set_entities().begin(), current_paths->set_entities().back());
+                        current_paths->set_entities().erase(current_paths->set_entities().end() - 1);
+                        current_paths->append(bunch_paths);
+                    }
+                }
+                const Polygon &hole_poly_ref = previous_is_near_enough ?
+                                               poly_with_offset.contour(intersec_end_previous.iContour) :
+                                               poly_with_offset.contour(intersec_end.iContour);
+
+                // create offset if not already here
+                // note: the pointer isn't dangerous, as long as we don't modify the polygon_2_offseted after getting the pointer from it.
+                const Polygon *offset_hole_poly;
+                if (auto it = polygon_2_offseted.find(&hole_poly_ref); it != polygon_2_offseted.end()) {
+                    if (it->second.empty()) {
+                        // can't be offseted
+                        offset_hole_poly = &hole_poly_ref;
+                    } else {
+                        // get from cache
+                        offset_hole_poly = &it->second;
+                    }
+                } else {
+                    // try to create one
+                    // negative offset because it's a hole, so negative to makes it grow.
+                    Polygons polys = offset(hole_poly_ref, -scaled_spacing/2);
+                    if (polys.size() == 1 && polys.front().points.size() == hole_poly_ref.points.size()) {
+                        //polys.front().simplify(scaled_spacing * 2);
+                        // can be offseted
+                        polygon_2_offseted[&hole_poly_ref] = polys.front();
+                        offset_hole_poly = &polygon_2_offseted[&hole_poly_ref];
+                    } else {
+                        // can't be offseted
+                        polygon_2_offseted[&hole_poly_ref] = Polygon {};
+                        offset_hole_poly = &hole_poly_ref;
+                    }
+                }
 
                 // next intersec
-                //assert(intersec_next.type == intersec.OUTER_LOW);
-                assert(hole_poly.size() > intersec.iSegment && hole_poly.size() > intersec_next.iSegment);
+                // assert(intersec_end_next.type == intersec.OUTER_LOW);
+                assert(offset_hole_poly->size() > intersec_end.iSegment && offset_hole_poly->size() > intersec_end_next.iSegment);
                 // go both dir, choose lower one
-                poly.append(Point(sil.pos, intersec.pos()));
-                double length1_sqr = 0;
-                size_t idx_pt   = intersec.iSegment;
-                size_t last_idx = intersec_next.iSegment;
+                poly.clear();
+                Point last_point(end_print_point);
+                double length1 = 0;
+                size_t idx_pt      = intersec_end.iSegment;
+                size_t last_idx    = intersec_end_next.iSegment;
                 while (idx_pt != last_idx) {
-                    length1_sqr += poly.back().distance_to_square(hole_poly.points[idx_pt]);
-                    poly.append(hole_poly.points[idx_pt]);
+                    length1 += last_point.distance_to(offset_hole_poly->points[idx_pt]);
+                    last_point = offset_hole_poly->points[idx_pt];
                     // go next point
-                    if (++idx_pt >= hole_poly.size())
+                    if (++idx_pt >= offset_hole_poly->size())
                         idx_pt = 0;
                 }
-                length1_sqr += poly.back().distance_to_square(Point(sil.pos, intersec_next.pos()));
+                length1 += last_point.distance_to(Point(vseg.sil.pos, intersec_end_next.pos()));
                 // other dir
-                double   length2_sqr = 0;
-                Polyline poly2;
-                poly2.append(Point(sil.pos, intersec.pos()));
-                idx_pt   = (intersec.iSegment == 0 ? hole_poly.size() - 1 : intersec.iSegment - 1);
-                last_idx = (intersec_next.iSegment == 0 ? hole_poly.size() - 1 : intersec_next.iSegment - 1);
+                double   length2 = 0;
+                last_point = end_print_point;
+                idx_pt   = (intersec_end.iSegment == 0 ? offset_hole_poly->size() - 1 : intersec_end.iSegment - 1);
+                last_idx = (intersec_end_next.iSegment == 0 ? offset_hole_poly->size() - 1 : intersec_end_next.iSegment - 1);
                 while (idx_pt != last_idx) {
-                    length2_sqr += poly2.back().distance_to_square(hole_poly.points[idx_pt]);
-                    poly2.append(hole_poly.points[idx_pt]);
+                    length2 += last_point.distance_to(offset_hole_poly->points[idx_pt]);
+                    last_point = offset_hole_poly->points[idx_pt];
                     // go next point
-                    if (--idx_pt >= hole_poly.size())
-                        idx_pt = hole_poly.size() - 1;
+                    if (--idx_pt >= offset_hole_poly->size())
+                        idx_pt = offset_hole_poly->size() - 1;
                 }
-                length2_sqr += poly2.back().distance_to_square(Point(sil.pos, intersec_next.pos()));
+                length2 += last_point.distance_to(Point(vseg.sil.pos, intersec_end_next.pos()));
                 // TODO: do both travel at the same time, end the loop when finishing one.
-                if (length1_sqr > length2_sqr && poly2.size() > 1)
-                    poly = poly2;
+                Polyline &poly_next = vseg.segments[i_seg + 1];
+                if (length1 > length2) {
+                    //create via second path
+                    poly.append(end_print_point);
+                    idx_pt   = (intersec_end.iSegment == 0 ? offset_hole_poly->size() - 1 : intersec_end.iSegment - 1);
+                    last_idx = (intersec_end_next.iSegment == 0 ? offset_hole_poly->size() - 1 : intersec_end_next.iSegment - 1);
+                    while (idx_pt != last_idx) {
+                        if(poly.back().distance_to_square(poly_next.front()) < poly.back().distance_to_square(offset_hole_poly->points[idx_pt]))
+                            break;
+                        poly.append(offset_hole_poly->points[idx_pt]);
+                        // go next point
+                        if (--idx_pt >= offset_hole_poly->size())
+                            idx_pt = offset_hole_poly->size() - 1;
+                    }
+                } else {
+                    //create via first path
+                    poly.append(end_print_point);
+                    idx_pt      = intersec_end.iSegment;
+                    last_idx    = intersec_end_next.iSegment;
+                    while (idx_pt != last_idx) {
+                        if(poly.back().distance_to_square(poly_next.front()) < poly.back().distance_to_square(offset_hole_poly->points[idx_pt]))
+                            break;
+                        poly.append(offset_hole_poly->points[idx_pt]);
+                        // go next point
+                        if (++idx_pt >= offset_hole_poly->size())
+                            idx_pt = 0;
+                    }
+                }
 
-                // Save travel
+                // Save travel (if needed)
                 if (poly.size() > 1) {
-                    poly.append(Point(sil.pos, intersec_next.pos()));
-                    //if (length1_sqr > length2_sqr)
+                    poly.append(Point(vseg.sil.pos, intersec_end_next.pos()));
+                    // if (length1_sqr > length2_sqr)
                     //    svg.draw(poly, "red", scale_t(0.01));
-                    //else
+                    // else
                     //    svg.draw(poly, "blue", scale_t(0.01));
-                    ExtrusionPath *path = new ExtrusionPath(good_role,
-                                                            params.flow.mm3_per_mm() * params.flow_mult * 0.01,
-                                                            (float) (params.flow.width() * 0.1),
-                                                            (float) params.flow.height(), true);
-                    path->polyline      = std::move(poly);
+                    ExtrusionPath *path;
+                    if (params.config->fill_rectilinearholes_travel_flow_ratio == 0) {
+                        path = new ExtrusionPath(ExtrusionRole::erRectilinearAroundHoleInfillTravel, 0, 0,
+                                                 (float) params.flow.height(),
+                                                 true);
+                    } else {
+                        path = new ExtrusionPath(ExtrusionRole::erRectilinearAroundHoleInfillTravel,
+                                                 params.config->fill_rectilinearholes_travel_flow_ratio.get_abs_value(
+                                                     params.flow.mm3_per_mm() * params.flow_mult),
+                                                 (float) (params.flow.width() * 0.1), (float) params.flow.height(),
+                                                 true);
+                    }
+                    path->polyline = std::move(poly);
                     current_paths->set_entities().push_back(path);
                     poly.clear();
                 }
-                //else if(poly.empty()) {
-                //        assert(false);
-                //        svg.draw(poly.front(), "grey", scale_t(0.1));
-                //}
-
-                //do the next intersect already
-                poly.append(Point(sil.pos, intersec_next.pos()));
-                i++;
-            //} else if (intersec.type == intersec.OUTER_HIGH && i + 1 < sil.intersections.size()) {
-            //    // hit contour
-            //    poly.append(Point(sil.pos, intersec.pos()));
-                contour = true;
+                assert(poly.empty());
             } else {
-                poly.append(Point(sil.pos, intersec.pos()));
+                //// last seg. don't need to add travel. but still has bunch the lines.
+                //std::unique_ptr<ExtrusionPath> path(new ExtrusionPath(good_role,
+                //                                                  params.flow.mm3_per_mm() * params.flow_mult,
+                //                                                  (float) (params.flow.width() * params.flow_mult),
+                //                                                  (float) params.flow.height(), false));
+                //path->polyline = std::move(poly);
+                //current_paths->append(path);
+                poly.clear();
             }
-        }
-        if (poly.size() > 1) {
-            //svg.draw(poly, "lime", scale_t(0.01));
-            ExtrusionPath *path = new ExtrusionPath(good_role, params.flow.mm3_per_mm() * params.flow_mult,
-                                                    (float) (params.flow.width() * params.flow_mult),
-                                                    (float) params.flow.height(), true);
-            path->polyline      = std::move(poly);
-            current_paths->set_entities().push_back(path);
+            assert(poly.empty());
         }
         if (!current_paths->empty()) {
             all_multipaths.push_back(current_paths.get());
@@ -3569,7 +3760,6 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
             current_paths->set_can_sort_reverse(false, true);
         }
     }
-    //svg.Close();
 
     if (!current_paths->empty()) {
         all_multipaths.push_back(current_paths.get());
@@ -3577,10 +3767,12 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
     }
 
     // paths must be rotated back
-    for (ExtrusionEntityCollection *multi : all_multipaths) {
-        for (ExtrusionEntity *entity : multi->entities()) {
-            assert(dynamic_cast<ExtrusionPath*>(entity));
-            ExtrusionPath &path = *static_cast<ExtrusionPath*>(entity);
+    class RotateVisitor : public ExtrusionVisitorRecursive
+    {
+    public:
+        std::pair<float, Point> rotate_vector;
+        void use(ExtrusionPath &path) override
+        {
             // No need to translate, the absolute position is irrelevant.
             // it->translate(- rotate_vector.second(0), - rotate_vector.second(1));
             // assert(! it->has_duplicate_points());
@@ -3590,6 +3782,10 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
             // assert(! it->has_duplicate_points());
             path.polyline.as_polyline().remove_duplicate_points();
         }
+    }visitor;
+    visitor.rotate_vector = rotate_vector;
+    for (ExtrusionEntityCollection *multi : all_multipaths) {
+        multi->visit(visitor);
     }
 
     // change flow to 100% if needed
@@ -3597,34 +3793,24 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
     double mult_flow = 1;
     if (!params.dont_adjust && params.full_infill() && !params.flow.bridge() && params.fill_exactly){
         // compute the path of the nozzle -> extruded volume
-        double extruded_volume = 0;
+        ExtrusionVolume vol_visitor;
         for (ExtrusionEntityCollection *multi : all_multipaths) {
-            for (ExtrusionEntity *entity : multi->entities()) {
-                assert(dynamic_cast<ExtrusionPath*>(entity));
-                ExtrusionPath &path = *static_cast<ExtrusionPath*>(entity);
-                double length_tot = 0;
-                const Points &pts = path.polyline.get_points();
-                const Point *previous = &pts.front();
-                for(auto it = pts.begin()+1;it != pts.end(); ++it) {
-                    length_tot += unscaled(previous->distance_to(*it));
-                    previous = &*it;
-                }
-                extruded_volume += length_tot * path.mm3_per_mm;
-            }
+            multi->visit(vol_visitor);
         }
         // compute real volume
         double polyline_volume = compute_unscaled_volume_to_fill(surface, params);
-        if (extruded_volume != 0 && polyline_volume != 0) mult_flow *= polyline_volume / extruded_volume;
+        if (vol_visitor.volume != 0 && polyline_volume != 0)
+            mult_flow *= polyline_volume / vol_visitor.volume;
         //failsafe, it can happen
-        if (mult_flow > 1.3) mult_flow = 1.3;
-        if (mult_flow < 0.8) mult_flow = 0.8;
+        if (mult_flow > 1.3)
+            mult_flow = 1.3;
+        if (mult_flow < 0.8)
+            mult_flow = 0.8;
+        ExtrusionModifyFlow flow_visitor(mult_flow);
         for (ExtrusionEntityCollection *multi : all_multipaths) {
-            for (ExtrusionEntity *entity : multi->entities()) {
-                assert(dynamic_cast<ExtrusionPath*>(entity));
-                static_cast<ExtrusionPath*>(entity)->mm3_per_mm *= mult_flow;
-            }
+            multi->visit(flow_visitor);
         }
-        BOOST_LOG_TRIVIAL(info) << "Layer " << layer_id << ": Fill process extrude " << extruded_volume << " mm3 for a volume of " << polyline_volume << " mm3 : we mult the flow by " << mult_flow;
+        BOOST_LOG_TRIVIAL(info) << "Layer " << layer_id << ": Fill process extrude " << vol_visitor.volume << " mm3 for a volume of " << polyline_volume << " mm3 : we mult the flow by " << mult_flow;
     }
 
     if (!coll->empty()) {
