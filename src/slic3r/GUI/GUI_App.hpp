@@ -248,6 +248,7 @@ public:
     void            html_dialog();
     void            bed_leveling_dialog();
     void            flow_ratio_dialog();
+    void            flow_speed_dialog();
     void            filament_temperature_dialog();
     void            bridge_tuning_dialog();
     void            over_bridge_dialog();
