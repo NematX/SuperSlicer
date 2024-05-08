@@ -13,6 +13,7 @@
 #include "GCode/AvoidCrossingPerimeters.hpp"
 #include "GCode/CoolingBuffer.hpp"
 #include "GCode/FanMover.hpp"
+#include "GCode/PressureAdvance.hpp"
 #include "GCode/FindReplace.hpp"
 #include "GCode/AddLineNumber.hpp"
 #include "GCode/RemoveComments.hpp"
@@ -501,6 +502,7 @@ private:
     std::unique_ptr<AddLineNumber>        m_add_line_number;
     std::unique_ptr<RemoveComments>       m_remove_comments;
     std::unique_ptr<FanMover>             m_fan_mover;
+    std::unique_ptr<PressureAdvance>      m_pressure_model;
 
     // Heights (print_z) at which the skirt has already been extruded.
     std::vector<coordf_t>               m_skirt_done;

@@ -1842,6 +1842,8 @@ void GCodeProcessor::process_gcode_line(const GCodeReader::GCodeLine& line, bool
     ++m_line_id;
 
     // update start position
+    for (int axis = 0; axis < 4; axis++)
+        assert(!std::isnan(m_end_position[axis]));
     m_start_position = m_end_position;
 
     const std::string_view cmd = line.cmd();
@@ -2039,6 +2041,7 @@ void GCodeProcessor::process_gcode_line(const GCodeReader::GCodeLine& line, bool
                 BOOST_LOG_TRIVIAL(error) << "GCodeProcessor encountered an invalid value for position set (" << line.raw() << ").";
                 pos = 0;
             }
+            assert(!std::isnan(pos));
             if(axis == 'X')
                 m_end_position[X] = pos;
             if(axis == 'Y')
@@ -2760,6 +2763,7 @@ void GCodeProcessor::process_G1(const GCodeReader::GCodeLine& line)
     // updates axes positions from line
     for (unsigned char a = X; a <= E; ++a) {
         m_end_position[a] = absolute_position((Axis)a, line);
+        assert(!std::isnan(m_end_position[a]));
     }
 
     // updates feedrate from line, if present
@@ -2827,6 +2831,7 @@ void GCodeProcessor::process_G1(const GCodeReader::GCodeLine& line)
         if (m_height == 0.0f)
             m_height = DEFAULT_TOOLPATH_HEIGHT;
 
+        assert(!std::isnan(m_height));
         if (m_end_position[Z] == 0.0f)
             m_end_position[Z] = m_height;
 
@@ -3035,6 +3040,9 @@ void GCodeProcessor::process_G1(const GCodeReader::GCodeLine& line)
         else if ((type != EMoveType::Extrude || (m_extrusion_role != erExternalPerimeter && m_extrusion_role != erOverhangPerimeter)) && m_seams_detector.has_first_vertex()) {
             auto set_end_position = [this](const Vec3f& pos) {
                 m_end_position[X] = pos.x(); m_end_position[Y] = pos.y(); m_end_position[Z] = pos.z();
+                assert(!std::isnan(m_end_position[X]));
+                assert(!std::isnan(m_end_position[Y]));
+                assert(!std::isnan(m_end_position[Z]));
             };
 
             const Vec3f curr_pos(m_end_position[X], m_end_position[Y], m_end_position[Z]);
@@ -3284,6 +3292,7 @@ void GCodeProcessor::process_G92(const GCodeReader::GCodeLine& line)
         // extruder coordinate can grow to the point where its float representation does not allow for proper addition with small increments,
         // we set the value taken from the G92 line as the new current position for it
         m_end_position[E] = line.e() * lengths_scale_factor;
+        assert(!std::isnan(m_end_position[E]));
         any_found = true;
     }
     else

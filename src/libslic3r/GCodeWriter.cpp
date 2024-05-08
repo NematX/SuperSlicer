@@ -382,8 +382,11 @@ std::string GCodeWriter::write_acceleration(){
         // M204: Set default acceleration
         if (m_current_acceleration > 0)
             gcode << "M204 S" << m_current_acceleration;
+    } else if (FLAVOR_IS(gcfNematX)) {
+        if (m_current_acceleration > 0)
+            gcode << ";M204 S" << m_current_acceleration;
     }
-    assert(!gcode.str().empty() || FLAVOR_IS(gcfNematX) || FLAVOR_IS(gcfNoExtrusion));
+    assert(!gcode.str().empty() || FLAVOR_IS(gcfNoExtrusion));
     //if at least something, add comment and line return
     if (gcode.tellp() != std::streampos(0)) {
         if (this->config.gcode_comments)

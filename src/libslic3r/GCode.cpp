@@ -1444,6 +1444,7 @@ void GCode::_do_export(Print& print_mod, GCodeOutputStream &file, ThumbnailsGene
     m_remove_comments = make_unique<RemoveComments>(print.config());
     file.set_find_replace(m_find_replace.get(), m_add_line_number.get(), m_remove_comments.get(), false);
     m_fan_mover.release();
+    m_pressure_model.release();
     file.set_only_ascii(print.config().gcode_ascii.value);
 
     // resets analyzer's tracking data
@@ -2389,6 +2390,16 @@ void GCode::process_layers(
         return fan_mover->process_gcode(in, true);
     });
 
+    const auto pressure_advance = tbb::make_filter<std::string, std::string>(slic3r_tbb_filtermode::serial_in_order,
+            [this, &pressure_advance = this->m_pressure_model, &config = this->config(), &writer = this->m_writer](std::string in)->std::string {
+        CNumericLocalesSetter locales_setter;
+        if (pressure_advance.get() == nullptr)
+            pressure_advance.reset(new Slic3r::PressureAdvance(writer, config, writer.tool()->id()));
+        //flush as it's a whole layer
+        this->m_throw_if_canceled();
+        return pressure_advance->process_gcode(in, true, writer.tool()->id());
+    });
+
     // It registers a handler that sets locales to "C" before any TBB thread starts participating in tbb::parallel_pipeline.
     // Handler is unregistered when the destructor is called.
     TBBLocalesSetter locales_setter;
@@ -2400,7 +2411,7 @@ void GCode::process_layers(
         pipeline_to_layerresult = pipeline_to_layerresult & spiral_vase;
     if (m_pressure_equalizer)
         pipeline_to_layerresult = pipeline_to_layerresult & pressure_equalizer;
-    tbb::filter<void, std::string> pipeline_to_string = pipeline_to_layerresult & cooling & fan_mover;
+    tbb::filter<void, std::string> pipeline_to_string = pipeline_to_layerresult & cooling & fan_mover & pressure_advance;
     if (m_find_replace)
         pipeline_to_string = pipeline_to_string & find_replace;
     tbb::filter<void, void> full_pipeline = pipeline_to_string & output;
@@ -2496,6 +2507,16 @@ void GCode::process_layers(
         return fan_mover->process_gcode(in, true);
     });
 
+    const auto pressure_advance = tbb::make_filter<std::string, std::string>(slic3r_tbb_filtermode::serial_in_order,
+            [this, &pressure_advance = this->m_pressure_model, &config = this->config(), &writer = this->m_writer](std::string in)->std::string {
+        CNumericLocalesSetter locales_setter;
+        if (pressure_advance.get() == nullptr)
+            pressure_advance.reset(new Slic3r::PressureAdvance(writer, config, writer.tool()->id()));
+        //flush as it's a whole layer
+        this->m_throw_if_canceled();
+        return pressure_advance->process_gcode(in, true, writer.tool()->id());
+    });
+
     // It registers a handler that sets locales to "C" before any TBB thread starts participating in tbb::parallel_pipeline.
     // Handler is unregistered when the destructor is called.
     TBBLocalesSetter locales_setter;
@@ -2507,7 +2528,7 @@ void GCode::process_layers(
         pipeline_to_layerresult = pipeline_to_layerresult & spiral_vase;
     if (m_pressure_equalizer)
         pipeline_to_layerresult = pipeline_to_layerresult & pressure_equalizer;
-    tbb::filter<void, std::string> pipeline_to_string = pipeline_to_layerresult & cooling & fan_mover;
+    tbb::filter<void, std::string> pipeline_to_string = pipeline_to_layerresult & cooling & fan_mover & pressure_advance;
     if (m_find_replace)
         pipeline_to_string = pipeline_to_string & find_replace;
     tbb::filter<void, void> full_pipeline = pipeline_to_string & output;

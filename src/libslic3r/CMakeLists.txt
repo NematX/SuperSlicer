@@ -127,6 +127,8 @@ add_library(libslic3r STATIC
     GCode/FindReplace.hpp
     GCode/PostProcessor.cpp
     GCode/PostProcessor.hpp
+    GCode/PressureAdvance.cpp
+    GCode/PressureAdvance.hpp
     GCode/PressureEqualizer.cpp
     GCode/PressureEqualizer.hpp
     GCode/PrintExtents.cpp

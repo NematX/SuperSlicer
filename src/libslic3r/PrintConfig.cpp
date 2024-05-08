@@ -1753,6 +1753,15 @@ void PrintConfigDef::init_fff_params()
     def->graph_settings->step_y      = 0.1;
     def->graph_settings->allowed_types = {GraphData::GraphType::LINEAR, GraphData::GraphType::SQUARE};
 
+    def = this->add("extruder_fan_offset", coPercents);
+    def->label = L("Extruder fan offset");
+    def->category = OptionCategory::extruders;
+    def->tooltip = L("This offset wil be added to all fan values set in the filament properties. It won't make them go higher than 100% nor lower than 0%.");
+    def->sidetext = L("%");
+    def->mode = comExpert | comSuSi;
+    def->is_vector_extruder = true;
+    def->set_default_value(new ConfigOptionPercents{ 0 });
+
     def = this->add("extruder_offset", coPoints);
     def->label = L("Extruder offset");
     def->category = OptionCategory::extruders;
@@ -1776,14 +1785,17 @@ void PrintConfigDef::init_fff_params()
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionFloats{ 0 });
 
-    def = this->add("extruder_fan_offset", coPercents);
-    def->label = L("Extruder fan offset");
-    def->category = OptionCategory::extruders;
-    def->tooltip = L("This offset wil be added to all fan values set in the filament properties. It won't make them go higher than 100% nor lower than 0%.");
-    def->sidetext = L("%");
+    def = this->add("extruder_pressure_factor", coFloats);
+    def->label = L("Factor for pressure");
+    def->tooltip = L("For each increase of speed, the filament need more pressure to not."
+                    "\nIt's the amount of mm of filament per speed inscrease."
+                    " If you need 2mm of filament as a pressure for printing at 100mm/s, then the value is 2 / 100 = 0.02"
+                    "\nSet zero to disable.");
+    def->sidetext = L("s");
+    def->min = 0;
     def->mode = comExpert | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionPercents{ 0 });
+    def->set_default_value(new ConfigOptionFloats { 0. });
 
 
     def = this->add("extrusion_axis", coString);
@@ -2095,6 +2107,16 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comPrusa;
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionFloats { 100. });
+
+    def = this->add("filament_compressibility_factor", coFloats);
+    def->label = L("Compressibility of the filament");
+    def->tooltip = L("Used by the slicer's pressure model to increase & decrease the pressure in advance, as the pressure response can be slow."
+                    " If the pressure buildup need to be kickstarted by 2mm of filament while going from 0 to 100mm/s in 4 seconds, then you need to enter the value 2 / (4*100) = 0.005"
+                    "\nSet zero to disable.");
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->is_vector_extruder = true;
+    def->set_default_value(new ConfigOptionFloats { 0. });
 
     def = this->add("filament_toolchange_delay", coFloats);
     def->label = L("Delay after unloading");
@@ -6824,6 +6846,7 @@ void PrintConfigDef::init_extruder_option_keys()
         "extruder_extrusion_multiplier_speed",
         "extruder_fan_offset",
         "extruder_offset",
+        "extruder_pressure_factor",
         "extruder_temperature_offset",
         "max_layer_height",
         "min_layer_height",
@@ -8412,6 +8435,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "extra_perimeters_overhangs",
 "extruder_extrusion_multiplier_speed",
 "extruder_fan_offset",
+"extruder_pressure_factor",
 "extruder_temperature_offset",
 "extrusion_spacing",
 "fan_kickstart",
@@ -8420,6 +8444,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "fan_speedup_overhangs",
 "fan_speedup_time",
 "feature_gcode",
+"filament_compressibility_factor",
 "filament_cooling_zone_pause",
 "filament_custom_variables",
 "filament_dip_extraction_speed",

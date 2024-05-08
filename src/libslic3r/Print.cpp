@@ -95,6 +95,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
         "extruder_extrusion_multiplier_speed",
         "extruder_offset",
         "extruder_fan_offset"
+        "extruder_pressure_factor"
         "extruder_temperature_offset",
         "extrusion_multiplier",
         "fan_below_layer_time",
@@ -105,6 +106,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
         "fan_percentage",
         "fan_printer_min_speed",
         "filament_colour",
+        "filament_compressibility_factor",
         "filament_custom_variables",
         "filament_diameter",
         "filament_density",
