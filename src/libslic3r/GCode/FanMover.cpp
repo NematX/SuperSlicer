@@ -153,14 +153,14 @@ void FanMover::_put_in_middle_G1(std::list<BufferData>::iterator item_to_split, 
         if (item_to_split->de != 0) {
             if (relative_e) {
                 before.de = item_to_split->de * percent;
-                FanMover_func::change_axis_value(before.raw, 'E', before.de, 5);
+                FanMover_func::change_axis_value(before.raw, before.e_axis_char, before.de, 5);
                 item_to_split->de = item_to_split->de * (1 - percent);
-                FanMover_func::change_axis_value(item_to_split->raw, 'E', item_to_split->de, 5);
+                FanMover_func::change_axis_value(item_to_split->raw, item_to_split->e_axis_char, item_to_split->de, 5);
             } else {
                 before.de = item_to_split->de * percent;
                 item_to_split->e += before.de;
                 item_to_split->de = item_to_split->de * (1 - percent);
-                FanMover_func::change_axis_value(before.raw, 'E', before.e + before.de, 5);
+                FanMover_func::change_axis_value(before.raw, before.e_axis_char, before.e + before.de, 5);
             }
         }
         //add before then line_to_write, then there is the modified data.
@@ -199,10 +199,10 @@ void FanMover::_print_in_middle_G1(BufferData& line_to_split, float nb_sec_from_
         }
         if (line_to_split.de != 0) {
             if (relative_e) {
-                FanMover_func::change_axis_value(before, 'E', line_to_split.de * percent, 5);
-                FanMover_func::change_axis_value(after, 'E', line_to_split.de * (1 - percent), 5);
+                FanMover_func::change_axis_value(before, line_to_split.e_axis_char, line_to_split.de * percent, 5);
+                FanMover_func::change_axis_value(after, line_to_split.e_axis_char, line_to_split.de * (1 - percent), 5);
             } else {
-                FanMover_func::change_axis_value(before, 'E', line_to_split.e + line_to_split.de * percent, 5);
+                FanMover_func::change_axis_value(before, line_to_split.e_axis_char, line_to_split.e + line_to_split.de * percent, 5);
             }
         }
         m_process_output += before + "\n";
@@ -390,7 +390,7 @@ void FanMover::_process_gcode_line(GCodeReader& reader, const GCodeReader::GCode
                                     time_count -= it->time;
                                     if (time_count< 0) {
                                         //found something that is lower than us
-                                        _put_in_middle_G1(it, it->time + time_count, BufferData(std::string(line.raw()), 0, fan_speed, true), nb_seconds_delay);
+                                        _put_in_middle_G1(it, it->time + time_count, BufferData(std::string(line.raw()), line.e_char() ,0, fan_speed, true), nb_seconds_delay);
                                         //found, stop
                                         break;
                                     }
@@ -442,7 +442,7 @@ void FanMover::_process_gcode_line(GCodeReader& reader, const GCodeReader::GCode
                                 //if kickstart, write the M106 S[fan_baseline] first
                                 //set the target speed and set the kickstart flag
                                 put_in_buffer(BufferData(_set_fan(100)//m_writer.set_fan(100, true)); //FIXME extruder id (or use the gcode writer, but then you have to disable the multi-thread thing
-                                    , 0, fan_speed, true));
+                                    , 'P', 0, fan_speed, true));
                                 //kickstart!
                                 //m_process_output += m_writer.set_fan(100, true) + "\n";
                                 //add the normal speed line for the future
@@ -481,7 +481,7 @@ void FanMover::_process_gcode_line(GCodeReader& reader, const GCodeReader::GCode
     }
 
     if (time >= 0) {
-        BufferData& new_data = put_in_buffer(BufferData(line.raw(), time, fan_speed));
+        BufferData& new_data = put_in_buffer(BufferData(line.raw(), line.e_char(), time, fan_speed));
         if (line.has(Axis::X)) {
             new_data.x = reader.x();
             new_data.dx = line.dist_X(reader);
@@ -516,7 +516,7 @@ void FanMover::_process_gcode_line(GCodeReader& reader, const GCodeReader::GCode
             m_current_kickstart.time -= time;
             if (m_current_kickstart.time < 0) {
                 //prev is possible because we just do a emplace_back.
-                _put_in_middle_G1(prev(m_buffer.end()), time + m_current_kickstart.time, BufferData{ m_current_kickstart.raw, 0, m_current_kickstart.fan_speed, true }, kickstart);
+                _put_in_middle_G1(prev(m_buffer.end()), time + m_current_kickstart.time, BufferData{ m_current_kickstart.raw, m_current_kickstart.e_axis_char, 0, m_current_kickstart.fan_speed, true }, kickstart);
             }
         }
     }/* else {

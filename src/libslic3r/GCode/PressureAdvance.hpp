@@ -47,6 +47,7 @@ public:
         double f; // end speed for this section (if written)
         // delta to go to end position
         double dx = 0, dy = 0, dxy= 0, dz = 0, de = 0;
+        char m_e_char; // char of the extruder
         std::string comment;
         BufferData(std::string line, double max_axle, double max_axle_xyz, double speed, double acceleration, double decceleration)
             : raw(line)
@@ -98,10 +99,10 @@ public:
                 assert(!std::isnan(e_speed_end));
                 if (is_relative_e) {
                     double e_compute = this->de + this->speed_end * pressure_factor - this->speed_start * pressure_factor;
-                    PressureAdvance_func::change_axis_value(this->raw, 'E', e_compute, e_decimals);
+                    PressureAdvance_func::change_axis_value(this->raw, m_e_char, e_compute, e_decimals);
                 } else {
                     double e_compute = this->e + this->de + e_speed_end * pressure_factor;
-                    PressureAdvance_func::change_axis_value(this->raw, 'E', e_compute, e_decimals);
+                    PressureAdvance_func::change_axis_value(this->raw, m_e_char, e_compute, e_decimals);
                 }
             }
             //if (!std::isnan(this->f) && is_useful_move() && !std::isnan(this->e) && this->de != 0 && this->speed_end > 0)
@@ -218,7 +219,6 @@ private:
 
 public:
     PressureAdvance(const GCodeWriter &writer, const FullPrintConfig &print_config, uint16_t current_extruder_id);
-
 
     // Adds the gcode contained in the given string to the analysis and returns it after removing the workcodes
     // should set he current extruder id, unless it's the same as the previous call, and there is no extruder change.

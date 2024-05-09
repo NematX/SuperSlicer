@@ -29,8 +29,9 @@ class FanMover
         float x = 0, y = 0, z = 0, e = 0;
         // delta to go to end position
         float dx = 0, dy = 0, dz = 0, de = 0;
-        BufferData(std::string line, float time = 0, int16_t fan_speed = 0, float is_kickstart = false)
-            : raw(line), time(time), fan_speed(fan_speed), is_kickstart(is_kickstart)
+        char e_axis_char = 'E';
+        BufferData(std::string line, char e_axis, float time = 0, int16_t fan_speed = 0, float is_kickstart = false)
+            : raw(line), time(time), fan_speed(fan_speed), is_kickstart(is_kickstart), e_axis_char(e_axis)
         {
             // avoid double \n
             if (!line.empty() && line.back() == '\n')
@@ -69,12 +70,23 @@ private:
     std::string m_process_output;
 
 public:
-    FanMover(const GCodeWriter& writer, const float nb_seconds_delay, const bool with_D_option, const bool relative_e,
-        const bool only_overhangs, const float kickstart)
-        : regex_fan_speed("S[0-9]+"), 
-        nb_seconds_delay(nb_seconds_delay>0 ? std::max(0.01f,nb_seconds_delay) : 0),
-        with_D_option(with_D_option)
-        , relative_e(relative_e), only_overhangs(only_overhangs), kickstart(kickstart), m_writer(writer){}
+    FanMover(const GCodeWriter &writer,
+             const FullPrintConfig &  config,
+             const float        nb_seconds_delay,
+             const bool         with_D_option,
+             const bool         relative_e,
+             const bool         only_overhangs,
+             const float        kickstart)
+        : regex_fan_speed("S[0-9]+")
+        , nb_seconds_delay(nb_seconds_delay > 0 ? std::max(0.01f, nb_seconds_delay) : 0)
+        , with_D_option(with_D_option)
+        , relative_e(relative_e)
+        , only_overhangs(only_overhangs)
+        , kickstart(kickstart)
+        , m_writer(writer)
+    {
+        m_parser.apply_config(config);
+    }
 
     // Adds the gcode contained in the given string to the analysis and returns it after removing the workcodes
     const std::string& process_gcode(const std::string& gcode, bool flush);

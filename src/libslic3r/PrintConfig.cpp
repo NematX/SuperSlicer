@@ -8684,7 +8684,7 @@ std::map<std::string, std::string> PrintConfigDef::to_prusa(t_config_option_key&
     }
     if (!opt_key.empty() && prusa_export_to_change_keys.find(opt_key) == prusa_export_to_change_keys.end()) {
         auto mode = all_conf.def()->get(opt_key)->mode;
-        assert( (mode & comPrusa) == comPrusa);
+        assert( (mode & comPrusa) == comPrusa || mode == coNone);
     }
     if (opt_key.find("_pattern") != std::string::npos) {
         if ("smooth" == value || "smoothtriple" == value || "smoothhilbert" == value || "rectiwithperimeter" == value || "scatteredrectilinear" == value || "rectilineargapfill" == value || "sawtooth" == value) {

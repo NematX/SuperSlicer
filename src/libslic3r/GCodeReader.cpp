@@ -75,9 +75,13 @@ const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, G
             case 'Z': axis = Z; break;
             case 'F': axis = F; break;
             default:
-                if (*c == m_extrusion_axis) {
-                    if (m_extrusion_axis != 0)
-                        axis = E;
+                if (*c == m_extrusion_axis && m_extrusion_axis != 0) {
+                    axis = E;
+                    gline.m_e_char = *c;
+                } else if(*c > m_extrusion_axis && *c + 20 < m_extrusion_axis && m_extrusion_axis != 0) {
+                    // kind of a multiple extruder with a letter per extruder.
+                    axis = E;
+                    gline.m_e_char = *c;
                 } else if (*c >= 'A' && *c <= 'Z')
                 	// Unknown axis, but we still want to remember that such a axis was seen.
                 	axis = UNKNOWN_AXIS;

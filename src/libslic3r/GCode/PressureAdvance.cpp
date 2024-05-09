@@ -743,6 +743,7 @@ void PressureAdvance::_process_gcode_line(GCodeReader &reader, const GCodeReader
         }
         if (line.has(Axis::E)) {
             new_data->e = reader.e();
+            new_data->m_e_char = line.e_char();
             if (m_relative_e) {
                 new_data->de = line.e();
                 // GCode reader doesn't know it's relative extrusion, we have to do it ourself.

@@ -2379,7 +2379,7 @@ void GCode::process_layers(
 
         if (fan_mover.get() == nullptr)
             fan_mover.reset(new Slic3r::FanMover(
-                writer,
+                writer, config,
                 std::abs((float)config.fan_speedup_time.value),
                 config.fan_speedup_time.value > 0,
                 config.use_relative_e_distances.value,
@@ -2494,9 +2494,10 @@ void GCode::process_layers(
 
     const auto fan_mover = tbb::make_filter<std::string, std::string>(slic3r_tbb_filtermode::serial_in_order,
         [this, &fan_mover = this->m_fan_mover, &config = this->config(), &writer = this->m_writer](std::string in)->std::string {
+
         if (fan_mover.get() == nullptr)
             fan_mover.reset(new Slic3r::FanMover(
-                writer,
+                writer, config,
                 std::abs((float)config.fan_speedup_time.value),
                 config.fan_speedup_time.value > 0,
                 config.use_relative_e_distances.value,
