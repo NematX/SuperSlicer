@@ -6614,6 +6614,32 @@ void PrintConfigDef::init_fff_params()
     def->sidetext = L("mm");
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionFloat(0));
+    
+    def = this->add("hole_size_compensations_curve", coGraph);
+    def->label = L("XY holes curve compensation");
+    def->full_label = L("XY holes curve compensation");
+    def->tooltip = L("This string is edited by a Dialog and contains XY compensations for different hole diameters."
+                    "\nThe graph is in mm of compensation per mm of diameter.");
+    def->mode = comExpert | comSuSi;
+    def->is_vector_extruder = true;
+    def->set_default_value(new ConfigOptionGraph(GraphData(0,0, GraphData::GraphType::LINEAR, {})));
+    def->graph_settings = std::make_shared<GraphSettings>();
+    def->graph_settings->title       = L("Compensation per hole diameter");
+    def->graph_settings->description = L("Add this compensation to the existing one (only for convex holes)");
+    def->graph_settings->x_label     = L("Hole diameter (mm)");
+    def->graph_settings->y_label     = L("XY compensation (mm)");
+    def->graph_settings->null_label  = L("No compensation");
+    def->graph_settings->label_min_x = L("Hole min size");
+    def->graph_settings->label_max_x = L("Hole max size");
+    def->graph_settings->label_min_y = L("Min compensation");
+    def->graph_settings->label_max_y = L("Max compensation");
+    def->graph_settings->min_x       = 0;
+    def->graph_settings->max_x       = 10;
+    def->graph_settings->step_x      = 0.1;
+    def->graph_settings->min_y       = -10;
+    def->graph_settings->max_y       = 10;
+    def->graph_settings->step_y      = 0.01;
+    def->graph_settings->allowed_types = {GraphData::GraphType::LINEAR, GraphData::GraphType::SQUARE};
 
     def = this->add("hole_size_threshold", coFloat);
     def->label = L("Threshold");
@@ -8496,6 +8522,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "gcode_precision_e",
 "gcode_precision_xyz",
 "hole_size_compensation",
+"hole_size_compensations_curve",
 "hole_size_threshold",
 "hole_to_polyhole_threshold",
 "hole_to_polyhole_twisted",

@@ -740,6 +740,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloatOrPercent,       first_layer_speed))
     ((ConfigOptionFloatOrPercent,       first_layer_speed_over_raft))
     ((ConfigOptionFloat,                hole_size_compensation))
+    ((ConfigOptionGraph,                hole_size_compensations_curve))
     ((ConfigOptionFloat,                hole_size_threshold))
     ((ConfigOptionBool,                 infill_only_where_needed))
     // Force the generation of solid shells between adjacent materials/volumes.

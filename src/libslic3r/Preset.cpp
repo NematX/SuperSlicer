@@ -689,6 +689,7 @@ static std::vector<std::string> s_Preset_print_options {
         "xy_size_compensation",
         "xy_inner_size_compensation",
         "hole_size_compensation",
+        "hole_size_compensations_curve",
         "hole_size_threshold",
         "hole_to_polyhole",
         "hole_to_polyhole_threshold",

@@ -148,6 +148,7 @@ group:Modifying slices
 		setting:width$6:hole_size_compensation
 		setting:width$6:hole_size_threshold
 	end_line
+	setting:hole_size_compensations_curve
 	line:Convert round vertical holes to polyholes
 		setting:label$_:hole_to_polyhole
 		setting:sidetext_width$5:hole_to_polyhole_threshold

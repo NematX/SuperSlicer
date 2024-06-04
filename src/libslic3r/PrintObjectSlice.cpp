@@ -1034,7 +1034,7 @@ static inline void apply_mm_segmentation(PrintObject &print_object, ThrowOnCance
 
 
 
-ExPolygons PrintObject::_shrink_contour_holes(double contour_delta, double not_convex_delta, double convex_delta, const ExPolygons& polys) const {
+ExPolygons PrintObject::_shrink_contour_holes(coord_t contour_delta, coord_t not_convex_delta, coord_t convex_delta, const GraphData& convex_delta_curve, const ExPolygons& polys) const {
     ExPolygons new_ex_polys;
     double max_hole_area = scale_d(scale_d(m_config.hole_size_threshold.value));
     for (const ExPolygon& ex_poly : polys) {
@@ -1045,55 +1045,52 @@ ExPolygons PrintObject::_shrink_contour_holes(double contour_delta, double not_c
             //check if convex to reduce it
             // check whether first point forms a convex angle
             //note: we allow a deviation of 5.7° (0.01rad = 0.57°)
-            bool ok = true;
-            ok = (hole.points.front().ccw_angle(hole.points.back(), *(hole.points.begin() + 1)) <= PI + 0.1);
+            bool is_convex = true;
+            is_convex = (hole.points.front().ccw_angle(hole.points.back(), *(hole.points.begin() + 1)) <= PI + 0.1);
             // check whether points 1..(n-1) form convex angles
-            if (ok)
+            if (is_convex)
                 for (Points::const_iterator p = hole.points.begin() + 1; p != hole.points.end() - 1; ++p) {
-                    ok = (p->ccw_angle(*(p - 1), *(p + 1)) <= PI + 0.1);
-                    if (!ok) break;
+                    is_convex = (p->ccw_angle(*(p - 1), *(p + 1)) <= PI + 0.1);
+                    if (!is_convex) break;
                 }
 
             // check whether last point forms a convex angle
-            ok &= (hole.points.back().ccw_angle(*(hole.points.end() - 2), hole.points.front()) <= PI + 0.1);
+            is_convex &= (hole.points.back().ccw_angle(*(hole.points.end() - 2), hole.points.front()) <= PI + 0.1);
 
-            if (ok && not_convex_delta != convex_delta) {
-                if (convex_delta != 0) {
-                    //apply hole threshold cutoff
-                    double convex_delta_adapted = convex_delta;
-                    double area = -hole.area();
-                    if (area > max_hole_area * 4 && max_hole_area > 0) {
-                        convex_delta_adapted = not_convex_delta;
-                    } else if (area > max_hole_area && max_hole_area > 0) {
-                        // not a hard threshold, to avoid artefacts on slopped holes.
-                        double percent = (max_hole_area * 4 - area) / (max_hole_area * 3);
-                        convex_delta_adapted = convex_delta * percent + (1 - percent) * not_convex_delta;
-                    }
-                    if (convex_delta_adapted != 0) {
-                        Polygon hole_as_contour = hole;
-                        hole_as_contour.make_counter_clockwise();
-                        for (ExPolygon& newHole : offset_ex(ExPolygon{ hole_as_contour }, -convex_delta_adapted)) {
-                            holes.push_back(std::move(newHole));
-                        }
-                    } else {
-                        holes.push_back(ExPolygon{ hole });
-                        holes.back().contour.make_counter_clockwise();
-                    }
-                } else {
-                    holes.push_back(ExPolygon{ hole });
-                    holes.back().contour.make_counter_clockwise();
+            coord_t delta_for_offset = not_convex_delta;
+            // apply convex hole with threshold cutoff
+            if (is_convex && (not_convex_delta != convex_delta) && (convex_delta != 0)) {
+                delta_for_offset = convex_delta;
+                double area = -hole.area();
+                if (area > max_hole_area * 4 && max_hole_area > 0) {
+                    delta_for_offset = not_convex_delta;
+                } else if (area > max_hole_area && max_hole_area > 0) {
+                    // not a hard threshold, to avoid artefacts on slopped holes.
+                    double percent = (max_hole_area * 4 - area) / (max_hole_area * 3);
+                    delta_for_offset = coord_t(convex_delta * percent + (1 - percent) * not_convex_delta);
+                }
+            }
+            // also apply curve compensation
+            if (is_convex && convex_delta_curve.data_size() > 0) {
+                //compute rough diameter;
+                Point center = hole.centroid();
+                coordf_t dist = 0;
+                for (const Point &p : hole) {
+                    dist += p.distance_to(center);
+                }
+                dist /= hole.points.size();
+                delta_for_offset += scale_t(convex_delta_curve.interpolate(unscaled(dist*2)));
+            }
+            // offset_ex via convex_delta_adapted if needed
+            if (delta_for_offset != 0) {
+                Polygon hole_as_contour = hole;
+                hole_as_contour.make_counter_clockwise();
+                for (ExPolygon& newHole : offset_ex(ExPolygon{ hole_as_contour }, double(-delta_for_offset))) {
+                    holes.push_back(std::move(newHole));
                 }
             } else {
-                if (not_convex_delta != 0) {
-                    Polygon hole_as_contour = hole;
-                    hole_as_contour.make_counter_clockwise();
-                    for (ExPolygon& newHole : offset_ex(ExPolygon{ hole_as_contour }, -not_convex_delta)) {
-                        holes.push_back(std::move(newHole));
-                    }
-                } else {
-                    holes.push_back(ExPolygon{ hole });
-                    holes.back().contour.make_counter_clockwise();
-                }
+                holes.push_back(ExPolygon{ hole });
+                holes.back().contour.make_counter_clockwise();
             }
         }
         //modify contour
@@ -1290,7 +1287,8 @@ void PrintObject::slice_volumes()
 
         // If XY Size compensation is also enabled, notify the user that XY Size compensation
         // would not be used because the object is multi-material painted.
-        if (m_config.xy_size_compensation.value != 0.f || m_config.xy_inner_size_compensation.value != 0.f || m_config.hole_size_compensation.value != 0.f) {
+        if (m_config.xy_size_compensation.value != 0.f || m_config.xy_inner_size_compensation.value != 0.f || m_config.hole_size_compensation.value != 0.f || 
+            (m_config.hole_size_compensations_curve.value.data_size() > 0 && m_config.hole_size_compensations_curve.is_enabled())) {
             this->active_step_add_warning(
                 PrintStateBase::WarningLevel::CRITICAL,
                 L("An object has enabled XY Size compensation which will not be used because it is also multi-material painted.\nXY Size "
@@ -1321,17 +1319,21 @@ void PrintObject::slice_volumes()
 	                m_print->throw_if_canceled();
 	                Layer *layer = m_layers[layer_id];
 	                // Apply size compensation and perform clipping of multi-part objects.
-                    float outter_delta = float(scale_(m_config.xy_size_compensation.value));
-                    float inner_delta = float(scale_(m_config.xy_inner_size_compensation.value));
-                    float hole_delta = inner_delta + float(scale_(m_config.hole_size_compensation.value));
+                    coord_t outter_delta = scale_t(m_config.xy_size_compensation.value);
+                    coord_t inner_delta = scale_t(m_config.xy_inner_size_compensation.value);
+                    coord_t hole_delta = inner_delta + scale_t(m_config.hole_size_compensation.value);
+                    GraphData hole_compensation_by_diameter;
+                    if (m_config.hole_size_compensations_curve.value.data_size() > 0) {
+                        hole_compensation_by_diameter = m_config.hole_size_compensations_curve.value;
+                    }
                     //FIXME only apply the compensation if no raft is enabled.
-                    float first_layer_compensation = 0.f;
+                    coord_t first_layer_compensation = 0;
                     int first_layers = m_config.first_layer_size_compensation_layers.value;
                     if (layer_id < first_layers && m_config.raft_layers == 0 && m_config.first_layer_size_compensation.value != 0) {
                         // Only enable Elephant foot compensation if printing directly on the print bed.
-                        first_layer_compensation = float(scale_(m_config.first_layer_size_compensation.value));
+                        first_layer_compensation = scale_t(m_config.first_layer_size_compensation.value);
                         // reduce first_layer_compensation for every layer over the first one.
-                        first_layer_compensation = (first_layers - layer_id) * first_layer_compensation / float(first_layers);
+                        first_layer_compensation = coord_t( (coordf_t(first_layers - layer_id) * first_layer_compensation) / coordf_t(first_layers));
                         // simplify compensations if possible
                         if (first_layer_compensation > 0) {
                             outter_delta += first_layer_compensation;
@@ -1339,7 +1341,7 @@ void PrintObject::slice_volumes()
                             hole_delta += first_layer_compensation;
                             first_layer_compensation = 0;
                         } else {
-                            float min_delta = std::min(outter_delta, std::min(inner_delta, hole_delta));
+                            coord_t min_delta = std::min(outter_delta, std::min(inner_delta, hole_delta));
                             if (min_delta > 0) {
                                 if (-first_layer_compensation < min_delta) {
                                     outter_delta += first_layer_compensation;
@@ -1357,31 +1359,80 @@ void PrintObject::slice_volumes()
                     }
                     
                     //remove the upscaling done by the slicing
-                    const float aleady_done_delta = is_mm_painted() ? 0.f : std::max(0.f, std::min(outter_delta, std::min(inner_delta, hole_delta)));
+                    const coord_t aleady_done_delta = is_mm_painted() ? coord_t(0) : std::max(coord_t(0), std::min(outter_delta, std::min(inner_delta, hole_delta)));
                     outter_delta -= aleady_done_delta;
                     inner_delta -= aleady_done_delta;
                     hole_delta -= aleady_done_delta;
-                    //TODO: test it's done for multi-region and not
 
+                    // pre-process hole_compensation_by_diameter
+                    GraphData negative_hole_compensation_by_diameter;
+                    GraphData positive_hole_compensation_by_diameter;
+                    if (hole_compensation_by_diameter.data_size() > 0) {
+                        // simplify hole_compensation_by_diameter: keep only used points
+                        for (size_t i = 0; i < hole_compensation_by_diameter.begin_idx; i++)
+                            hole_compensation_by_diameter.graph_points.erase(hole_compensation_by_diameter.graph_points.begin());
+                        hole_compensation_by_diameter.end_idx -= hole_compensation_by_diameter.begin_idx;
+                        for (size_t i = hole_compensation_by_diameter.end_idx; i < hole_compensation_by_diameter.graph_points.size(); i++)
+                            hole_compensation_by_diameter.graph_points.pop_back();
+                        assert(hole_compensation_by_diameter.begin_idx == 0);
+                        assert(hole_compensation_by_diameter.end_idx == hole_compensation_by_diameter.graph_points.size());
+                        assert(!hole_compensation_by_diameter.graph_points.empty());
+                        // create positive-only curve
+                        positive_hole_compensation_by_diameter = hole_compensation_by_diameter;
+                        for (auto &data_pt : positive_hole_compensation_by_diameter.graph_points)
+                            data_pt.y() = std::max(0., data_pt.y());
+                        // create negative-only curve
+                        negative_hole_compensation_by_diameter = hole_compensation_by_diameter;
+                        for (auto &data_pt : negative_hole_compensation_by_diameter.graph_points)
+                            data_pt.y() = std::min(0., data_pt.y());
+                        // clear if only 0 (positive)
+                        bool only_0 = true;
+                        for (auto &pt : positive_hole_compensation_by_diameter.graph_points)
+                            if(pt.y() != 0)
+                                only_0 = false;
+                        if (only_0) {
+                            positive_hole_compensation_by_diameter.graph_points.clear();
+                            positive_hole_compensation_by_diameter.end_idx = 0;
+                        }
+                        // clear if only 0 (negative)
+                        only_0 = true;
+                        for (auto &pt : negative_hole_compensation_by_diameter.graph_points)
+                            if(pt.y() != 0)
+                                only_0 = false;
+                        if (only_0) {
+                            negative_hole_compensation_by_diameter.graph_points.clear();
+                            negative_hole_compensation_by_diameter.end_idx = 0;
+                        }
+                    }
+                    //TODO: test it's done for multi-region and not
 	                if (layer->regions().size() == 1) {
 	                    // Optimized version for a single region layer.
 	                    // Single region, growing or shrinking.
                         LayerRegion* layerm = layer->regions().front();
                         ExPolygons expolygons = to_expolygons(std::move(layerm->m_slices.surfaces));
                         // Apply all three main XY compensation.
-                        if (hole_delta > 0 || inner_delta > 0 || outter_delta > 0) {
-                            expolygons = _shrink_contour_holes(std::max(0.f, outter_delta), std::max(0.f, inner_delta), std::max(0.f, hole_delta), expolygons);
+                        if (hole_delta > 0 || inner_delta > 0 || outter_delta > 0 || positive_hole_compensation_by_diameter.data_size() > 0) {
+                            expolygons = _shrink_contour_holes(std::max(coord_t(0), outter_delta), std::max(coord_t(0), inner_delta), std::max(coord_t(0), hole_delta), positive_hole_compensation_by_diameter, expolygons);
                         }
                         // Apply the elephant foot compensation.
-                        if (layer_id < first_layers && first_layer_compensation != 0.f) {
-                            expolygons = union_ex(Slic3r::elephant_foot_compensation(expolygons, layerm->flow(frExternalPerimeter),
-                                unscale<double>(-first_layer_compensation)));
+                        if (layer_id < first_layers && first_layer_compensation != coord_t(0)) {
+                            expolygons = union_ex(Slic3r::elephant_foot_compensation(expolygons, layerm->flow(frExternalPerimeter), unscaled(-first_layer_compensation)));
                         }
                         // Apply all three main negative XY compensation.
-                        if (hole_delta < 0 || inner_delta < 0 || outter_delta < 0) {
-                            expolygons = _shrink_contour_holes(std::min(0.f, outter_delta), std::min(0.f, inner_delta), std::min(0.f, hole_delta), expolygons);
+                        if (hole_delta < 0 || inner_delta < 0 || outter_delta < 0 || negative_hole_compensation_by_diameter.data_size() > 0) {
+                                static int isaqsdsdfsdfqzfn = 0;
+                                std::stringstream stri;
+                                stri << layer_id << "_slice_grow_" << isaqsdsdfsdfqzfn++ << ".svg";
+                                SVG svg(stri.str());
+                            ExPolygons    expolygons_before = expolygons;
+                            expolygons = _shrink_contour_holes(std::min(coord_t(0), outter_delta), std::min(coord_t(0), inner_delta), std::min(coord_t(0), hole_delta), negative_hole_compensation_by_diameter, expolygons);
+                            
+                                //svg.draw(to_polylines(to_expolygons(std::move(layerm->m_slices.surfaces))), "gray");
+                                svg.draw(to_polylines(expolygons_before), "cyan");
+                                svg.draw(to_polylines(expolygons), "green");
+                                svg.Close();
                         }
-                        if (layer->regions().front()->region().config().curve_smoothing_precision > 0.f) {
+                        if (layer->regions().front()->region().config().curve_smoothing_precision > 0.) {
                             //smoothing
                             expolygons = _smooth_curves(expolygons, layer->regions().front()->region().config());
                         }
@@ -1392,16 +1443,16 @@ void PrintObject::slice_volumes()
                         float min_growth = std::min(hole_delta, std::min(inner_delta, outter_delta));
                         bool clip = m_config.clip_multipart_objects.value;
                         ExPolygons merged_poly_for_holes_growing;
-                        if (max_growth > 0) {
+                        if (max_growth > 0 || positive_hole_compensation_by_diameter.data_size() > 0) {
                             //merge polygons because region can cut "holes".
                             //then, cut them to give them again later to their region
                             merged_poly_for_holes_growing = layer->merged(float(SCALED_EPSILON));
-                            merged_poly_for_holes_growing = _shrink_contour_holes(std::max(0.f, outter_delta), std::max(0.f, inner_delta), std::max(0.f, hole_delta), union_ex(merged_poly_for_holes_growing));
+                            merged_poly_for_holes_growing = _shrink_contour_holes(std::max(coord_t(0), outter_delta), std::max(coord_t(0), inner_delta), std::max(coord_t(0), hole_delta), positive_hole_compensation_by_diameter, union_ex(merged_poly_for_holes_growing));
                         }
                         bool has_curve_smoothing = false;
                         for (size_t region_id = 0; region_id < layer->regions().size() && !has_curve_smoothing; ++region_id) {
                             LayerRegion* layerm = layer->regions()[region_id];
-                            has_curve_smoothing = layerm->region().config().curve_smoothing_precision > 0.f;
+                            has_curve_smoothing = layerm->region().config().curve_smoothing_precision > 0.;
                         }
                         //note: ps has removed that step...
                         if (clip || max_growth > 0 || has_curve_smoothing) {
@@ -1416,9 +1467,9 @@ void PrintObject::slice_volumes()
                                 }
                                 // Apply the first_layer_compensation if >0.
                                 if (layer_id == 0 && first_layer_compensation > 0)
-                                    slices = offset_ex(std::move(slices), std::max(first_layer_compensation, 0.f));
+                                    slices = offset_ex(std::move(slices), std::max(double(first_layer_compensation), 0.));
                                 //smoothing
-                                if (layerm->region().config().curve_smoothing_precision > 0.f)
+                                if (layerm->region().config().curve_smoothing_precision > 0.)
                                     slices = _smooth_curves(slices, layerm->region().config());
                                 // Trim by the slices of already processed regions.
                                 if (region_id > 0 && clip)
@@ -1429,19 +1480,19 @@ void PrintObject::slice_volumes()
                                 layerm->m_slices.set(std::move(slices), stPosInternal | stDensSparse);
                             }
                         }
-                        if (min_growth < 0.f || first_layer_compensation != 0.f) {
+                        if (min_growth < 0.f || first_layer_compensation != 0.f || negative_hole_compensation_by_diameter.data_size() > 0) {
                             // Apply the negative XY compensation. (the ones that is <0)
                             ExPolygons trimming;
                             static const float eps = float(scale_(m_config.slice_closing_radius.value) * 1.5);
                             if (layer_id < first_layers && first_layer_compensation < 0.f) {
                                 ExPolygons expolygons_first_layer = offset_ex(layer->merged(eps), -eps);
                                 trimming = Slic3r::elephant_foot_compensation(expolygons_first_layer,
-                                    layer->regions().front()->flow(frExternalPerimeter), unscale<double>(-first_layer_compensation));
+                                    layer->regions().front()->flow(frExternalPerimeter), unscaled(-first_layer_compensation));
                             } else {
                                 trimming = layer->merged(float(SCALED_EPSILON));
                             }
-                            if (min_growth < 0)
-                                trimming = _shrink_contour_holes(std::min(0.f, outter_delta), std::min(0.f, inner_delta), std::min(0.f, hole_delta), trimming);
+                            if (min_growth < 0 || negative_hole_compensation_by_diameter.data_size() > 0)
+                                trimming = _shrink_contour_holes(std::min(coord_t(0), outter_delta), std::min(coord_t(0), inner_delta), std::min(coord_t(0), hole_delta), negative_hole_compensation_by_diameter, trimming);
                             //trim surfaces
                             for (size_t region_id = 0; region_id < layer->regions().size(); ++region_id) {
                                 layer->regions()[region_id]->trim_surfaces(to_polygons(trimming));

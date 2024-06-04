@@ -393,7 +393,7 @@ private:
 
     void slice_volumes();
     // Has any support (not counting the raft).
-    ExPolygons _shrink_contour_holes(double contour_delta, double default_delta, double convex_delta, const ExPolygons& input) const;
+    ExPolygons _shrink_contour_holes(coord_t contour_delta, coord_t default_delta, coord_t convex_delta, const GraphData& convex_delta_curve, const ExPolygons& input) const;
     void _transform_hole_to_polyholes();
     void _min_overhang_threshold();
     ExPolygons _smooth_curves(const ExPolygons &input, const PrintRegionConfig &conf) const;
