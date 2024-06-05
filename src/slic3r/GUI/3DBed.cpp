@@ -408,7 +408,7 @@ std::tuple<Bed3D::Type, std::string, std::string, bool> Bed3D::detect_type(const
 
 void Bed3D::render_axes() const
 {
-    if (m_build_volume.valid())
+    if (m_build_volume.valid() && wxGetApp().app_config->get("show_axes") == "1")
         m_axes.render();
 }
 

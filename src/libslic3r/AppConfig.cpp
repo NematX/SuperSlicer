@@ -499,6 +499,9 @@ void AppConfig::set_defaults()
     if (get("use_free_camera").empty())
         set("use_free_camera", "0");
 
+    if (get("show_axes").empty())
+        set("show_axes", "1");
+
     if (get("reverse_mouse_wheel_zoom").empty())
         set("reverse_mouse_wheel_zoom", "0");
 

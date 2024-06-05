@@ -693,6 +693,13 @@ void PreferencesDialog::build(size_t selected_tab)
 	// as it's quite hard to detect a change and then clean & reload the gcode data... then asking for relaod is easier.
 	m_values_need_restart.push_back("gcodeviewer_decimals");
 
+    def.label = L("Show axes");
+    def.type = coBool;
+    def.tooltip = L("Show x, y and z axes in all 3d views.");
+    def.set_default_value(new ConfigOptionBool{ app_config->get("show_axes") == "1" });
+    option = Option(def, "show_axes");
+    m_optgroups_gui.back()->append_single_option_line(option);
+
 
 	activate_options_tab(m_optgroups_gui.back(), 3);
 	if (is_editor) {
