@@ -36,6 +36,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/CalibrationFlowSpeedDialog.hpp
     GUI/CalibrationOverBridgeDialog.cpp
     GUI/CalibrationOverBridgeDialog.hpp
+    GUI/CalibrationPressureDialog.cpp
+    GUI/CalibrationPressureDialog.hpp
     GUI/CalibrationTempDialog.cpp
     GUI/CalibrationTempDialog.hpp
     GUI/CalibrationRetractionDialog.cpp

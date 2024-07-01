@@ -65,6 +65,7 @@
 #include "CalibrationFlowDialog.hpp"
 #include "CalibrationFlowSpeedDialog.hpp"
 #include "CalibrationOverBridgeDialog.hpp"
+#include "CalibrationPressureDialog.hpp"
 #include "CalibrationTempDialog.hpp"
 #include "CalibrationRetractionDialog.hpp"
 #include "CalibrationPressureAdvDialog.hpp"
@@ -1951,37 +1952,41 @@ void GUI_App::change_calibration_dialog(const wxDialog* have_to_destroy, wxDialo
     }
 }
 
-void GUI_App::html_dialog()
+void GUI_App::calibration_html_dialog()
 {
     change_calibration_dialog(nullptr, new HtmlDialog(this, mainframe,"Introduction to calibrations", "/calibration", "introduction.html"));
 }
-void GUI_App::bed_leveling_dialog()
+void GUI_App::calibration_bed_leveling_dialog()
 {
     change_calibration_dialog(nullptr, new CalibrationBedDialog(this, mainframe));
 }
-void GUI_App::flow_ratio_dialog()
+void GUI_App::calibration_flow_ratio_dialog()
 {
     change_calibration_dialog(nullptr, new CalibrationFlowDialog(this, mainframe));
 }
-void GUI_App::flow_speed_dialog()
+void GUI_App::calibration_flow_speed_dialog()
 {
     change_calibration_dialog(nullptr, new CalibrationFlowSpeedDialog(this, mainframe));
 }
-void GUI_App::over_bridge_dialog()
+void GUI_App::calibration_over_bridge_dialog()
 {
     change_calibration_dialog(nullptr, new CalibrationOverBridgeDialog(this, mainframe));
 }
-void GUI_App::bridge_tuning_dialog()
+void GUI_App::calibration_bridge_tuning_dialog()
 {
     change_calibration_dialog(nullptr, new CalibrationBridgeDialog(this, mainframe));
 }
-void GUI_App::filament_temperature_dialog()
+void GUI_App::calibration_filament_temperature_dialog()
 {
     change_calibration_dialog(nullptr, new CalibrationTempDialog(this, mainframe));
 }
 void GUI_App::calibration_cube_dialog()
 {
     change_calibration_dialog(nullptr, new CalibrationCubeDialog(this, mainframe));
+}
+void GUI_App::calibration_pressure_dialog()
+{
+    change_calibration_dialog(nullptr, new CalibrationPressureDialog(this, mainframe));
 }
 void GUI_App::calibration_retraction_dialog()
 {
