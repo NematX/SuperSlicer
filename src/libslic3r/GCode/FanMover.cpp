@@ -42,22 +42,22 @@ const std::string& FanMover::process_gcode(const std::string& gcode, bool flush)
     return m_process_output;
 }
 
-bool is_end_of_word(char c) {
-   return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == 0;
-}
+namespace FanMover_func {
 
-float get_axis_value(const std::string& line, char axis)
+bool is_end_of_word(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == 0; }
+
+float get_axis_value(const std::string &line, char axis)
 {
     char match[3] = " X";
-    match[1] = axis;
+    match[1]      = axis;
 
     size_t pos = line.find(match) + 2;
-    //size_t end = std::min(line.find(' ', pos + 1), line.find(';', pos + 1));
+    // size_t end = std::min(line.find(' ', pos + 1), line.find(';', pos + 1));
     // Try to parse the numeric value.
-    const char* c = line.c_str();
-    char* pend = nullptr;
-    errno = 0;
-    double  v = strtod(c + pos, &pend);
+    const char *c    = line.c_str();
+    char *      pend = nullptr;
+    errno            = 0;
+    double v         = strtod(c + pos, &pend);
     if (pend != nullptr && errno == 0 && pend != c) {
         // The axis value has been parsed correctly.
         return float(v);
@@ -65,32 +65,51 @@ float get_axis_value(const std::string& line, char axis)
     return NAN;
 }
 
-void change_axis_value(std::string& line, char axis, const float new_value, const int decimal_digits)
+void change_axis_value(std::string &line, char axis, const float new_value, const int decimal_digits)
 {
     char match[3] = " X";
-    match[1] = axis;
+    match[1]      = axis;
 
     size_t pos = line.find(match) + 2;
     size_t end = std::min(line.find(' ', pos + 1), line.find(';', pos + 1));
-    line = line.replace(pos, end - pos, to_string_nozero(new_value, decimal_digits));
+    line       = line.replace(pos, end - pos, to_string_nozero(new_value, decimal_digits));
 }
 
-int16_t get_fan_speed(const std::string &line, GCodeFlavor flavor) {
+int16_t get_fan_speed(const std::string &line, GCodeFlavor flavor)
+{
     if (line.compare(0, 4, "M106") == 0) {
         if (flavor == (gcfMach3) || flavor == (gcfMachinekit) || flavor == (gcfNematX)) {
-            return (int16_t)get_axis_value(line, 'P');
+            return (int16_t) FanMover_func::get_axis_value(line, 'P');
         } else {
-            return (int16_t)get_axis_value(line, 'S');
+            return (int16_t) FanMover_func::get_axis_value(line, 'S');
         }
     } else if (line.compare(0, 4, "M127") == 0 || line.compare(0, 4, "M107") == 0) {
         return 0;
     } else if ((flavor == (gcfMakerWare) || flavor == (gcfSailfish)) && line.compare(0, 4, "M126") == 0) {
-        return (int16_t)get_axis_value(line, 'T');
+        return (int16_t) FanMover_func::get_axis_value(line, 'T');
     } else {
         return -1;
     }
-
 }
+
+bool parse_number(const std::string_view sv, int& out)
+{
+    {
+        // Legacy conversion, which is costly due to having to make a copy of the string before conversion.
+        try {
+            assert(sv.size() < 1024);
+            assert(sv.data() != nullptr);
+            std::string str{ sv };
+            size_t read = 0;
+            out = std::stoi(str, &read);
+            return str.size() == read;
+        }
+        catch (...) {
+            return false;
+        }
+    }
+}
+} // namespace FanMover_func
 
 void FanMover::_put_in_middle_G1(std::list<BufferData>::iterator item_to_split, float nb_sec_since_itemtosplit_start, BufferData &&line_to_write, float max_time) {
     assert(item_to_split != m_buffer.end());
@@ -117,31 +136,31 @@ void FanMover::_put_in_middle_G1(std::list<BufferData>::iterator item_to_split, 
             before.dx = item_to_split->dx * percent;
             item_to_split->x += before.dx;
             item_to_split->dx = item_to_split->dx * (1-percent);
-            change_axis_value(before.raw, 'X', before.x + before.dx, 3);
+            FanMover_func::change_axis_value(before.raw, 'X', before.x + before.dx, 3);
         }
         if (item_to_split->dy != 0) {
             before.dy = item_to_split->dy * percent;
             item_to_split->y += before.dy;
             item_to_split->dy = item_to_split->dy * (1 - percent);
-            change_axis_value(before.raw, 'Y', before.y + before.dy, 3);
+            FanMover_func::change_axis_value(before.raw, 'Y', before.y + before.dy, 3);
         }
         if (item_to_split->dz != 0) {
             before.dz = item_to_split->dz * percent;
             item_to_split->z += before.dz;
             item_to_split->dz = item_to_split->dz * (1 - percent);
-            change_axis_value(before.raw, 'Z', before.z + before.dz, 3);
+            FanMover_func::change_axis_value(before.raw, 'Z', before.z + before.dz, 3);
         }
         if (item_to_split->de != 0) {
             if (relative_e) {
                 before.de = item_to_split->de * percent;
-                change_axis_value(before.raw, 'E', before.de, 5);
+                FanMover_func::change_axis_value(before.raw, 'E', before.de, 5);
                 item_to_split->de = item_to_split->de * (1 - percent);
-                change_axis_value(item_to_split->raw, 'E', item_to_split->de, 5);
+                FanMover_func::change_axis_value(item_to_split->raw, 'E', item_to_split->de, 5);
             } else {
                 before.de = item_to_split->de * percent;
                 item_to_split->e += before.de;
                 item_to_split->de = item_to_split->de * (1 - percent);
-                change_axis_value(before.raw, 'E', before.e + before.de, 5);
+                FanMover_func::change_axis_value(before.raw, 'E', before.e + before.de, 5);
             }
         }
         //add before then line_to_write, then there is the modified data.
@@ -170,20 +189,20 @@ void FanMover::_print_in_middle_G1(BufferData& line_to_split, float nb_sec_from_
         std::string before = line_to_split.raw;
         std::string& after = line_to_split.raw;
         if (line_to_split.dx != 0) {
-            change_axis_value(before, 'X', line_to_split.x + line_to_split.dx * percent, 3);
+            FanMover_func::change_axis_value(before, 'X', line_to_split.x + line_to_split.dx * percent, 3);
         }
         if (line_to_split.dy != 0) {
-            change_axis_value(before, 'Y', line_to_split.y + line_to_split.dy * percent, 3);
+            FanMover_func::change_axis_value(before, 'Y', line_to_split.y + line_to_split.dy * percent, 3);
         }
         if (line_to_split.dz != 0) {
-            change_axis_value(before, 'Z', line_to_split.z + line_to_split.dz * percent, 3);
+            FanMover_func::change_axis_value(before, 'Z', line_to_split.z + line_to_split.dz * percent, 3);
         }
         if (line_to_split.de != 0) {
             if (relative_e) {
-                change_axis_value(before, 'E', line_to_split.de * percent, 5);
-                change_axis_value(after, 'E', line_to_split.de * (1 - percent), 5);
+                FanMover_func::change_axis_value(before, 'E', line_to_split.de * percent, 5);
+                FanMover_func::change_axis_value(after, 'E', line_to_split.de * (1 - percent), 5);
             } else {
-                change_axis_value(before, 'E', line_to_split.e + line_to_split.de * percent, 5);
+                FanMover_func::change_axis_value(before, 'E', line_to_split.e + line_to_split.de * percent, 5);
             }
         }
         m_process_output += before + "\n";
@@ -222,32 +241,13 @@ std::string FanMover::_set_fan(int16_t speed) {
     return str;
 }
 
-
-bool parse_number(const std::string_view sv, int& out)
-{
-    {
-        // Legacy conversion, which is costly due to having to make a copy of the string before conversion.
-        try {
-            assert(sv.size() < 1024);
-            assert(sv.data() != nullptr);
-            std::string str{ sv };
-            size_t read = 0;
-            out = std::stoi(str, &read);
-            return str.size() == read;
-        }
-        catch (...) {
-            return false;
-        }
-    }
-}
-
 //FIXME: add other firmware
 // or just create that damn new gcode writer arch
 void FanMover::_process_T(const std::string_view command)
 {
     if (command.length() > 1) {
         int eid = 0;
-        if (!parse_number(command.substr(1), eid) || eid < 0 || eid > 255) {
+        if (!FanMover_func::parse_number(command.substr(1), eid) || eid < 0 || eid > 255) {
             GCodeFlavor flavor = m_writer.config.gcode_flavor;
             // Specific to the MMU2 V2 (see https://www.help.prusa3d.com/en/article/prusa-specific-g-codes_112173):
             if ((flavor == gcfMarlinLegacy || flavor == gcfMarlinFirmware) && (command == "Tx" || command == "Tc" || command == "T?"))
@@ -343,7 +343,7 @@ void FanMover::_process_gcode_line(GCodeReader& reader, const GCodeReader::GCode
         }
         case 'M':
         {
-            fan_speed = get_fan_speed(line.raw(), m_writer.config.gcode_flavor);
+            fan_speed = FanMover_func::get_fan_speed(line.raw(), m_writer.config.gcode_flavor);
             if (fan_speed >= 0) {
                 const auto fan_baseline = (m_writer.config.fan_percentage.value ? 100.0 : 255.0);
                 fan_speed = 100 * fan_speed / fan_baseline;

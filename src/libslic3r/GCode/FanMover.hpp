@@ -13,26 +13,31 @@
 
 namespace Slic3r {
 
-class BufferData {
-public:
-    //raw string, contains end position
-    std::string raw;
-    // time to go from start to end
-    float time;
-    int16_t fan_speed;
-    bool is_kickstart;
-    // start position
-    float x = 0, y = 0, z = 0, e = 0;
-    // delta to go to end position
-    float dx = 0, dy = 0, dz = 0, de = 0;
-    BufferData(std::string line, float time = 0, int16_t fan_speed = 0, float is_kickstart = false) : raw(line), time(time), fan_speed(fan_speed), is_kickstart(is_kickstart){
-        //avoid double \n
-        if(!line.empty() && line.back() == '\n') line.pop_back();
-    }
-};
 
 class FanMover
 {
+    class BufferData
+    {
+    public:
+        // raw string, contains end position
+        std::string raw;
+        // time to go from start to end
+        float   time;
+        int16_t fan_speed;
+        bool    is_kickstart;
+        // start position
+        float x = 0, y = 0, z = 0, e = 0;
+        // delta to go to end position
+        float dx = 0, dy = 0, dz = 0, de = 0;
+        BufferData(std::string line, float time = 0, int16_t fan_speed = 0, float is_kickstart = false)
+            : raw(line), time(time), fan_speed(fan_speed), is_kickstart(is_kickstart)
+        {
+            // avoid double \n
+            if (!line.empty() && line.back() == '\n')
+                line.pop_back();
+        }
+    };
+
 private:
     const std::regex regex_fan_speed;
     const float nb_seconds_delay; // in s
