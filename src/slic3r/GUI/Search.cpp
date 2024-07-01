@@ -70,10 +70,10 @@ template<class T>
 void change_opt_key(std::string& opt_key, DynamicPrintConfig* config, int& cnt)
 {
     T* opt_cur = static_cast<T*>(config->option(opt_key));
-    cnt = opt_cur->values.size();
+    cnt = opt_cur->size();
     return;
 
-    if (opt_cur->values.size() > 0)
+    if (opt_cur->size() > 0)
         opt_key += "#" + std::to_string(0);
 }
 
@@ -127,10 +127,10 @@ static std::string get_key(const std::string& opt_key, Preset::Type type)
 void change_opt_keyFoP(std::string& opt_key, DynamicPrintConfig* config, int& cnt)
 {
     ConfigOptionFloatsOrPercents* opt_cur = static_cast<ConfigOptionFloatsOrPercents*>(config->option(opt_key));
-    cnt = opt_cur->values.size();
+    cnt = opt_cur->size();
     return;
 
-    if (opt_cur->values.size() > 0)
+    if (opt_cur->size() > 0)
         opt_key += "#" + std::to_string(0);
 }
 const GroupAndCategory& OptionsSearcher::get_group_and_category(const std::string& opt_key, ConfigOptionMode tags) const
@@ -207,6 +207,7 @@ void OptionsSearcher::append_options(DynamicPrintConfig* config, Preset::Type ty
             //case coFloatsOrPercents:change_opt_key<ConfigOptionFloatsOrPercents	>(opt_key, config, cnt);	break;
             case coFloatsOrPercents:change_opt_keyFoP(opt_key, config, cnt);	break;
             case coPoints:	change_opt_key<ConfigOptionPoints	>(opt_key, config, cnt);	break;
+            case coGraphs:	change_opt_key<ConfigOptionGraphs	>(opt_key, config, cnt);	break;
             default:		break;
             }
 
