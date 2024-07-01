@@ -254,7 +254,7 @@ private:
     //void _print_in_middle_G1(BufferData& line_to_split, float nb_sec, const std::string& line_to_write);
     void write_buffer_data();
     double compute_pressure_change_mm_filament(const BufferData& command);
-    void PressureAdvance::update_last_move(size_t last_move_idx, double junction_axle_speed);
+    void update_last_move(size_t last_move_idx, double junction_axle_speed);
 
     double get_pressure_factor() {
         double val = this->m_config.extruder_pressure_factor.get_float(m_current_extruder);

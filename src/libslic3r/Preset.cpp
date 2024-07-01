@@ -314,7 +314,7 @@ void Preset::normalize(DynamicPrintConfig &config)
                 static_cast<ConfigOptionVectorBase*>(opt)->resize(n, defaults.option(key));
         }
         // The following keys are mandatory for the UI, but they are not part of FullPrintConfig, therefore they are handled separately.
-        for (const std::string &key : { "filament_settings_id" }) {
+        for (const char *key : {"filament_settings_id"}) {
             auto *opt = config.option(key, false);
             assert(opt == nullptr || opt->type() == coStrings);
             if (opt != nullptr && opt->type() == coStrings)
@@ -623,7 +623,8 @@ static std::vector<std::string> s_Preset_print_options {
         "support_material_angle",
         "support_material_angle_height",
         "support_material_interface_layers", "support_material_bottom_interface_layers",
-        "support_material_interface_pattern",
+        "support_material_top_interface_pattern",
+        "support_material_bottom_interface_pattern",
         "support_material_interface_angle",
         "support_material_interface_angle_increment",
         "support_material_interface_spacing",
@@ -699,6 +700,7 @@ static std::vector<std::string> s_Preset_print_options {
         "wipe_tower", "wipe_tower_x", "wipe_tower_y", "wipe_tower_width", "wipe_tower_rotation_angle", "wipe_tower_bridging",
         "wipe_tower_speed", "wipe_tower_wipe_starting_speed",
         "wipe_tower_brim_width",
+        "priming_position",
         "mmu_segmented_region_max_width",
         "single_extruder_multi_material_priming", 
         "wipe_tower_no_sparse_layers",

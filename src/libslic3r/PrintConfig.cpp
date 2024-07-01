@@ -4529,6 +4529,17 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comPrusa;
     def->set_default_value(new ConfigOptionStrings());
 
+    def = this->add("priming_position", coPoint);
+    def->label = L("Priming position");
+    def->full_label = L("Priming position");
+    def->tooltip = L("Coordinates of the left front corner of the priming patch."
+                     "\nIf set to 0,0 then the position is computed automatically.");
+    //TODO: enable/disable
+    def->category = OptionCategory::customgcode;
+    def->sidetext = L("mm");
+    def->mode = comAdvancedE | comSuSi;
+    def->set_default_value(new ConfigOptionPoint(Vec2d(0,0)));
+
     def = this->add("printer_custom_variables", coString);
     def->label = L("Custom variables");
     def->full_label = L("Custom Printer variables");
@@ -5464,15 +5475,6 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("If enabled, all printing extruders will be primed at the front edge of the print bed at the start of the print.");
     def->mode = comAdvancedE | comPrusa;
     def->set_default_value(new ConfigOptionBool(true));
-
-    def = this->add("wipe_tower_no_sparse_layers", coBool);
-    def->label = L("No sparse layers (EXPERIMENTAL)");
-    def->category = OptionCategory::mmsetup;
-    def->tooltip = L("If enabled, the wipe tower will not be printed on layers with no toolchanges. "
-                     "On layers with a toolchange, extruder will travel downward to print the wipe tower. "
-                     "User is responsible for ensuring there is no collision with the print.");
-    def->mode = comAdvancedE | comPrusa;
-    def->set_default_value(new ConfigOptionBool(false));
     
     def = this->add("solid_infill_acceleration", coFloatOrPercent);
     def->label = L("Solid ");
@@ -5846,11 +5848,36 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvancedE | comPrusa;
     def->set_default_value(new ConfigOptionEnum<SupportMaterialPattern>(smpRectilinear));
 
-    def = this->add("support_material_interface_pattern", coEnum);
-    def->label = L("Pattern");
-    def->full_label = L("Support interface pattern");
+    def = this->add("support_material_bottom_interface_pattern", coEnum);
+    def->label = L("Bottom Pattern");
+    def->full_label = L("Support bottom interface pattern");
     def->category = OptionCategory::support;
-    def->tooltip = L("Pattern for interface layers."
+    def->tooltip = L("Pattern for the bottom interface layers (the ones that start on the object)."
+        "\nDefault pattern is the same as the top interface, unless it's Hilbert Curve or Ironing."
+        "\nNote that 'Hilbert', 'Ironing' , '(filled)' patterns are really discouraged, and meant to be used with soluble supports and 100% fill interface layer.");
+    def->enum_keys_map = &ConfigOptionEnum<InfillPattern>::get_enum_values();
+    def->enum_values.push_back("auto");
+    def->enum_values.push_back("rectilinear");
+    def->enum_values.push_back("monotonic");
+    def->enum_values.push_back("concentric");
+    def->enum_values.push_back("hilbertcurve");
+    def->enum_values.push_back("concentricgapfill");
+    def->enum_values.push_back("smooth");
+    def->enum_labels.push_back(L("Default"));
+    def->enum_labels.push_back(L("Rectilinear"));
+    def->enum_labels.push_back(L("Monotonic"));
+    def->enum_labels.push_back(L("Concentric"));
+    def->enum_labels.push_back(L("Hilbert Curve"));
+    def->enum_labels.push_back(L("Concentric (filled)"));
+    def->enum_labels.push_back(L("Ironing"));
+    def->mode = comAdvancedE | comSuSi;
+    def->set_default_value(new ConfigOptionEnum<InfillPattern>(ipAuto));
+
+    def = this->add("support_material_top_interface_pattern", coEnum);
+    def->label = L("Top Pattern");
+    def->full_label = L("Support top interface pattern");
+    def->category = OptionCategory::support;
+    def->tooltip = L("Pattern for the top interface layers."
         "\nNote that 'Hilbert', 'Ironing' and '(filled)' patterns are meant to be used with soluble supports and 100% fill interface layer.");
     def->enum_keys_map = &ConfigOptionEnum<InfillPattern>::get_enum_values();
     def->enum_values.push_back("auto");
@@ -5871,6 +5898,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels.push_back(L("Ironing"));
     def->mode = comAdvancedE | comPrusa;
     def->set_default_value(new ConfigOptionEnum<InfillPattern>(ipRectilinear));
+    def->aliases = {"support_material_interface_pattern"};
 
     def = this->add("support_material_layer_height", coFloatOrPercent);
     def->label = L("Support layer height");
@@ -6513,6 +6541,14 @@ void PrintConfigDef::init_fff_params()
     def->aliases = { "wipe_tower_brim" }; // SuperSlicer 2.3 and before
     def->set_default_value(new ConfigOptionFloatOrPercent(2,false));
 
+    def = this->add("wipe_tower_no_sparse_layers", coBool);
+    def->label = L("No sparse layers (EXPERIMENTAL)");
+    def->category = OptionCategory::mmsetup;
+    def->tooltip = L("If enabled, the wipe tower will not be printed on layers with no toolchanges. "
+                     "On layers with a toolchange, extruder will travel downward to print the wipe tower. "
+                     "User is responsible for ensuring there is no collision with the print.");
+    def->mode = comAdvancedE | comPrusa;
+    def->set_default_value(new ConfigOptionBool(false));
     def = this->add("wipe_tower_x", coFloat);
     def->label = L("X");
     def->full_label = L("Wipe tower X");
@@ -6520,6 +6556,7 @@ void PrintConfigDef::init_fff_params()
     def->sidetext = L("mm");
     def->mode = comAdvancedE | comPrusa;
     def->set_default_value(new ConfigOptionFloat(180.));
+
 
     def = this->add("wipe_tower_y", coFloat);
     def->label = L("Y");
@@ -8015,17 +8052,19 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
 
     // In PrusaSlicer 2.3.0-alpha0 the "monotonic" infill was introduced, which was later renamed to "monotonous".
     if (value == "monotonous" && (opt_key == "top_fill_pattern" || opt_key == "bottom_fill_pattern" || opt_key == "fill_pattern"
-            || opt_key == "solid_fill_pattern" || opt_key == "bridge_fill_pattern" || opt_key == "support_material_interface_pattern"))
+            || opt_key == "solid_fill_pattern" || opt_key == "bridge_fill_pattern" || opt_key == "support_material_interface_pattern")) {
         value = "monotonic";
+    }
     // some changes has occurs between rectilineargapfill and monotonicgapfill. Set them at the right value for each type
     if (value == "rectilineargapfill" && (opt_key == "top_fill_pattern" || opt_key == "bottom_fill_pattern") )
         value = "monotonicgapfill";
-    if (opt_key == "fill_pattern" || opt_key == "support_material_interface_pattern")
-        if (value == "rectilineargapfill")
+    if (opt_key == "fill_pattern" || opt_key == "support_material_interface_pattern" || opt_key == "support_material_top_interface_pattern" || opt_key == "support_material_bottom_interface_pattern") {
+        if (value == "rectilineargapfill") {
             value = "rectilinear";
-        else if (value == "monotonicgapfill")
+        } else if (value == "monotonicgapfill") {
             value = "monotonic";
-
+        }
+    }
     if (ignore.find(opt_key) != ignore.end()) {
         opt_key = "";
         return;
@@ -8035,9 +8074,9 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
         opt_key = "raft_first_layer_density";
         value = "100";
     }
-    if (boost::starts_with(opt_key, "thin_perimeters") && value == "1")
+    if (boost::starts_with(opt_key, "thin_perimeters") && value == "1") {
         value = "100%";
-
+    }
     if ("fan_always_on" == opt_key) {
         if (value != "1") {
             //min_fan_speed is already converted to default_fan_speed, just has to deactivate it if not always_on
@@ -8066,8 +8105,9 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
                 }
             }
         }
-        if (remove_unkown_keys)
+        if (remove_unkown_keys) {
             opt_key = "";
+        }
         return;
     }
 }
@@ -8247,13 +8287,13 @@ void _convert_from_prusa(CONFIG_CLASS& conf, const DynamicPrintConfig& global_co
     // set phony entries
     if (with_phony) {
         for (auto &[opt_key_width, opt_key_spacing] :
-             {std::pair<char *, char *>{"extrusion_width", "extrusion_spacing"},
-              std::pair<char *, char *>{"perimeter_extrusion_width", "perimeter_extrusion_spacing"},
-              std::pair<char *, char *>{"external_perimeter_extrusion_width", "external_perimeter_extrusion_spacing"},
-              std::pair<char *, char *>{"first_layer_extrusion_width", "first_layer_extrusion_spacing"},
-              std::pair<char *, char *>{"infill_extrusion_width", "infill_extrusion_spacing"},
-              std::pair<char *, char *>{"solid_infill_extrusion_width", "solid_infill_extrusion_spacing"},
-              std::pair<char *, char *>{"top_infill_extrusion_width", "top_infill_extrusion_spacing"}}) {
+             {std::pair<const char *, const char *>{"extrusion_width", "extrusion_spacing"},
+              std::pair<const char *, const char *>{"perimeter_extrusion_width", "perimeter_extrusion_spacing"},
+              std::pair<const char *, const char *>{"external_perimeter_extrusion_width", "external_perimeter_extrusion_spacing"},
+              std::pair<const char *, const char *>{"first_layer_extrusion_width", "first_layer_extrusion_spacing"},
+              std::pair<const char *, const char *>{"infill_extrusion_width", "infill_extrusion_spacing"},
+              std::pair<const char *, const char *>{"solid_infill_extrusion_width", "solid_infill_extrusion_spacing"},
+              std::pair<const char *, const char *>{"top_infill_extrusion_width", "top_infill_extrusion_spacing"}}) {
             // if prusa has defined a width, or if the conf has a default spacing that need to be overwritten
             if (conf.option(opt_key_width) != nullptr || conf.option(opt_key_spacing) != nullptr) {
                 ConfigOption *opt_new = print_config_def.get(opt_key_spacing)->default_value.get()->clone();
@@ -8354,13 +8394,13 @@ void _deserialize_maybe_from_prusa(const std::map<t_config_option_key, std::stri
     if (with_phony) {
         const ConfigDef *def = config.def();
         for (const auto& [opt_key_width, opt_key_spacing] :
-                {std::pair<char *, char *>{"extrusion_width", "extrusion_spacing"},
-                std::pair<char *, char *>{"perimeter_extrusion_width", "perimeter_extrusion_spacing"},
-                std::pair<char *, char *>{"external_perimeter_extrusion_width", "external_perimeter_extrusion_spacing"},
-                std::pair<char *, char *>{"first_layer_extrusion_width", "first_layer_extrusion_spacing"},
-                std::pair<char *, char *>{"infill_extrusion_width", "infill_extrusion_spacing"},
-                std::pair<char *, char *>{"solid_infill_extrusion_width", "solid_infill_extrusion_spacing"},
-                std::pair<char *, char *>{"top_infill_extrusion_width", "top_infill_extrusion_spacing"}}) {
+                {std::pair<const char *, const char *>{"extrusion_width", "extrusion_spacing"},
+                std::pair<const char *, const char *>{"perimeter_extrusion_width", "perimeter_extrusion_spacing"},
+                std::pair<const char *, const char *>{"external_perimeter_extrusion_width", "external_perimeter_extrusion_spacing"},
+                std::pair<const char *, const char *>{"first_layer_extrusion_width", "first_layer_extrusion_spacing"},
+                std::pair<const char *, const char *>{"infill_extrusion_width", "infill_extrusion_spacing"},
+                std::pair<const char *, const char *>{"solid_infill_extrusion_width", "solid_infill_extrusion_spacing"},
+                std::pair<const char *, const char *>{"top_infill_extrusion_width", "top_infill_extrusion_spacing"}}) {
             const ConfigOption *opt_width = config.option(opt_key_width);
             const ConfigOption *opt_spacing = config.option(opt_key_spacing);
             if (opt_width && opt_spacing) {
@@ -8587,6 +8627,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "perimeter_reverse",
 "perimeter_round_corners",
 "perimeters_hole",
+"priming_position",
 "print_extrusion_multiplier",
 "print_first_layer_temperature",
 "print_custom_variables",
@@ -8642,7 +8683,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "support_material_interface_angle_increment",
 "support_material_interface_fan_speed",
 "support_material_interface_layer_height",
-"support_material_interface_pattern",
+"support_material_bottom_interface_pattern",
 "support_material_layer_height",
 "thin_perimeters_all",
 "thin_perimeters",
@@ -8725,9 +8766,16 @@ std::map<std::string, std::string> PrintConfigDef::to_prusa(t_config_option_key&
             && ("fill_pattern" == opt_key || "top_fill_pattern" == opt_key)) {
             value = "alignedrectilinear";
         }
+        if ("support_material_top_interface_pattern" == opt_key) {
+            opt_key = "support_material_interface_pattern";
+        }
     } else if ("seam_position" == opt_key) {
         if ("cost" == value) {
             value = "nearest";
+        }else if ("allrandom" == value) {
+            value = "random";
+        }else if ("contiguous" == value) {
+            value = "aligned";
         }
     } else if ("first_layer_size_compensation" == opt_key) {
         opt_key = "elefant_foot_compensation";
@@ -8740,13 +8788,14 @@ std::map<std::string, std::string> PrintConfigDef::to_prusa(t_config_option_key&
         }
     } else if ("elephant_foot_min_width" == opt_key) {
         opt_key = "elefant_foot_min_width";
-    } else if("first_layer_acceleration" == opt_key) {
+    } else if("first_layer_acceleration" == opt_key || "first_layer_acceleration_over_raft" == opt_key) {
         if (value.find("%") != std::string::npos) {
             // can't support %, so we uese the default accel a baseline for half-assed conversion
             value = std::to_string(all_conf.get_abs_value(opt_key, all_conf.get_computed_value("default_acceleration")));
         }
     } else if ("infill_acceleration" == opt_key || "bridge_acceleration" == opt_key || "default_acceleration" == opt_key || "perimeter_acceleration" == opt_key
-        || "overhangs_speed" == opt_key || "ironing_speed" == opt_key || "perimeter_speed" == opt_key || "infill_speed" == opt_key || "bridge_speed" == opt_key || "support_material_speed" == opt_key
+        || "overhangs_speed" == opt_key || "ironing_speed" == opt_key || "perimeter_speed" == opt_key 
+        || "infill_speed" == opt_key || "bridge_speed" == opt_key || "support_material_speed" == opt_key
         || "max_print_speed" == opt_key
         ) {
         // remove '%'
@@ -8866,6 +8915,20 @@ std::map<std::string, std::string> PrintConfigDef::to_prusa(t_config_option_key&
             new_entries["fan_always_on"] = "1";
         }
     }
+
+    // compute max & min height from % to flat value
+    if ("min_layer_height" == opt_key || "max_layer_height" == opt_key) {
+        ConfigOptionFloats computed_opt;
+        const ConfigOptionFloatsOrPercents *current_opt = all_conf.option<ConfigOptionFloatsOrPercents>(opt_key);
+        const ConfigOptionFloats *nozzle_diameters = all_conf.option<ConfigOptionFloats>("nozzle_diameter");
+        assert(current_opt && nozzle_diameters);
+        assert(current_opt->size() == nozzle_diameters->size());
+        for (int i = 0; i < current_opt->size(); i++) {
+            computed_opt.set_at(current_opt->get_abs_value(i, nozzle_diameters->get_at(i)), i);
+        }
+        assert(computed_opt.size() == nozzle_diameters->size());
+        value = computed_opt.serialize();
+    }
     
     if ("thumbnails" == opt_key) {
     // add format to thumbnails
@@ -8877,8 +8940,6 @@ std::map<std::string, std::string> PrintConfigDef::to_prusa(t_config_option_key&
         std::string coma = "";
         for (std::string &size : sizes) {
             //if first or second dimension is 0: ignore.
-            size_t test1 = size.find("0x");
-            size_t test2 = size.find("x0");
             if (size.find("0x") == 0 || size.find("x0") + 2 == size.size())
                 continue;
             assert(size.find('/') == std::string::npos);
@@ -8928,8 +8989,10 @@ DynamicPrintConfig* DynamicPrintConfig::new_from_defaults_keys(const std::vector
 
 const ConfigOption *MultiPtrPrintConfig::optptr(const t_config_option_key &opt_key) const
 {
-    for (auto conf : storages) {
+    for (ConfigBase *conf : storages) {
+#ifdef _DEBUG
         assert(conf->exists());
+#endif
         const ConfigOption *opt = conf->optptr(opt_key);
         if (opt)
             return opt;
@@ -8939,8 +9002,10 @@ const ConfigOption *MultiPtrPrintConfig::optptr(const t_config_option_key &opt_k
 ConfigOption *MultiPtrPrintConfig::optptr(const t_config_option_key &opt_key, bool create)
 {
     assert(!create);
-    for (auto conf : storages) {
+    for (ConfigBase *conf : storages) {
+#ifdef _DEBUG
         assert(conf->exists());
+#endif
         ConfigOption *opt = conf->optptr(opt_key);
         if (opt)
             return opt;
@@ -8952,8 +9017,10 @@ t_config_option_keys MultiPtrPrintConfig::keys() const
     assert(false);
     // shouldn't need ot call that
     t_config_option_keys keys;
-    for (auto conf : storages) {
+    for (ConfigBase *conf : storages) {
+#ifdef _DEBUG
         assert(conf->exists());
+#endif
         append(keys, conf->keys());
     }
     return keys;
@@ -9025,7 +9092,7 @@ double min_object_distance(const ConfigBase *config, double ref_height /* = 0*/)
     double base_dist = 0;
     //std::cout << "START min_object_distance =>" << base_dist << "\n";
     const ConfigOptionBool* co_opt = config->option<ConfigOptionBool>("complete_objects");
-    if (config->option("parallel_objects_step")->get_float() > 0 || co_opt && co_opt->value) {
+    if ((config->option("parallel_objects_step")->get_float() > 0) || (co_opt && co_opt->value)) {
         double skirt_dist = 0;
         try {
             std::vector<double> vals = dynamic_cast<const ConfigOptionFloats*>(config->option("nozzle_diameter"))->get_values();

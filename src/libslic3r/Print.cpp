@@ -292,6 +292,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
             || opt_key == "first_layer_temperature"
             || opt_key == "gcode_flavor"
             || opt_key == "high_current_on_filament_swap"
+            || opt_key == "priming_position"
             || opt_key == "single_extruder_multi_material"
             || opt_key == "temperature"
             || opt_key == "wipe_tower"
@@ -1792,7 +1793,7 @@ DynamicConfig PrintStatistics::config() const
 DynamicConfig PrintStatistics::placeholders()
 {
     DynamicConfig config;
-    for (const std::string &key : { 
+    for (const char *key : { 
         "print_time", "normal_print_time", "silent_print_time", 
         "used_filament", "extruded_volume", "total_cost", "total_weight", 
         "total_toolchanges", "total_wipe_tower_cost", "total_wipe_tower_filament",
