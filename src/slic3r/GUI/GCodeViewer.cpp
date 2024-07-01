@@ -1073,7 +1073,7 @@ GCodeViewer::GCodeViewer()
             ifs.open(path_colors.string());
             boost::property_tree::read_ini(ifs, tree_colors);
 
-            for (int i = 0; i < Extrusion_Role_Colors.size(); i++) {
+            for (size_t i = 0; i < Extrusion_Role_Colors.size(); i++) {
                 std::string color_code = tree_colors.get<std::string>(ExtrusionEntity::role_to_string((ExtrusionRole)i));
                 if (color_code.length() > 5) {
                     wxColour color;
@@ -4036,7 +4036,7 @@ void GCodeViewer::render_legend(float& legend_height)
                 last_color[i] = m_tool_colors[i];
             }
             int last_extruder_id = 1;
-            int color_change_idx = 0;
+            size_t color_change_idx = 0;
             for (const auto& time_rec : times) {
                 switch (time_rec.first)
                 {
@@ -4325,8 +4325,8 @@ void GCodeViewer::render_legend(float& legend_height)
         if (!outliers_allowed)
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.3333f);
 
-        ImDrawList *draw_list = ImGui::GetWindowDrawList();
-        ImVec2      pos       = ImGui::GetCursorScreenPos();
+        //ImDrawList *draw_list = ImGui::GetWindowDrawList();
+        //ImVec2      pos       = ImGui::GetCursorScreenPos();
 
         // draw text
         ImGui::SameLine();
@@ -4415,14 +4415,14 @@ void GCodeViewer::render_legend(float& legend_height)
             imgui.text(min_label);
             ImGui::SameLine();
             ImGui::PushItemWidth(imgui.get_style_scaling() * size);
-            ImGui::InputFloat(m_extrusions.ranges.min_max_cstr_id[size_t(m_view_type)].second.c_str(), &mod_max, 0.0f,
+            ImGui::InputFloat(m_extrusions.ranges.min_max_cstr_id[size_t(m_view_type)].second.c_str(), &mod_min, 0.0f,
                               0.0f, format.c_str(), ImGuiInputTextFlags_CharsDecimal, 0.f);
             // draw max
             ImGui::SameLine();
             imgui.text(max_label);
             ImGui::SameLine();
             ImGui::PushItemWidth(imgui.get_style_scaling() * size);
-            ImGui::InputFloat(m_extrusions.ranges.min_max_cstr_id[size_t(m_view_type)].first.c_str(), &mod_min, 0.0f,
+            ImGui::InputFloat(m_extrusions.ranges.min_max_cstr_id[size_t(m_view_type)].first.c_str(), &mod_max, 0.0f,
                               0.0f, format.c_str(), ImGuiInputTextFlags_CharsDecimal, 0.f);
 
         } else {

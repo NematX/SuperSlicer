@@ -23,10 +23,13 @@
 #include <algorithm>
 #include <limits>
 #include <unordered_set>
+
 #include <boost/filesystem/path.hpp>
 #include <boost/format.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/regex.hpp>
+
+#include <tbb/parallel_for.h>
 
 // Mark string for localization and translate.
 #define L(s) Slic3r::I18N::translate(s)
@@ -93,6 +96,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
         "extruder_clearance_height",
         "extruder_clearance_radius",
         "extruder_colour",
+        "extruder_extrusion_multiplier_speed",
         "extruder_offset",
         "extruder_fan_offset"
         "extruder_temperature_offset",
@@ -250,7 +254,8 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
             ) {
             steps.emplace_back(psSkirtBrim);
         } else if (
-               opt_key == "filament_shrink"
+               opt_key == "bridge_precision"
+            || opt_key == "filament_shrink"
             || opt_key == "first_layer_height"
             || opt_key == "nozzle_diameter"
             || opt_key == "model_precision"
@@ -624,6 +629,7 @@ double Print::get_object_first_layer_height(const PrintObject& object) const {
             object_first_layer_height = std::min(object_first_layer_height, object.config().first_layer_height.get_abs_value(nozzle_diameter));
         }
     }
+    assert(object_first_layer_height < 1000000000);
     return object_first_layer_height;
 }
 
@@ -1753,11 +1759,24 @@ std::string Print::output_filename(const std::string &filename_base) const
 DynamicConfig PrintStatistics::config() const
 {
     DynamicConfig config;
-    std::string normal_print_time = short_time(this->estimated_normal_print_time);
-    std::string silent_print_time = short_time(this->estimated_silent_print_time);
-    config.set_key_value("print_time",                new ConfigOptionString(normal_print_time));
-    config.set_key_value("normal_print_time",         new ConfigOptionString(normal_print_time));
-    config.set_key_value("silent_print_time",         new ConfigOptionString(silent_print_time));
+    if (this->estimated_print_time_str.find(static_cast<uint8_t>(PrintEstimatedStatistics::ETimeMode::Normal)) !=
+        this->estimated_print_time_str.end()) {
+        std::string normal_print_time = short_time(
+            this->estimated_print_time_str.at(static_cast<uint8_t>(PrintEstimatedStatistics::ETimeMode::Normal)));
+        config.set_key_value("print_time", new ConfigOptionString(normal_print_time));
+        config.set_key_value("normal_print_time", new ConfigOptionString(normal_print_time));
+    } else if (this->estimated_print_time_str.find(static_cast<uint8_t>(
+                   PrintEstimatedStatistics::ETimeMode::Stealth)) != this->estimated_print_time_str.end()) {
+        std::string silent_print_time = short_time(
+            this->estimated_print_time_str.at(static_cast<uint8_t>(PrintEstimatedStatistics::ETimeMode::Stealth)));
+        config.set_key_value("print_time", new ConfigOptionString(silent_print_time));
+    }
+    if (this->estimated_print_time_str.find(static_cast<uint8_t>(PrintEstimatedStatistics::ETimeMode::Stealth)) !=
+        this->estimated_print_time_str.end()) {
+        std::string silent_print_time = short_time(
+            this->estimated_print_time_str.at(static_cast<uint8_t>(PrintEstimatedStatistics::ETimeMode::Stealth)));
+        config.set_key_value("silent_print_time", new ConfigOptionString(silent_print_time));
+    }
     config.set_key_value("used_filament",             new ConfigOptionFloat(this->total_used_filament / 1000.));
     config.set_key_value("extruded_volume",           new ConfigOptionFloat(this->total_extruded_volume));
     config.set_key_value("total_cost",                new ConfigOptionFloat(this->total_cost));

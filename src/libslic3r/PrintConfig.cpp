@@ -818,6 +818,16 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvancedE | comSuSi;
     def->set_default_value(new ConfigOptionPercent(100));
 
+    def = this->add("bridge_precision", coFloatOrPercent);
+    def->label = L("Bridge precision");
+    def->category = OptionCategory::slicing;
+    def->tooltip = L("This is the precision of the bridge detection. If you put it too low, the bridge detection will be very inneficient."
+                    "\nCan be a % of the bridge spacing.");
+    def->sidetext = L("mm or %");
+    def->min = 0;
+    def->mode = comAdvancedE | comSuSi;
+    def->set_default_value(new ConfigOptionFloatOrPercent(25, true));
+
     def = this->add("bridge_overlap_min", coPercent);
     def->label = L("Min");
     def->full_label = L("Min bridge density");
@@ -1755,6 +1765,14 @@ void PrintConfigDef::init_fff_params()
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionStrings{ "" });
 
+    def = this->add("extruder_extrusion_multiplier_speed", coStrings);
+    def->label = L("Extrusion multipler");
+    def->tooltip = L("This string is edited by a Dialog and contains extusion multiplier for different speeds.");
+    def->mode = comExpert | comSuSi;
+    def->is_vector_extruder = true;
+    def->set_default_value(new ConfigOptionStrings { "0 1 1 1 1 1 1 1 1 1 1 1|"
+       " 10 1. 20 1. 30 1. 40 1. 60 1. 80 1. 120 1. 160 1. 240 1. 320 1. 480 1. 640 1. 960 1. 1280 1." });
+
     def = this->add("extruder_offset", coPoints);
     def->label = L("Extruder offset");
     def->category = OptionCategory::extruders;
@@ -2326,6 +2344,13 @@ void PrintConfigDef::init_fff_params()
     def->mode       = comAdvancedE | comSuSi;
     def->set_default_value(new ConfigOptionBool(true));
 
+    def             = this->add("fill_angle_follow_model", coBool);
+    def->label      = L("Rotate with object");
+    def->category   = OptionCategory::infill;
+    def->tooltip    = L("If your object has a z-rotation, then the infill will also be rotated by this value.");
+    def->mode       = comAdvancedE | comSuSi;
+    def->set_default_value(new ConfigOptionBool(false));
+
     def = this->add("fill_angle_increment", coFloat);
     def->label = L("Fill");
     def->full_label = L("Fill angle increment");
@@ -2479,7 +2504,7 @@ void PrintConfigDef::init_fff_params()
     def->full_label = L("XY First layer compensation");
     def->category = OptionCategory::slicing;
     def->tooltip = L("The first layer will be grown / shrunk in the XY plane by the configured value "
-        "to compensate for the 1st layer squish aka an Elephant Foot effect. (should be negative = inwards)");
+        "to compensate for the 1st layer squish aka an Elephant Foot effect. (should be negative = inwards = remove area)");
     def->sidetext = L("mm");
     def->mode = comAdvancedE | comSuSi | comPrusa; // just a rename & inverted of prusa 's elefant_foot
     def->set_default_value(new ConfigOptionFloat(0));
@@ -3160,7 +3185,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels.push_back(L("Connected to outer perimeters"));
     def->enum_labels.push_back(L("Not connected"));
     def->mode = comExpert | comSuSi;
-    def->set_default_value(new ConfigOptionEnum<InfillConnection>(icConnected));
+    def->set_default_value(new ConfigOptionEnum<InfillConnection>(icNotConnected));
 
     def = this->add("infill_connection_solid", coEnum);
     def->label = L("Connection of solid infill lines");
@@ -3336,6 +3361,7 @@ void PrintConfigDef::init_fff_params()
     // and it contains a sum of "inherits" values over the print and filament profiles.
     def = this->add("inherits_cummulative", coStrings);
     def->set_default_value(new ConfigOptionStrings());
+    def->mode = comPrusa;
     def->cli = ConfigOptionDef::nocli;
 
     def = this->add("interface_shells", coBool);
@@ -3380,11 +3406,14 @@ void PrintConfigDef::init_fff_params()
     def = this->add("ironing_angle", coFloat);
     def->label = L("Ironing angle");
     def->category = OptionCategory::ironing;
-    def->tooltip = L("Ironing angle. if negative, it will use the fill angle.");
+    def->tooltip = L("Ironing post-process angle."
+        "\nIf positive, the ironing will use this angle."
+        "\nIf -1, it will use the fill angle."
+        "\nIf lower than -1, it will use the fill angle minus this angle.");
     def->sidetext = L("°");
-    def->min = -1;
+    def->min = -360;
     def->mode = comExpert | comSuSi;
-    def->set_default_value(new ConfigOptionFloat(-1));
+    def->set_default_value(new ConfigOptionFloat(-45));
 
     def = this->add("ironing_type", coEnum);
     def->label = L("Ironing Type");
@@ -3461,12 +3490,12 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionString(""));
 
-    def = this->add("exact_last_layer_height", coBool);
-    def->label = L("Exact last layer height");
-    def->category = OptionCategory::perimeter;
-    def->tooltip = L("This setting controls the height of last object layers to put the last layer at the exact highest height possible. Experimental.");
-    def->mode = comHidden;
-    def->set_default_value(new ConfigOptionBool(false));
+    // def = this->add("exact_last_layer_height", coBool);
+    // def->label = L("Exact last layer height");
+    // def->category = OptionCategory::perimeter;
+    // def->tooltip = L("This setting controls the height of last object layers to put the last layer at the exact highest height possible. Experimental.");
+    // def->mode = comHidden;
+    // def->set_default_value(new ConfigOptionBool(false));
 
     def = this->add("remaining_times", coBool);
     def->label = L("Supports remaining times");
@@ -3729,7 +3758,7 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionFloatsOrPercents{ FloatOrPercent{ 75, true} });
 
     def = this->add("max_print_speed", coFloatOrPercent);
-    def->label = L("Max print speed");
+    def->label = L("Max auto-speed");
     def->full_label = L("Max print speed for Autospeed");
     def->category = OptionCategory::speed;
     def->tooltip = L("When setting other speed settings to 0, Slic3r will autocalculate the optimal speed "
@@ -3757,8 +3786,8 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionPercents{ 90 });
 
     def = this->add("max_volumetric_speed", coFloat);
-    def->label = L("Volumetric speed");
-    def->full_label = L("Maximum Print Volumetric speed");
+    def->label = L("Volumetric auto-speed");
+    def->full_label = L("Maximum Volumetric print speed for Autospeed");
     def->category = OptionCategory::extruders;
     def->tooltip = L("This setting allows you to set the maximum flowrate for your print, and so cap the desired flow rate for the autospeed algorithm."
         " The autospeed tries to keep a constant feedrate for the entire object, and so can lower the volumetric speed for some features."
@@ -4037,6 +4066,42 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvancedE | comSuSi;
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionInts{ -1 });
+
+    def = this->add("overhangs_max_slope", coFloatOrPercent);
+    def->label = L("Overhangs max slope");
+    def->full_label = L("Overhangs max slope");
+    def->category = OptionCategory::slicing;
+    def->tooltip = L("Maximum slope for overhangs. if at each layer, the overhangs hangs by more than this value, then the geometry will be cut."
+                    " It doesn't cut into detected bridgeable areas."
+                    "\nCan be a % of the highest nozzle diameter."
+                    "\nSet to 0 to disable.");
+    def->sidetext = L("mm or %");
+    def->ratio_over = "nozzle_diameter";
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionFloatOrPercent(0, false));
+
+    def = this->add("overhangs_bridge_threshold", coFloat);
+    def->label = L("Bridge max length");
+    def->category = OptionCategory::slicing;
+    def->tooltip = L("Maximum distance for bridges. If the distance is over that, it will be considered as overhangs for 'overhangs_max_slope'."
+                    "\nSet to -1 to accept all distances."
+                    "\nSet to 0 to ignore bridges.");
+    def->sidetext = L("mm");
+    def->min = -1;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionFloat(-1));
+
+    def = this->add("overhangs_bridge_upper_layers", coInt);
+    def->label = L("Consider upper bridges");
+    def->category = OptionCategory::slicing;
+    def->tooltip = L("Don't put overhangs if the area will filled in next layer by bridges."
+                    "\nSet to -1 to accept all upper layers."
+                    "\nSet to 0 to only consider our layer bridges.");
+    def->sidetext = L("layers");
+    def->min = -1;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionInt(0));
 
     def = this->add("overhangs_speed", coFloatOrPercent);
     def->label = L("Overhangs");
@@ -5038,7 +5103,7 @@ void PrintConfigDef::init_fff_params()
     def->sidetext = L("mm²");
     def->min = 0;
     def->mode = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionFloat(70));
+    def->set_default_value(new ConfigOptionFloat(4));
 
     def = this->add("solid_infill_below_layer_area", coFloat);
     def->label = L("Solid infill layer threshold area");
@@ -5049,10 +5114,10 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionFloat(0));
 
-    def = this->add("solid_infill_below_thickness", coFloatOrPercent);
-    def->label = L("Solid infill threshold thickness");
+    def = this->add("solid_infill_below_width", coFloatOrPercent);
+    def->label = L("Solid infill threshold width");
     def->category = OptionCategory::infill;
-    def->tooltip = L("Force solid infill for parts of regions having a smaller thickness than the specified threshold."
+    def->tooltip = L("Force solid infill for parts of regions having a smaller width than the specified threshold."
                     "\nCan be a % of the current solid infill spacing."
                     "\nSet 0 to disable");
     def->sidetext = L("mm or %");
@@ -5229,7 +5294,8 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Only custom Start G-code");
     def->category = OptionCategory::customgcode;
     def->tooltip = L("Ensure that the slicer won't add heating, fan, extruder... commands before or just after your start-gcode."
-                    "If set to true, you have to write a good and complete start_gcode, as no checks are made anymore.");
+                    "\nIf set to true, you have to write a good and complete start_gcode, as no checks are made anymore."
+                    "\nExemple:\nG21 ; set units to millimeters\nG90 ; use absolute coordinates\n{if use_relative_e_distances}M83{else}M82{endif}\nG92 E0 ; reset extrusion distance");
     def->mode = comExpert | comPrusa;
     def->set_default_value(new ConfigOptionBool(false));
 
@@ -5801,6 +5867,15 @@ void PrintConfigDef::init_fff_params()
     def->category = OptionCategory::filament;
     def->tooltip = L("Override the temperature of the extruder. Avoid making too many changes, it won't stop for cooling/heating. 0 to disable. May only work on Height range modifiers.");
     def->mode = comExpert | comSuSi;
+    def->min = 0;
+    def->set_default_value(new ConfigOptionInt(0));
+
+    def = this->add("print_first_layer_temperature", coInt);
+    def->label = L("Temperature");
+    def->category = OptionCategory::filament;
+    def->tooltip = L("Override the temperature of the extruder (for the first layer). Avoid making too many changes, it won't stop for cooling/heating. 0 to disable (using print_temperature if defined). May only work on Height range modifiers.");
+    def->mode = comExpert | comSuSi;
+    def->min = 0;
     def->set_default_value(new ConfigOptionInt(0));
 
     def = this->add("print_retract_lift", coFloat);
@@ -6215,7 +6290,7 @@ void PrintConfigDef::init_fff_params()
     def = this->add("wipe_only_crossing", coBools);
     def->label = L("Wipe only when crossing perimeters");
     def->category = OptionCategory::extruders;
-    def->tooltip = L("Don't wipe when you don't cross a perimeter. Need 'only_retract_when_crossing_perimeters'and 'wipe' enabled.");
+    def->tooltip = L("Don't wipe when you don't cross a perimeter. Need 'avoid_crossing_perimeters' and 'wipe' enabled.");
     def->mode = comAdvancedE | comSuSi;
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionBools{ true });
@@ -6247,10 +6322,10 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionFloat(80.));
 
     def = this->add("wipe_tower_wipe_starting_speed", coFloatOrPercent);
-    def->label = L("Wipe tower starting speed");
+    def->label = L("Wipe tower wipe starting speed");
     def->category = OptionCategory::speed;
     def->tooltip = L("Start of the wiping speed ramp up (for wipe tower)."
-        "\nCan be a % of the 'Wipe tower speed'."
+        "\nCan be a % of the 'Wipe tower main speed'."
         "\nSet to 0 to disable.");
     def->sidetext = L("mm/s or %");
     def->mode = comAdvancedE | comSuSi;
@@ -6407,7 +6482,7 @@ void PrintConfigDef::init_fff_params()
     def->full_label = L("Outer XY size compensation");
     def->category = OptionCategory::slicing;
     def->tooltip = L("The object will be grown/shrunk in the XY plane by the configured value "
-        "(negative = inwards, positive = outwards). This might be useful for fine-tuning sizes."
+        "(negative = inwards = remove area, positive = outwards = add area). This might be useful for fine-tuning sizes."
         "\nThis one only applies to the 'exterior' shell of the object."
         "\n !!! it's recommended you put the same value into the 'Inner XY size compensation', unless you are sure you don't have horizontal holes. !!! ");
     def->sidetext = L("mm");
@@ -6419,7 +6494,7 @@ void PrintConfigDef::init_fff_params()
     def->full_label = L("Inner XY size compensation");
     def->category = OptionCategory::slicing;
     def->tooltip = L("The object will be grown/shrunk in the XY plane by the configured value "
-        "(negative = inwards, positive = outwards). This might be useful for fine-tuning sizes."
+        "(negative = inwards = remove area, positive = outwards = add area). This might be useful for fine-tuning sizes."
         "\nThis one only applies to the 'inner' shell of the object (!!! horizontal holes break the shell !!!)");
     def->sidetext = L("mm");
     def->mode = comExpert | comSuSi;
@@ -6430,7 +6505,7 @@ void PrintConfigDef::init_fff_params()
     def->full_label = L("XY holes compensation");
     def->category = OptionCategory::slicing;
     def->tooltip = L("The convex holes will be grown / shrunk in the XY plane by the configured value"
-        " (negative = inwards, positive = outwards, should be negative as the holes are always a bit smaller irl)."
+        " (negative = inwards = remove area, positive = outwards = add area, should be negative as the holes are always a bit smaller irl)."
         " This might be useful for fine-tuning hole sizes."
         "\nThis setting behaves the same as 'Inner XY size compensation' but only for convex shapes. It's added to 'Inner XY size compensation', it does not replace it. ");
     def->sidetext = L("mm");
@@ -6665,6 +6740,7 @@ void PrintConfigDef::init_extruder_option_keys()
         "default_filament_profile",
         "deretract_speed",
         "extruder_colour",
+        "extruder_extrusion_multiplier_speed",
         "extruder_fan_offset",
         "extruder_offset",
         "extruder_temperature_offset",
@@ -7798,6 +7874,7 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
         "seal_position", "vibration_limit", "bed_size",
         "print_center", "g0", "threads", "pressure_advance", "wipe_tower_per_color_wipe",
         "cooling", "serial_port", "serial_speed",
+        "exact_last_layer_height",
         // Introduced in some PrusaSlicer 2.3.1 alpha, later renamed or removed.
         "fuzzy_skin_perimeter_mode", "fuzzy_skin_shape",
         // Introduced in PrusaSlicer 2.3.0-alpha2, later replaced by automatic calculation based on extrusion width.
@@ -7811,11 +7888,13 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
             || opt_key == "solid_fill_pattern" || opt_key == "bridge_fill_pattern" || opt_key == "support_material_interface_pattern"))
         value = "monotonic";
     // some changes has occurs between rectilineargapfill and monotonicgapfill. Set them at the right value for each type
-    if (value == "rectilineargapfill" && (opt_key == "top_fill_pattern" || opt_key == "bottom_fill_pattern" || opt_key == "fill_pattern" || opt_key == "support_material_interface_pattern"))
+    if (value == "rectilineargapfill" && (opt_key == "top_fill_pattern" || opt_key == "bottom_fill_pattern") )
         value = "monotonicgapfill";
-    if (value == "monotonicgapfill" && (opt_key == "solid_fill_pattern"))
-        value = "rectilineargapfill";
-    
+    if (opt_key == "fill_pattern" || opt_key == "support_material_interface_pattern")
+        if (value == "rectilineargapfill")
+            value = "rectilinear";
+        else if (value == "monotonicgapfill")
+            value = "monotonic";
 
     if (ignore.find(opt_key) != ignore.end()) {
         opt_key = "";
@@ -8216,6 +8295,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "bridge_fill_pattern",
 "bridge_internal_acceleration",
 "bridge_internal_fan_speed",
+"bridge_precision",
 "bridge_overlap",
 "bridge_overlap_min",
 "bridge_speed_internal",
@@ -8239,7 +8319,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "curve_smoothing_precision",
 "default_speed",
 "enforce_full_fill_volume",
-"exact_last_layer_height",
+// "exact_last_layer_height",
 "external_infill_margin",
 "external_perimeter_acceleration",
 "external_perimeter_cut_corners",
@@ -8252,6 +8332,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "external_perimeters_vase",
 "extra_perimeters_odd_layers",
 "extra_perimeters_overhangs",
+"extruder_extrusion_multiplier_speed",
 "extruder_fan_offset",
 "extruder_temperature_offset",
 "extrusion_spacing",
@@ -8281,6 +8362,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "fill_aligned_z",
 "fill_angle_increment",
 "fill_angle_cross",
+"fill_angle_follow_model",
 "fill_angle_template",
 "fill_rectilinearholes_travel_flow_ratio",
 "fill_rectilinearholes_travel_speed",
@@ -8311,6 +8393,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "gcode_precision_e",
 "gcode_precision_xyz",
 "hole_size_compensation",
+"hole_size_compensations_curve",
 "hole_size_threshold",
 "hole_to_polyhole_threshold",
 "hole_to_polyhole_twisted",
@@ -8353,6 +8436,9 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "over_bridge_flow_ratio",
 "overhangs_acceleration",
 "overhangs_fan_speed",
+"overhangs_max_slope",
+"overhangs_bridge_threshold",
+"overhangs_bridge_upper_layers",
 "overhangs_reverse_threshold",
 "overhangs_reverse",
 "overhangs_speed_enforce",
@@ -8369,6 +8455,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "perimeter_round_corners",
 "perimeters_hole",
 "print_extrusion_multiplier",
+"print_first_layer_temperature",
 "print_custom_variables",
 "print_retract_length",
 "print_retract_lift",
@@ -8409,7 +8496,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "solid_infill_overlap",
 "start_gcode_manual",
 "solid_infill_below_layer_area",
-"solid_infill_below_thickness",
+"solid_infill_below_width",
 "support_material_angle_height",
 "support_material_acceleration",
 "support_material_contact_distance_type",
@@ -8910,7 +8997,7 @@ void DynamicPrintConfig::normalize_fdm()
             this->opt<ConfigOptionBool>("support_material", true)->value = false;
             this->opt<ConfigOptionInt>("solid_over_perimeters")->value = 0;
             this->opt<ConfigOptionInt>("support_material_enforce_layers")->value = 0;
-            this->opt<ConfigOptionBool>("exact_last_layer_height", true)->value = false;
+            // this->opt<ConfigOptionBool>("exact_last_layer_height", true)->value = false;
             this->opt<ConfigOptionBool>("ensure_vertical_shell_thickness", true)->value = false;
             this->opt<ConfigOptionBool>("infill_dense", true)->value = false;
             this->opt<ConfigOptionBool>("extra_perimeters", true)->value = false;

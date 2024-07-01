@@ -1,16 +1,25 @@
-#include "GUI.hpp"
-#include "GUI_App.hpp"
-#include "I18N.hpp"
 #include "Field.hpp"
-#include "wxExtensions.hpp"
-#include "Plater.hpp"
-#include "MainFrame.hpp"
-#include "format.hpp"
 
 #include "libslic3r/PresetBundle.hpp"
 #include "libslic3r/PrintConfig.hpp"
 
+#include "BitmapComboBox.hpp"
+#include "format.hpp"
+#include "GUI.hpp"
+#include "GUI_App.hpp"
+#include "I18N.hpp"
+#include "OG_CustomCtrl.hpp"
+#include "MainFrame.hpp"
+#include "MsgDialog.hpp"
+#include "Plater.hpp"
+#include "wxExtensions.hpp"
+
 #include <regex>
+
+#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/log/trivial.hpp>
+
 #include <wx/numformatter.h>
 #include <wx/tooltip.h>
 #include <wx/notebook.h>
@@ -20,11 +29,6 @@
 #include <wx/tglbtn.h>
 #endif
 #include <wx/tokenzr.h>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/log/trivial.hpp>
-#include "OG_CustomCtrl.hpp"
-#include "MsgDialog.hpp"
-#include "BitmapComboBox.hpp"
 
 #ifdef __WXOSX__
 #define wxOSX true
@@ -1448,16 +1452,16 @@ void SpinCtrl::BUILD() {
         propagate_value();
 	}));
 
-    temp->Bind(wxEVT_SPINCTRL, ([this](wxCommandEvent e) {  propagate_value();  }), temp->GetId());
+    temp->Bind(wxEVT_SPINCTRL, ([this](wxCommandEvent& e) {  propagate_value();  }), temp->GetId());
 
-    temp->Bind(wxEVT_TEXT_ENTER, ([this](wxCommandEvent e)
+    temp->Bind(wxEVT_TEXT_ENTER, ([this](wxCommandEvent& e)
     {
         e.Skip();
         propagate_value();
         bEnterPressed = true;
     }), temp->GetId());
 
-	temp->Bind(wxEVT_TEXT, ([this, temp](wxCommandEvent e)
+	temp->Bind(wxEVT_TEXT, ([this, temp](wxCommandEvent& e)
 	{
 // 		# On OSX / Cocoa, wxSpinCtrl::GetValue() doesn't return the new value
 // 		# when it was changed from the text control, so the on_change callback
@@ -1592,7 +1596,7 @@ void Choice::BUILD() {
 		}
 		set_selection();
 	}
-
+    this->suppress_scroll();
     temp->Bind(wxEVT_MOUSEWHEEL, [this](wxMouseEvent& e) {
         if (m_suppress_scroll && !m_is_dropped)
             e.StopPropagation();

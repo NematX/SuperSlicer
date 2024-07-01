@@ -784,8 +784,9 @@ void compute_global_occlusion(GlobalModelInfo &result, const PrintObject *po,
     throw_if_canceled();
     BOOST_LOG_TRIVIAL(debug)
     << "SeamPlacer: build AABB tree: end";
+    bool has_seam_visibility = po->config().seam_visibility.value && po->config().seam_position.value == SeamPosition::spCost;
     result.mesh_samples_visibility = raycast_visibility(raycasting_tree, triangle_set, result.mesh_samples,
-            negative_volumes_start_index, !po->config().seam_visibility.value);
+            negative_volumes_start_index, !has_seam_visibility);
     throw_if_canceled();
 #ifdef DEBUG_FILES
     result.debug_export(triangle_set);
@@ -840,7 +841,10 @@ struct SeamComparator {
             travel_importance = (float)po.config().seam_travel_cost.get_abs_value(1.f);
             angle_importance = (float)po.config().seam_angle_cost.get_abs_value(1.f);
         }
-        visibility_importance = po.config().seam_visibility.value ? 1.f : 0.f;
+        visibility_importance = (po.config().seam_visibility.value &&
+                                 po.config().seam_position.value == SeamPosition::spCost) ?
+                                    1.f :
+                                    0.f;
     }
 
     // Standard comparator, must respect the requirements of comparators (e.g. give same result on same inputs) for sorting usage
@@ -857,7 +861,8 @@ struct SeamComparator {
         }
 
         //avoid overhangs
-        if (a.overhang > 0.0f || b.overhang > 0.0f) {
+        if ((a.overhang > a.perimeter.flow_width / 4 && b.overhang == 0.0f) ||
+            (b.overhang > b.perimeter.flow_width / 4 && a.overhang == 0.0f)) {
             return a.overhang < b.overhang;
         }
 
@@ -881,11 +886,11 @@ struct SeamComparator {
         }
 
         // the penalites are kept close to range [0-1.x] however, it should not be relied upon
-        float penalty_a = a.overhang
+        float penalty_a = 2 * a.overhang / a.perimeter.flow_width
                 + visibility_importance * a.visibility
                 + angle_importance * compute_angle_penalty(a.local_ccw_angle)
                 + travel_importance * distance_penalty_a;
-        float penalty_b = b.overhang 
+        float penalty_b = 2 * b.overhang / b.perimeter.flow_width
                 + visibility_importance * b.visibility
                 + angle_importance * compute_angle_penalty(b.local_ccw_angle)
                 + travel_importance * distance_penalty_b;
@@ -1220,10 +1225,12 @@ void SeamPlacer::calculate_overhangs_and_layer_embedding(const PrintObject *po) 
                     for (SeamCandidate &perimeter_point : layers[layer_idx].points) {
                         Vec2f point = Vec2f { perimeter_point.position.head<2>() };
                         if (prev_layer_distancer.get() != nullptr) {
-                            perimeter_point.overhang = prev_layer_distancer->distance_from_perimeter(point)
-                                    + 0.6f * perimeter_point.perimeter.flow_width
-                                    - tan(SeamPlacer::overhang_angle_threshold)
-                                            * po->layers()[layer_idx]->height;
+                            perimeter_point.overhang = prev_layer_distancer->distance_from_perimeter(point);
+
+                            //perimeter_point.overhang = perimeter_point.overhang + 0.6f * perimeter_point.perimeter.flow_width
+                            //        - tan(SeamPlacer::overhang_angle_threshold)
+                            //                * po->layers()[layer_idx]->height;
+
                             perimeter_point.overhang =
                                     perimeter_point.overhang < 0.0f ? 0.0f : perimeter_point.overhang;
                         }
@@ -1646,7 +1653,12 @@ void SeamPlacer::init(const Print &print, std::function<void(void)> throw_if_can
     m_seam_per_object.clear();
     this->external_perimeters_first = print.default_region_config().external_perimeters_first;
 
-    for (const PrintObject *po : print.objects()) {
+    for (size_t obj_idx = 0; obj_idx < print.objects().size(); ++ obj_idx) {
+        const PrintObject *po = print.objects()[obj_idx];
+        print.set_status(int((obj_idx * 100) / print.objects().size()),
+                         ("Computing seam visibility areas: object %s / %s"),
+                         {std::to_string(obj_idx + 1), std::to_string(print.objects().size())},
+                         PrintBase::SlicingStatus::SECONDARY_STATE);
         throw_if_canceled_func();
         SeamPosition configured_seam_preference = po->config().seam_position.value;
         SeamComparator comparator { configured_seam_preference, *po };
@@ -1751,7 +1763,7 @@ std::tuple<bool,std::optional<Vec3f>> get_seam_from_modifier(const Layer& layer,
 
                 double test_lambda_z = std::abs(layer.print_z - test_lambda_pos.z());
                 Point xy_lambda(scale_(test_lambda_pos.x()), scale_(test_lambda_pos.y()));
-                Point nearest = polygon.point_projection(xy_lambda);
+                Point nearest = polygon.point_projection(xy_lambda).first;
                 Vec3d polygon_3dpoint{ unscaled(nearest.x()), unscaled(nearest.y()), (double)layer.print_z };
                 double test_lambda_dist = (polygon_3dpoint - test_lambda_pos).norm();
                 double sphere_radius = po->model_object()->instance_bounding_box(0, true).size().x() / 2;

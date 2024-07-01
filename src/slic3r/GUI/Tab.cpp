@@ -1,34 +1,37 @@
-// #include "libslic3r/GCodeSender.hpp"
-#include "slic3r/Utils/Serial.hpp"
 #include "Tab.hpp"
-#include "PresetHints.hpp"
+
 #include "libslic3r/Log.hpp"
 #include "libslic3r/Model.hpp"
 #include "libslic3r/PresetBundle.hpp"
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/GCode/GCodeProcessor.hpp"
+#include <libslic3r/Slicing.hpp>
 
-#include "slic3r/Utils/Http.hpp"
-#include "slic3r/Utils/PrintHost.hpp"
 #include "BonjourDialog.hpp"
-#include "WipeTowerDialog.hpp"
 #include "ButtonsDescription.hpp"
-#include "Search.hpp"
+#include "GUI_App.hpp"
+#include "GUI_ObjectList.hpp"
+#include "MainFrame.hpp"
+#include "GLCanvas3D.hpp"
+#include "GraphDialog.hpp"
+#include "slic3r/Utils/Http.hpp"
+#include "format.hpp"
+#include "MsgDialog.hpp"
+#include "Notebook.hpp"
 #include "OG_CustomCtrl.hpp"
+#include "PhysicalPrinterDialog.hpp"
+#include "Plater.hpp"
+#include "PresetComboBoxes.hpp"
+#include "PresetHints.hpp"
+#include "slic3r/Utils/PrintHost.hpp"
+#include "slic3r/Utils/Serial.hpp"
+#include "SavePresetDialog.hpp"
+#include "Search.hpp"
+#include "UnsavedChangesDialog.hpp"
+#include "WipeTowerDialog.hpp"
 
-#include <wx/app.h>
-#include <wx/button.h>
-#include <wx/scrolwin.h>
-#include <wx/sizer.h>
 
-#include <wx/bmpcbox.h>
-#include <wx/bmpbuttn.h>
-#include <wx/collpane.h>
-#include <wx/treectrl.h>
-#include <wx/imaglist.h>
-#include <wx/settings.h>
-#include <wx/filedlg.h>
-
+#include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -36,25 +39,22 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/path.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/log/trivial.hpp>
+
+#include <wx/app.h>
+#include <wx/bmpcbox.h>
+#include <wx/bmpbuttn.h>
+#include <wx/button.h>
+#include <wx/collpane.h>
+#include <wx/filedlg.h>
+#include <wx/imaglist.h>
+#include <wx/settings.h>
+#include <wx/scrolwin.h>
+#include <wx/sizer.h>
+#include <wx/treectrl.h>
 
 #include "wxExtensions.hpp"
-#include "PresetComboBoxes.hpp"
 #include <wx/wupdlock.h>
-
-#include <libslic3r/Slicing.hpp>
-
-#include "GUI_App.hpp"
-#include "GUI_ObjectList.hpp"
-#include "Plater.hpp"
-#include "MainFrame.hpp"
-#include "GLCanvas3D.hpp"
-#include "format.hpp"
-#include "PhysicalPrinterDialog.hpp"
-#include "UnsavedChangesDialog.hpp"
-#include "SavePresetDialog.hpp"
-#include "Search.hpp"
-#include "MsgDialog.hpp"
-#include "Notebook.hpp"
 
 #ifdef WIN32
     #include <commctrl.h>
@@ -467,33 +467,42 @@ void Tab::load_initial_data()
     m_tt_non_system_script = has_parent ? &m_tt_value_unlock_script : &m_ttg_white_bullet_ns;
 }
 
-Slic3r::GUI::PageShp Tab::create_options_page(const wxString& title, const std::string& icon)
+int Tab::get_icon_id(const wxString& title, const std::string& icon)
 {
     // Index of icon in an icon list $self->{icons}.
-    auto icon_idx = 0;
+    int icon_idx = 0;
     if (!icon.empty()) {
         icon_idx = (m_icon_index.find(icon) == m_icon_index.end()) ? -1 : m_icon_index.at(icon);
         if (icon_idx == -1 && m_icons) {
             // Add a new icon to the icon list.
             m_scaled_icons_list.push_back(ScalableBitmap(this, icon));
             m_icons->Add(m_scaled_icons_list.back().bmp());
-            icon_idx = ++m_icon_count;
+            icon_idx           = ++m_icon_count;
             m_icon_index[icon] = icon_idx;
         }
 
         if (m_category_icon.find(title) == m_category_icon.end()) {
             // Add new category to the category_to_icon list.
             m_category_icon[title] = icon;
+        }
     }
-    }
-    // Initialize the page.
-    PageShp page(new Page(this, m_page_view, title, icon_idx));
-//	page->SetBackgroundStyle(wxBG_STYLE_SYSTEM);
-#ifdef __WINDOWS__
-//	page->SetDoubleBuffered(true);
-#endif //__WINDOWS__
+    return icon_idx;
+}
 
-    //page->set_config(m_config);
+Slic3r::GUI::PageShp Tab::create_options_page(const wxString& title, const std::string& icon)
+{
+    assert((this->type() & Preset::Type::TYPE_FREQUENT) == 0);
+    assert(Tab::fake_build || m_page_view);
+    // Initialize the page.
+    PageShp page(new Page(this, m_page_view, title, get_icon_id(title, icon)));
+    return page;
+}
+
+Slic3r::GUI::PageShp TabFrequent::create_options_page(const wxString &title, const std::string &icon) {
+    assert(!m_page_view);
+    assert(m_freq_parent);
+    // Initialize the page.
+    PageShp page(new Page(this, m_freq_parent, title, get_icon_id(title, icon)));
     return page;
 }
 
@@ -1247,12 +1256,12 @@ Field* Tab::get_field(const t_config_option_key& opt_key, int opt_index/* = -1*/
 
 std::pair<OG_CustomCtrl*, bool*> Tab::get_custom_ctrl_with_blinking_ptr(const t_config_option_key& opt_key, int opt_index/* = -1*/)
 {
-    if (!m_active_page)
+    if (!m_active_page && m_pages.empty())
         return {nullptr, nullptr};
 
     std::pair<OG_CustomCtrl*, bool*> ret = {nullptr, nullptr};
 
-    for (auto opt_group : m_active_page->m_optgroups) {
+    for (auto opt_group : m_active_page ? m_active_page->m_optgroups : m_pages.front()->m_optgroups) {
         ret = opt_group->get_custom_ctrl_with_blinking_ptr(opt_key, opt_index);
         if (ret.first && ret.second)
             break;
@@ -1286,10 +1295,10 @@ void Tab::toggle_option(const std::string& opt_key, bool toggle, int opt_index/*
 // update the preset selection boxes (the dirty flags)
 // If value is saved before calling this function, put saved_value = true,
 // and value can be some random value because in this case it will not been used
-void Tab::load_key_value(const std::string& opt_key, const boost::any& value, bool saved_value /*= false*/)
+void Tab::load_key_value(const std::string& opt_key, const boost::any& value, bool saved_value /*= false*/, int16_t extruder_id /*-1*/)
 {
     if (!saved_value)
-        m_config_base->option(opt_key)->set_any(value, -1); // change_opt_value(*m_config, opt_key, value);
+        m_config_base->option(opt_key)->set_any(value, extruder_id); // change_opt_value(*m_config, opt_key, value);
     // Mark the print & filament enabled if they are compatible with the currently selected preset.
     if (opt_key == "compatible_printers" || opt_key == "compatible_prints") {
         // Don't select another profile if this profile happens to become incompatible.
@@ -1506,6 +1515,14 @@ void Tab::activate_option(const std::string& opt_key, const wxString& category)
         }
 
     m_highlighter.init(get_custom_ctrl_with_blinking_ptr(opt_key));
+}
+
+void TabFrequent::activate_option(const std::string &opt_key, const wxString &category){
+    wxGetApp().plater()->collapse_sidebar(false);
+    wxGetApp().mainframe->select_tab(MainFrame::ETabType::Plater3D);
+    // no act btns -> no blink arrow
+    //std::pair<OG_CustomCtrl*, bool*> ctrl = get_custom_ctrl_with_blinking_ptr(opt_key);
+    //m_highlighter.init(ctrl);
 }
 
 void Tab::cache_config_diff(const std::vector<std::string>& selected_options)
@@ -1807,7 +1824,7 @@ std::vector<Slic3r::GUI::PageShp> Tab::create_pages(std::string setting_type_nam
             }
 
             if(logs) Slic3r::slic3r_log->info("settings gui") << "create page " << label.c_str() <<" : "<< params[params.size() - 1] << "\n";
-            pages.push_back(create_options_page(label, params[params.size() - 1]));
+            pages.push_back(this->create_options_page(label, params[params.size() - 1]));
             current_page = pages.back();
         }
         else if (boost::starts_with(full_line, "end_page"))
@@ -2532,8 +2549,8 @@ std::vector<Slic3r::GUI::PageShp> Tab::create_pages(std::string setting_type_nam
                 current_group->append_line(current_line);
                 current_page->descriptions.push_back("post_process_explanation");
             } else if (boost::starts_with(full_line, "filament_ramming_parameters")) {
-                Line thisline = current_group->create_single_option_line(
-                    "filament_ramming_parameters"); // { _(L("Ramming")), "" };
+                Line thisline = current_group->create_single_option_line("filament_ramming_parameters");
+                // { _(L("Ramming")), "" };
                 thisline.widget = [this](wxWindow *parent) {
                     auto ramming_dialog_btn = new wxButton(parent, wxID_ANY, _(L("Ramming settings")) + dots,
                                                            wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
@@ -2545,7 +2562,28 @@ std::vector<Slic3r::GUI::PageShp> Tab::create_pages(std::string setting_type_nam
                     ramming_dialog_btn->Bind(wxEVT_BUTTON, ([this](wxCommandEvent &e) {
                         RammingDialog dlg(this, (m_config_base->option<ConfigOptionStrings>("filament_ramming_parameters"))->get_at(0));
                         if (dlg.ShowModal() == wxID_OK)
-                            (m_config_base->option<ConfigOptionStrings>("filament_ramming_parameters"))->get_at(0) = dlg.get_parameters();
+                            //(m_config_base->option<ConfigOptionStrings>("filament_ramming_parameters"))->get_at(0) = dlg.get_parameters();
+                            load_key_value("filament_ramming_parameters", dlg.get_parameters(), false, 0);
+                    }));
+                    return sizer;
+                };
+                current_group->append_line(thisline);
+            } else if (boost::starts_with(full_line, "extruder_extrusion_multiplier_speed")) {
+                // don't forget the idx_page as it's on the extruder page.
+                Line thisline = current_group->create_single_option_line("extruder_extrusion_multiplier_speed", "", idx_page);
+                thisline.widget = [this](wxWindow *parent) {
+                    auto dialog_btn = new wxButton(parent, wxID_ANY, _L("Extrusion multiplier per speed") + dots,
+                                                           wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+                    dialog_btn->SetFont(Slic3r::GUI::wxGetApp().normal_font());
+                    wxGetApp().UpdateDarkUI(dialog_btn);
+                    auto sizer = new wxBoxSizer(wxHORIZONTAL);
+                    sizer->Add(dialog_btn);
+
+                    dialog_btn->Bind(wxEVT_BUTTON, ([this](wxCommandEvent &e) {
+                        GraphDialog dlg(this, (m_config_base->option<ConfigOptionStrings>("extruder_extrusion_multiplier_speed"))->get_at(0));
+                        if (dlg.ShowModal() == wxID_OK)
+                            //(m_config_base->option<ConfigOptionStrings>("extruder_extrusion_multiplier_speed"))->get_at(0) = dlg.get_parameters();
+                            load_key_value("extruder_extrusion_multiplier_speed", dlg.get_parameters(), false, 0);
                     }));
                     return sizer;
                 };
@@ -2566,7 +2604,7 @@ std::vector<Slic3r::GUI::PageShp> Tab::create_pages(std::string setting_type_nam
                 manager->set_cb_edited([this]() {
                     update_dirty();
                     toggle_options();
-                    wxGetApp().mainframe->on_config_changed(m_config); // invalidate print
+                    wxGetApp().mainframe->on_config_changed(*m_config); // invalidate print
                 });
                 current_line            = current_group->create_single_option_line(opt_key);
                 current_line.label_path = "";
@@ -2755,6 +2793,15 @@ void TabFrequent::toggle_options()
     }
 }
 
+void TabFrequent::update_changed_setting(const std::string& opt_key)
+{
+    //find the option, and ask for refresh
+    const ConfigOption *opt = m_config_base->option(opt_key);
+    DynamicConfig fake_conf;
+    fake_conf.set_key_value(opt_key, opt->clone());
+    wxGetApp().mainframe->on_config_changed(fake_conf);
+}
+
 void TabPrint::init()
 {
     m_presets = &m_preset_bundle->fff_prints;
@@ -2844,7 +2891,8 @@ void TabPrint::update()
 {
     if (m_preset_bundle->printers.get_selected_preset().printer_technology() == ptSLA)
         return; // ys_FIXME
-
+    
+    assert(m_config);
     ++m_update_cnt;
 
     // see https://github.com/prusa3d/PrusaSlicer/issues/6814
@@ -2876,7 +2924,7 @@ void TabPrint::update()
         if (!wxGetApp().plater()->inside_snapshot_capture())
             wxGetApp().obj_list()->update_and_show_object_settings_item();
 
-        wxGetApp().mainframe->on_config_changed(m_config);
+        wxGetApp().mainframe->on_config_changed(*m_config);
     }
 }
 
@@ -3121,8 +3169,10 @@ void TabFilament::update()
 
     m_update_cnt--;
 
-    if (m_update_cnt == 0)
-        wxGetApp().mainframe->on_config_changed(m_config);
+    if (m_update_cnt == 0) {
+        assert(m_config);
+        wxGetApp().mainframe->on_config_changed(*m_config);
+    }
 }
 
 void TabFilament::clear_pages()
@@ -3156,13 +3206,16 @@ void TabPrinter::init()
 
     // For DiffPresetDialog we use options list which is saved in Searcher class.
     // Options for the Searcher is added in the moment of pages creation.
-    // So, build first of all printer pages for non-selected printer technology...
+    // So, fake-build first of all printer pages for non-selected printer technology...
+    // //FIXME: split into PRINTERSLA and PRINTERFFF
+    Tab::fake_build = true;
     std::string def_preset_name = "- default " + std::string(m_printer_technology == ptSLA ? "FFF" : "SLA") + " -";
     m_config = &m_presets->find_preset(def_preset_name)->config;
     m_config_base = m_config;
     m_printer_technology != ptSLA ? build_sla() : build_fff();
     if (m_printer_technology == ptSLA)
         m_extruders_count_old = 0;// revert this value 
+    Tab::fake_build = false;
 
     // ... and than for selected printer technology
     load_initial_data();
@@ -3786,8 +3839,10 @@ void TabPrinter::update()
     update_description_lines();
     Layout();
 
-    if (m_update_cnt == 0)
-        wxGetApp().mainframe->on_config_changed(m_config);
+    if (m_update_cnt == 0) {
+        assert(m_config);
+        wxGetApp().mainframe->on_config_changed(*m_config);
+    }
 }
 
 void TabPrinter::update_fff()
@@ -4415,7 +4470,7 @@ void Tab::save_preset(std::string name /*= ""*/, bool detach)
     // Print bed has to be updated, when printer preset is detached from the system preset
     if (detach && type() == Preset::TYPE_PRINTER) {
         assert(m_config);
-        wxGetApp().mainframe->on_config_changed(m_config);
+        wxGetApp().mainframe->on_config_changed(*m_config);
     }
 
     // Mark the print & filament enabled if they are compatible with the currently selected preset.
@@ -4960,11 +5015,12 @@ wxSizer* TabPrint::create_substitutions_widget(wxWindow* parent)
     wxFlexGridSizer* grid_sizer = new wxFlexGridSizer(2, 5, wxGetApp().em_unit()); // delete_button,  edit column contains "Find", "Replace", "Notes"
     grid_sizer->SetFlexibleDirection(wxBOTH);
     grid_sizer->AddGrowableCol(1);
-
+    
+    assert(m_config);
     m_subst_manager.init(m_config, parent, grid_sizer);
     m_subst_manager.set_cb_edited_substitution([this]() {
         update_dirty();
-        wxGetApp().mainframe->on_config_changed(m_config); // invalidate print
+        wxGetApp().mainframe->on_config_changed(*m_config); // invalidate print
         });
     m_subst_manager.set_cb_hide_delete_all_btn([this]() {
         m_del_all_substitutions_btn->Hide();
@@ -5642,7 +5698,8 @@ void TabSLAMaterial::update()
 //     m_update_cnt--;
 //
 //     if (m_update_cnt == 0)
-        wxGetApp().mainframe->on_config_changed(m_config);
+        assert(m_config);
+        wxGetApp().mainframe->on_config_changed(*m_config);
 }
 
 void TabSLAPrint::init()
@@ -5692,6 +5749,8 @@ void TabSLAPrint::update()
 {
     if (m_preset_bundle->printers.get_selected_preset().printer_technology() == ptFFF)
         return;
+    
+    assert(m_config);
 
     m_update_cnt++;
 
@@ -5710,7 +5769,7 @@ void TabSLAPrint::update()
         if (!wxGetApp().plater()->inside_snapshot_capture())
             wxGetApp().obj_list()->update_and_show_object_settings_item();
 
-        wxGetApp().mainframe->on_config_changed(m_config);
+        wxGetApp().mainframe->on_config_changed(*m_config);
     }
 }
 

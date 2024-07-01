@@ -20,6 +20,7 @@
 
 #include <Eigen/Geometry>
 
+#include <atomic>
 #include <ctime>
 #include <functional>
 #include <set>
@@ -392,6 +393,7 @@ private:
     // Has any support (not counting the raft).
     ExPolygons _shrink_contour_holes(double contour_delta, double default_delta, double convex_delta, const ExPolygons& input) const;
     void _transform_hole_to_polyholes();
+    void _min_overhang_threshold();
     ExPolygons _smooth_curves(const ExPolygons &input, const PrintRegionConfig &conf) const;
     void detect_surfaces_type();
     void apply_solid_infill_below_layer_area();
@@ -439,8 +441,7 @@ private:
     bool                                    m_typed_slices = false;
 
     //this setting allow fill_aligned_z to get the max sparse spacing spacing.
-    coord_t                                 m_max_sparse_spacing;
-
+    coord_t                                 m_max_sparse_spacing = 0;
 
 };
 
@@ -483,10 +484,11 @@ private:
 struct PrintStatistics
 {
     PrintStatistics() { clear(); }
-    std::string                     estimated_normal_print_time;
-    std::string                     estimated_silent_print_time;
+    // PrintEstimatedStatistics::ETimeMode::Normal -> time
+    std::map<uint8_t, double>       estimated_print_time;
+    std::map<uint8_t, std::string>  estimated_print_time_str;
     double                          total_used_filament;
-    std::vector<std::pair<size_t, double>> color_extruderid_to_used_filament;
+    std::vector<std::pair<size_t, double>> color_extruderid_to_used_filament; // id -> mm (length)
     double                          total_extruded_volume;
     double                          total_cost;
     int                             total_toolchanges;
@@ -498,8 +500,10 @@ struct PrintStatistics
     unsigned int                    initial_extruder_id;
     std::string                     initial_filament_type;
     std::string                     printing_filament_types;
-    std::map<size_t, double>        filament_stats;
+    std::map<size_t, double>        filament_stats; // extruder id -> volume in mm3
     std::vector<std::pair<double, float>> layer_area_stats; // print_z to area
+
+    std::atomic_bool is_computing_gcode;
 
     // Config with the filled in print statistics.
     DynamicConfig           config() const;
@@ -521,6 +525,7 @@ struct PrintStatistics
         printing_filament_types.clear();
         filament_stats.clear();
         printing_extruders.clear();
+        is_computing_gcode = false;
     }
 };
 

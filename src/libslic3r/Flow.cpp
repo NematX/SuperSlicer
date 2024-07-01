@@ -6,6 +6,7 @@
 #include <assert.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/replace.hpp>
 
 // Mark string for localization and translate.
 #define L(s) Slic3r::I18N::translate(s)
@@ -80,10 +81,6 @@ double Flow::extrusion_width(const std::string& opt_key, const ConfigOptionFloat
     }
 
     if (opt->percent) {
-        auto opt_key_layer_height = first_layer ? "first_layer_height" : "layer_height";
-        auto opt_layer_height = config.option(opt_key_layer_height);
-        if (opt_layer_height == nullptr)
-            throw_on_missing_variable(opt_key, opt_key_layer_height);
         // first_layer_height depends on first_printing_extruder
         auto opt_nozzle_diameters = config.option<ConfigOptionFloats>("nozzle_diameter");
         if (opt_nozzle_diameters == nullptr)

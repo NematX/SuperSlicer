@@ -391,7 +391,9 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
                     BridgeDetector bd(
                         initial,
                         lower_layer->lslices,
-                        this->flow(frInfill).scaled_width()
+                        this->bridging_flow(frInfill).scaled_spacing(),
+                        scale_t(this->layer()->object()->print()->config().bridge_precision.get_abs_value(this->bridging_flow(frInfill).spacing())),
+                        this->layer()->id()
                     );
                     #ifdef SLIC3R_DEBUG
                     printf("Processing bridge at layer %zu:\n", this->layer()->id());
@@ -526,20 +528,20 @@ void LayerRegion::prepare_fill_surfaces()
             if (surface->has_fill_sparse() && surface->has_pos_internal() && surface->area() <= min_area)
                 surface->surface_type = stPosInternal | stDensSolid;
         }
-        // also Apply solid_infill_below_thickness
+        // also Apply solid_infill_below_width
         double   spacing            = this->flow(frSolidInfill).spacing();
         coordf_t scaled_spacing     = scale_d(spacing);
-        coordf_t min_half_thickness = scale_d(this->region().config().solid_infill_below_thickness.get_abs_value(spacing)) / 2;
-        if (min_half_thickness > 0) {
+        coordf_t min_half_width = scale_d(this->region().config().solid_infill_below_width.get_abs_value(spacing)) / 2;
+        if (min_half_width > 0) {
             Surfaces srfs_to_add;
             for (Surfaces::iterator surface = this->fill_surfaces.surfaces.begin();
                  surface != this->fill_surfaces.surfaces.end(); ++surface) {
                 if (surface->has_fill_sparse() && surface->has_pos_internal()) {
                     // try to collapse the surface
                     // grow it a bit more to have an easy time to intersect
-                    ExPolygons results = offset2_ex({surface->expolygon}, -min_half_thickness - SCALED_EPSILON,
-                                                    min_half_thickness + SCALED_EPSILON +
-                                                        std::min(scaled_spacing / 5, min_half_thickness / 5));
+                    ExPolygons results = offset2_ex({surface->expolygon}, -min_half_width - SCALED_EPSILON,
+                                                    min_half_width + SCALED_EPSILON +
+                                                        std::min(scaled_spacing / 5, min_half_width / 5));
                     // TODO: find a way to have both intersect & cut
                     ExPolygons cut = diff_ex(ExPolygons{surface->expolygon}, results);
                     ExPolygons intersect = intersection_ex(ExPolygons{surface->expolygon}, results);

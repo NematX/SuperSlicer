@@ -542,6 +542,12 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
         f->can_angle_cross   = surface_fill.params.can_angle_cross;
         f->adapt_fill_octree = (surface_fill.params.pattern == ipSupportCubic) ? support_fill_octree : adaptive_fill_octree;
 
+        // add object angle if needed
+        double z_object_angle = this->m_object->trafo().rotation().eulerAngles(0,1,2).z();
+        if (this->object()->config().fill_angle_follow_model.value) {
+            f->angle += z_object_angle;
+        }
+
         if (surface_fill.params.pattern == ipLightning)
             dynamic_cast<FillLightning::Filler*>(f.get())->generator = lightning_generator;
 
@@ -630,6 +636,8 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
 
                 //adjust the bridge density
                 if (surface_fill.params.flow.bridge() && surface_fill.params.density > 0.99 /*&& layerm->region()->config().bridge_overlap.get_abs_value(1) != 1*/) {
+                    // bridge have their own spacing, don't try to align it with normal infill.
+                    surface_fill.params.max_sparse_infill_spacing = 0;
                     ////varies the overlap to have the best coverage for the bridge
                     //surface_fill.params.density *= float(layerm->region()->config().bridge_overlap.get_abs_value(1));
                     double min_spacing = 0.999 * surface_fill.params.spacing / surface_fill.params.config->bridge_overlap.get_abs_value(surface_fill.params.density);
@@ -714,10 +722,25 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
                     for(auto &t : temp) real_surface += t.area();
                     assert(compute_volume.volume < unscaled(unscaled(surface_fill.surface.area())) * surface_fill.params.layer_height + EPSILON);
                     double area = unscaled(unscaled(real_surface));
-                    assert(compute_volume.volume <= area * surface_fill.params.layer_height * 1.001 || f->debug_verify_flow_mult <= 0.8);
-                    if(compute_volume.volume > 0) //can fail for thin regions
-                        assert(compute_volume.volume >= area * surface_fill.params.layer_height * 0.999 || f->debug_verify_flow_mult >= 1.3 || area < std::max(1.,surface_fill.params.config->solid_infill_below_area.value) || area < std::max(1.,surface_fill.params.config->solid_infill_below_layer_area.value));
-                }
+                    if(surface_fill.surface.has_pos_top())
+                        area *= surface_fill.params.config->fill_top_flow_ratio.value;
+                    if(surface_fill.surface.has_pos_bottom() && f->layer_id == 0)
+                        area *= surface_fill.params.config->first_layer_flow_ratio.value;
+                    if(surface_fill.surface.has_mod_bridge() && f->layer_id == 0)
+                        area *= surface_fill.params.config->first_layer_flow_ratio.value;
+                    //TODO: over-bridge mod
+                    if(surface_fill.params.config->over_bridge_flow_ratio.value == 1){
+                        assert(compute_volume.volume <= area * surface_fill.params.layer_height * 1.001 || f->debug_verify_flow_mult <= 0.8);
+                        if(compute_volume.volume > 0) //can fail for thin regions
+                            assert(
+                                compute_volume.volume >= area * surface_fill.params.layer_height * 0.999 ||
+                                f->debug_verify_flow_mult >= 1.3 ||
+                                f->debug_verify_flow_mult ==
+                                    0 // sawtooth output more filament,as it's 3D (debug_verify_flow_mult==0)
+                                || area < std::max(1., surface_fill.params.config->solid_infill_below_area.value) ||
+                                area < std::max(1., surface_fill.params.config->solid_infill_below_layer_area.value));
+                        }
+                    }
 #endif
             }
         }
@@ -841,14 +864,18 @@ void Layer::make_ironing()
             }
             if (ironing_params.extruder != -1) {
                 //TODO just_infill is currently not used.
-                ironing_params.type              = config.ironing_type;
-                ironing_params.just_infill     = false;
+                ironing_params.type         = config.ironing_type;
+                ironing_params.just_infill  = false;
                 ironing_params.line_spacing = config.ironing_spacing;
-                ironing_params.height         = default_layer_height * 0.01 * config.ironing_flowrate;
-                ironing_params.speed         = config.ironing_speed;
-                ironing_params.angle         = config.ironing_angle <0 ?
-                    compute_fill_angle(config, layerm->layer()->id()) :
-                    float(Geometry::deg2rad(config.ironing_angle.value));
+                ironing_params.height       = default_layer_height * 0.01 * config.ironing_flowrate;
+                ironing_params.speed        = config.ironing_speed;
+                if (config.ironing_angle.value >= 0) {
+                    ironing_params.angle = float(Geometry::deg2rad(config.ironing_angle.value));
+                } else {
+                    ironing_params.angle = compute_fill_angle(config, layerm->layer()->id());
+                    if (config.ironing_angle.value < -1)
+                        ironing_params.angle += float(Geometry::deg2rad(-config.ironing_angle.value));
+                }
                 ironing_params.layerm         = layerm;
                 by_extruder.emplace_back(ironing_params);
             }
@@ -930,8 +957,9 @@ void Layer::make_ironing()
 
         // Create the filler object.
         fill.init_spacing(ironing_params.line_spacing, fill_params);
-        fill.angle = float(ironing_params.angle + 0.25 * M_PI);
-        fill.link_max_length = (coord_t)scale_(3. * fill.get_spacing());
+        fill.can_angle_cross = region_config.fill_angle_cross.value;
+        fill.angle = float(ironing_params.angle);
+        fill.link_max_length = scale_t(3. * fill.get_spacing());
         double extrusion_height = ironing_params.height * fill.get_spacing() / nozzle_dmr;
         //FIXME FLOW decide if it's good
         // note: don't use filament_max_overlap, as it's a top surface

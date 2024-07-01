@@ -62,6 +62,7 @@ std::string GCodeWriter::get_default_color_change_gcode(const GCodeConfig &confi
 
 void GCodeWriter::apply_print_config(const PrintConfig &print_config)
 {
+    this->multiple_extruders = false;
     this->config.apply(print_config, true);
     m_extrusion_axis = get_extrusion_axis(this->config);
     m_single_extruder_multi_material = print_config.single_extruder_multi_material.value;
@@ -292,7 +293,34 @@ std::string GCodeWriter::set_bed_temperature(uint32_t temperature, bool wait)
     return gcode.str();
 }
 
+std::string GCodeWriter::set_chamber_temperature(uint32_t temperature, bool wait)
+{
+    if (temperature == m_last_chamber_temperature && !wait)
+        return std::string();
 
+    if (FLAVOR_IS(gcfMarlinFirmware) || FLAVOR_IS(gcfRepRap) || FLAVOR_IS(gcfMachinekit)) {
+        // ok
+    } else {
+        return std::string();
+    }
+
+    m_last_chamber_temperature = temperature;
+
+    std::string code, comment;
+    if (wait) {
+        code = "M191";
+        comment = "set chamber temperature and wait for it to be reached";
+    } else {
+        code = "M141";
+        comment = "set chamber temperature";
+    }
+    
+    std::ostringstream gcode;
+    gcode << code << " " << "S";
+    gcode << temperature << " ; " << comment << "\n";
+    
+    return gcode.str();
+}
 
 void GCodeWriter::set_acceleration(uint32_t acceleration)
 {
@@ -369,6 +397,8 @@ std::string GCodeWriter::write_acceleration(){
 
 std::string GCodeWriter::reset_e(bool force)
 {
+    this->m_de_left = 0;
+
     if (FLAVOR_IS(gcfMach3)
         || FLAVOR_IS(gcfMakerWare)
         || FLAVOR_IS(gcfSailfish))
@@ -510,16 +540,25 @@ std::string GCodeWriter::travel_to_xy(const Vec2d &point, const double speed, co
     if ((speed > 0) & (speed < travel_speed))
         travel_speed = speed;
 
+    std::string str_x = XYZ_NUM(point.x());
+    std::string str_y = XYZ_NUM(point.y());
+    if (!m_pos_str_x.empty() && m_pos_str_x == str_x && m_pos_str_y == str_y) {
+        //if point too close to the other, then do not write it, it's useless.
+        return "";
+    }
+
     m_pos.x() = point.x();
     m_pos.y() = point.y();
-    
+    m_pos_str_x = std::move(str_x);
+    m_pos_str_y = std::move(str_y);
+
 //    GCodeG1Formatter w;
 //    w.emit_xy(point);
 //    w.emit_f(this->config.travel_speed.value * 60.0);
 //    w.emit_comment(this->config.gcode_comments, comment);
 //    return w.string();
-    gcode << "G1 X" << XYZ_NUM(point.x())
-          <<   " Y" << XYZ_NUM(point.y())
+    gcode << "G1 X" << m_pos_str_x
+          <<   " Y" << m_pos_str_y
           <<   " F" << F_NUM(travel_speed * 60);
     COMMENT(comment);
     gcode << "\n";
@@ -551,6 +590,8 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const double speed, c
         the lift. */
     m_lifted = 0;
     m_pos = point;
+    m_pos_str_x = XYZ_NUM(point.x());
+    m_pos_str_y = XYZ_NUM(point.y());
 
     double travel_speed = this->config.travel_speed.value;
     if ((speed > 0) & (speed < travel_speed))
@@ -558,8 +599,8 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const double speed, c
 
     std::ostringstream gcode;
     gcode << write_acceleration();
-    gcode << "G1 X" << XYZ_NUM(point.x())
-          << " Y" << XYZ_NUM(point.y());
+    gcode << "G1 X" << m_pos_str_x
+          << " Y" << m_pos_str_y;
     if (config.z_step > SCALING_FACTOR)
         gcode << " Z" << PRECISION(point.z(), 6);
     else
@@ -628,19 +669,47 @@ bool GCodeWriter::will_move_z(double z) const
     return true;
 }
 
+std::pair<std::string, bool> GCodeWriter::_compute_de(double dE)
+{
+    bool        is_extrude = this->m_tool->extrude(dE) != 0;
+    std::string e_str;
+    if (is_extrude) {
+        // add missing de from rounding, compute the new rounding.
+        e_str            = E_NUM(m_tool->E() + this->m_de_left);
+        double written_e = atof(e_str.c_str());
+        is_extrude       = written_e != 0;
+        if (is_extrude) {
+            this->m_de_left = (m_tool->E() + this->m_de_left) - written_e;
+        } else {
+            this->m_de_left += dE;
+        }
+    }
+    return {e_str, is_extrude};
+}
+
 std::string GCodeWriter::extrude_to_xy(const Vec2d &point, double dE, const std::string &comment)
 {
     assert(dE == dE);
+    assert(m_pos.x() != point.x() || m_pos.y() != point.y());
+    std::string str_x = XYZ_NUM(point.x());
+    std::string str_y = XYZ_NUM(point.y());
+    if (!m_pos_str_x.empty() && m_pos_str_x == str_x && m_pos_str_y == str_y) {
+        //if point too close to the other, then do not write it, it's useless.
+        this->m_de_left += dE;
+        return "";
+    }
     m_pos.x() = point.x();
     m_pos.y() = point.y();
-    bool is_extrude = m_tool->extrude(dE) != 0;
+    m_pos_str_x = std::move(str_x);
+    m_pos_str_y = std::move(str_y);
+    auto [e_str, is_extrude] = this->_compute_de(dE);
 
     std::ostringstream gcode;
     gcode << write_acceleration();
-    gcode << "G1 X" << XYZ_NUM(point.x())
-        << " Y" << XYZ_NUM(point.y());
+    gcode << "G1 X" << m_pos_str_x
+        << " Y" << m_pos_str_y;
     if(is_extrude)
-        gcode <<    " " << m_extrusion_axis << E_NUM(m_tool->E());
+        gcode <<    " " << m_extrusion_axis << e_str;
     COMMENT(comment);
     gcode << "\n";
     return gcode.str();
@@ -653,13 +722,15 @@ std::string GCodeWriter::extrude_arc_to_xy(const Vec2d& point, const Vec2d& cent
 {
     m_pos.x() = point.x();
     m_pos.y() = point.y();
-    bool is_extrude = m_tool->extrude(dE) != 0;
+    m_pos_str_x = XYZ_NUM(point.x());
+    m_pos_str_y = XYZ_NUM(point.y());
+    auto [e_str, is_extrude] = this->_compute_de(dE);
 
     GCodeG2G3Formatter w(this->config.gcode_precision_xyz.value, this->config.gcode_precision_e.value, is_ccw);
     w.emit_xy(point);
     w.emit_ij(center_offset);
     if (is_extrude)
-        w.emit_e(m_extrusion_axis, m_tool->E());
+        w.emit(m_extrusion_axis, e_str);
     //BBS
     w.emit_comment(this->config.gcode_comments, comment);
     return w.string();
@@ -670,8 +741,10 @@ std::string GCodeWriter::extrude_to_xyz(const Vec3d &point, double dE, const std
     assert(dE == dE);
     m_pos.x() = point.x();
     m_pos.y() = point.y();
+    m_pos_str_x = XYZ_NUM(point.x());
+    m_pos_str_y = XYZ_NUM(point.y());
     m_lifted = 0;
-    bool is_extrude = m_tool->extrude(dE) != 0;
+    auto [e_str, is_extrude] = this->_compute_de(dE);
 
 //    GCodeG1Formatter w;
 //    w.emit_xyz(point);
@@ -680,11 +753,11 @@ std::string GCodeWriter::extrude_to_xyz(const Vec3d &point, double dE, const std
 //    return w.string();
     std::ostringstream gcode;
     gcode << write_acceleration();
-    gcode << "G1 X" << XYZ_NUM(point.x())
-        << " Y" << XYZ_NUM(point.y())
+    gcode << "G1 X" << m_pos_str_x
+        << " Y" << m_pos_str_y
         << " Z" << XYZ_NUM(point.z() + m_pos.z());
     if (is_extrude)
-            gcode <<    " " << m_extrusion_axis << E_NUM(m_tool->E());
+            gcode <<    " " << m_extrusion_axis << e_str;
     COMMENT(comment);
     gcode << "\n";
     // replace 'Z-0' by ' Z0'
@@ -918,14 +991,14 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comm
     std::ostringstream gcode;
 
     //add fan_offset
-    int8_t fan_speed = int8_t(std::min(uint8_t(100), speed));
+    int16_t fan_speed = int8_t(std::min(uint8_t(100), speed));
     fan_speed += tool_fan_offset;
-    fan_speed = std::max(int8_t(0), std::min(int8_t(100), fan_speed));
+    fan_speed = std::max(int16_t(0), std::min(int16_t(100), fan_speed));
     const double fan_baseline = (is_fan_percentage ? 100.0 : 255.0);
 
     // write it
     if (fan_speed == 0) {
-        if ((gcfTeacup == gcode_flavor)) {
+        if ((gcfTeacup == gcode_flavor || gcfRepRap == gcode_flavor)) {
             gcode << "M106 S0";
         } else if ((gcfMakerWare == gcode_flavor) || (gcfSailfish == gcode_flavor)) {
             gcode << "M127";

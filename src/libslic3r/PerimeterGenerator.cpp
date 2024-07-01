@@ -1,33 +1,33 @@
+#include "clipper/clipper_z.hpp"
+
 #include "PerimeterGenerator.hpp"
 
+#include "BoundingBox.hpp"
 #include "BridgeDetector.hpp"
 #include "ClipperUtils.hpp"
+#include "ExPolygon.hpp"
 #include "ExtrusionEntity.hpp"
 #include "ExtrusionEntityCollection.hpp"
 #include "Geometry.hpp"
+#include "Geometry/MedialAxis.hpp"
+#include "Geometry.hpp"
+#include "Line.hpp"
+#include "Milling/MillingPostProcess.hpp"
+#include "Polygon.hpp"
 #include "ShortestPath.hpp"
+#include "SVG.hpp"
 
 #include "Arachne/WallToolPaths.hpp"
 #include "Arachne/utils/ExtrusionLine.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cassert>
+#include <list>
 #include <stack>
 #include <unordered_map>
 #include <vector>
 
-#include "BoundingBox.hpp"
-#include "ExPolygon.hpp"
-#include "Geometry.hpp"
-#include "Geometry/MedialAxis.hpp"
-#include "Milling/MillingPostProcess.hpp"
-#include "Polygon.hpp"
-#include "Line.hpp"
-#include "ClipperUtils.hpp"
-#include "SVG.hpp"
-#include <algorithm>
-#include <cassert>
-#include <list>
 #include <boost/log/trivial.hpp>
 
 //#define ARACHNE_DEBUG
@@ -921,11 +921,13 @@ void PerimeterGenerator::processs_no_bridge(Surfaces& all_surfaces) {
                         //a detector per island
                         ExPolygons bridgeable;
                         for (ExPolygon unsupported : unsupported_filtered) {
-                            BridgeDetector detector{ unsupported,
+                            BridgeDetector detector( unsupported,
                                 lower_island.expolygons,
-                                perimeter_spacing };
+                                this->overhang_flow.scaled_spacing(),
+                                scale_t(this->print_config->bridge_precision.get_abs_value(this->overhang_flow.spacing())),
+                                this->layer->id());
                             if (detector.detect_angle(Geometry::deg2rad(this->config->bridge_angle.value)))
-                                expolygons_append(bridgeable, union_ex(detector.coverage(-1, true)));
+                                expolygons_append(bridgeable, union_ex(detector.coverage()));
                         }
                         if (!bridgeable.empty()) {
                             //check if we get everything or just the bridgeable area
@@ -1203,22 +1205,33 @@ void grow_holes_only(std::vector<ExPolygonAsynch> &unmoveable_contours,
         computed_offset -= overlap_spacing;
         Polygons ex_contour_offset = offset(Polygons{expoly.contour}, computed_offset);
         bool ex_contour_offset_now_fake_hole = false;
-        for (size_t idx_hole = 0; idx_hole< ok_holes.size() ; ++idx_hole) {
+        for (size_t idx_hole = 0; idx_hole < ok_holes.size(); ++idx_hole) {
             const Polygon &hole = ok_holes[idx_hole];
             assert(hole.is_counter_clockwise());
             // Check if it can fuse with contour
-            ExPolygons result = diff_ex(ex_contour_offset, Polygons{hole});
-            // Only two options here, it can fuse and then there is 1 or more contour, no holes.
-            // Or it don't touch the contour and so nothing happen.
-            if (result.size() > 1 || (!result.empty() && result.front().holes.empty())) {
-                for (ExPolygon &expoly : result) assert(expoly.holes.empty());
-                // now use this one.
-                ex_contour_offset = to_polygons(result);
-                ex_contour_offset_now_fake_hole = true;
-                //remove from useful holes
-                ok_holes.erase(ok_holes.begin() + idx_hole);
-                idx_hole--;
+            // TODO: bounding box for quicker cut search
+            auto it_contour_candidate_for_fuse = ex_contour_offset.begin();
+            Polygons fused_contour;
+            while (it_contour_candidate_for_fuse != ex_contour_offset.end()) {
+                ExPolygons result = diff_ex(Polygons{*it_contour_candidate_for_fuse}, Polygons{hole});
+                // Only two options here, it can fuse and then there is 1 or more contour, no holes.
+                // Or it don't touch the contour and so nothing happen. (the hole can be inside or outside)
+                // SO, we can check it it slip or if the contour has been modified
+                if (result.size() > 1 || (result.size() == 1 && result.front().contour != *it_contour_candidate_for_fuse)) {
+                    for (ExPolygon &expoly : result) assert(expoly.holes.empty());
+                    // now use this one.
+                    append(fused_contour, to_polygons(result));
+                    ex_contour_offset_now_fake_hole = true;
+                    // remove from useful holes
+                    ok_holes.erase(ok_holes.begin() + idx_hole);
+                    idx_hole--;
+                    it_contour_candidate_for_fuse = ex_contour_offset.erase(it_contour_candidate_for_fuse);
+                } else {
+                    ++it_contour_candidate_for_fuse;
+                }
             }
+            if(!fused_contour.empty())
+                append(ex_contour_offset, std::move(fused_contour));
         }
         // if moved from unmoveable_contours to growing_contours, then move the expoly
         if (ex_contour_offset_now_fake_hole) {
@@ -1379,11 +1392,13 @@ ProcessSurfaceResult PerimeterGenerator::process_classic(int& contour_count, int
                 const ExPolygonCollection lower_island(diff_ex(last, overhangs_unsupported));
                 ExPolygons bridgeable;
                 for (ExPolygon unsupported : overhangs_unsupported) {
-                    BridgeDetector detector{ unsupported,
+                    BridgeDetector detector( unsupported,
                         lower_island.expolygons,
-                        perimeter_spacing };
+                        this->overhang_flow.scaled_spacing(),
+                        scale_t(this->print_config->bridge_precision.get_abs_value(this->overhang_flow.spacing())),
+                        this->layer->id());
                     if (detector.detect_angle(Geometry::deg2rad(this->config->bridge_angle.value)))
-                        expolygons_append(bridgeable, union_ex(detector.coverage(-1, true)));
+                        expolygons_append(bridgeable, union_ex(detector.coverage()));
                 }
                 if (!bridgeable.empty()) {
                     //simplify to avoid most of artefacts from printing lines.
@@ -1886,7 +1901,7 @@ ProcessSurfaceResult PerimeterGenerator::process_classic(int& contour_count, int
             }
         }
         assert(contours.size() == contour_count);
-        assert(holes.size() == holes_count);
+        //assert(holes.size() == holes_count);
         // nest loops: holes first
         for (int d = 0; d < holes_count; ++d) {
             PerimeterGeneratorLoops& holes_d = holes[d];
@@ -2816,6 +2831,13 @@ ExtrusionPaths PerimeterGenerator::create_overhangs(const ClipperLib_Z::Path& ar
                     is_external ? this->ext_perimeter_flow : this->perimeter_flow,
                     std::max(this->ext_perimeter_flow.scaled_width() / 4, scale_t(this->print_config->resolution)),
                     (is_external ? this->ext_perimeter_flow : this->perimeter_flow).scaled_width() / 10);
+            if (thickpaths.empty()) {
+                // Note: can create problem with chain_and_reorder_extrusion_paths
+                assert(extrusion_path.size() < 2 ||
+                       Point(extrusion_path.front().x(), extrusion_path.front().y())
+                           .coincides_with_epsilon(Point(extrusion_path.back().x(), extrusion_path.back().y())));
+                continue;
+            }
 #ifdef _DEBUG
             for (int i = 1; i < thickpaths.size(); i++) {
                 assert(thickpaths[i - 1].last_point() == thickpaths[i].first_point());
@@ -3414,6 +3436,10 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_extrusions(std::vector<P
                 }
 
                 chain_and_reorder_extrusion_paths(paths, &start_point);
+                for(size_t i = 1; i< paths.size(); ++i)
+                    assert(paths[i-1].last_point().coincides_with_epsilon(paths[i].first_point()));
+                if(extrusion->is_closed)
+                    assert(paths.back().last_point().coincides_with_epsilon(paths.front().first_point()));
             }
         } else {
             append(paths, Geometry::unsafe_variable_width(Arachne::to_thick_polyline(*extrusion),
@@ -3452,7 +3478,15 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_extrusions(std::vector<P
 
         // Append paths to collection.
         if (!paths.empty()) {
+            for (size_t idx_path = 0; idx_path < paths.size(); ++idx_path) {
+                if (idx_path > 0)
+                    assert(paths[idx_path - 1].last_point().coincides_with_epsilon(paths[idx_path].first_point()));
+                for (size_t idx_pt = 1; idx_pt < paths[idx_path].size(); ++idx_pt) {
+                    assert(!paths[idx_path].polyline.get_points()[idx_pt - 1].coincides_with_epsilon(paths[idx_path].polyline.get_points()[idx_pt]));
+                }
+            }
             if (extrusion->is_closed) {
+                assert(paths.back().last_point().coincides_with_epsilon(paths.front().first_point()));
                 ExtrusionLoop extrusion_loop(std::move(paths), loop_role);
                 // Restore the orientation of the extrusion loop.
                 //TODO: use if (loop.is_steep_overhang && this->layer->id() % 2 == 1) to make_clockwise => need to detect is_steep_overhang on the arachne path
@@ -3855,7 +3889,7 @@ PerimeterGenerator::_get_nearest_point(const PerimeterGeneratorLoops &children, 
             //don't check the last point, as it's used to go outter, can't use it to go inner.
             for (size_t idx_point = 1; idx_point < myPolylines.paths[idx_poly].polyline.size()-1; idx_point++) {
                 const Point &p = myPolylines.paths[idx_poly].polyline.get_points()[idx_point];
-                Point nearest_p = child.polygon.point_projection(p);
+                Point nearest_p = child.polygon.point_projection(p).first;
                 coord_t dist = (coord_t)nearest_p.distance_to(p);
                 //if no projection, go to next
                 if (dist == 0) continue;
@@ -3883,7 +3917,7 @@ PerimeterGenerator::_get_nearest_point(const PerimeterGeneratorLoops &children, 
             //lastly, try to check from one of his points
             for (size_t idx_point = 0; idx_point < child.polygon.size(); idx_point++) {
                 const Point &p = child.polygon.points[idx_point];
-                Point nearest_p = myPolylines.paths[idx_poly].polyline.point_projection(p);
+                Point nearest_p = myPolylines.paths[idx_poly].polyline.point_projection(p).first;
                 coord_t dist = (coord_t)nearest_p.distance_to(p);
                 //if no projection, go to next
                 if (dist == 0) continue;

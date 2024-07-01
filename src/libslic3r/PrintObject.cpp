@@ -116,146 +116,6 @@ namespace Slic3r {
         return out;
     }
 
-
-
-    Polygons create_polyholes(const Point center, const coord_t radius, const coord_t nozzle_diameter, bool multiple)
-    {
-        // n = max(round(2 * d), 3); // for 0.4mm nozzle
-        size_t nb_edges = (int)std::max(3, (int)std::round(4.0 * unscaled(radius) * 0.4 / unscaled(nozzle_diameter)));
-        // cylinder(h = h, r = d / cos (180 / n), $fn = n);
-        //create x polyholes by rotation if multiple
-        int nb_polyhole = 1;
-        float rotation = 0;
-        if (multiple) {
-            nb_polyhole = 5;
-            rotation = 2 * float(PI) / (nb_edges * nb_polyhole);
-        }
-        Polygons list;
-        for (int i_poly = 0; i_poly < nb_polyhole; i_poly++)
-            list.emplace_back();
-        for (int i_poly = 0; i_poly < nb_polyhole; i_poly++) {
-            Polygon& pts = (((i_poly % 2) == 0) ? list[i_poly / 2] : list[(nb_polyhole + 1) / 2 + i_poly / 2]);
-            const float new_radius = radius / float(std::cos(PI / nb_edges));
-            for (size_t i_edge = 0; i_edge < nb_edges; ++i_edge) {
-                float angle = rotation * i_poly + (float(PI) * 2 * (float)i_edge) / nb_edges;
-                pts.points.emplace_back(center.x() + new_radius * cos(angle), center.y() + new_radius * sin(angle));
-            }
-            pts.make_clockwise();
-        }
-        //alternate
-        return list;
-    }
-
-    void PrintObject::_transform_hole_to_polyholes()
-    {
-        // get all circular holes for each layer
-        // the id is center-diameter-extruderid
-        //the tuple is Point center; float diameter_max; int extruder_id; coord_t max_variation; bool twist;
-        std::vector<std::vector<std::pair<std::tuple<Point, float, int, coord_t, bool>, Polygon*>>> layerid2center;
-        for (size_t i = 0; i < this->m_layers.size(); i++) layerid2center.emplace_back();
-        tbb::parallel_for(
-            tbb::blocked_range<size_t>(0, m_layers.size()),
-            [this, &layerid2center](const tbb::blocked_range<size_t>& range) {
-            for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
-                m_print->throw_if_canceled();
-                Layer* layer = m_layers[layer_idx];
-                for (size_t region_idx = 0; region_idx < layer->m_regions.size(); ++region_idx)
-                {
-                    if (layer->m_regions[region_idx]->region().config().hole_to_polyhole) {
-                        for (Surface& surf : layer->m_regions[region_idx]->m_slices.surfaces) {
-                            for (Polygon& hole : surf.expolygon.holes) {
-                                //test if convex (as it's clockwise bc it's a hole, we have to do the opposite)
-                                if (hole.convex_points().empty() && hole.points.size() > 8) {
-                                    // Computing circle center
-                                    Point center = hole.centroid();
-                                    double diameter_min = std::numeric_limits<float>::max(), diameter_max = 0;
-                                    double diameter_sum = 0;
-                                    for (int i = 0; i < hole.points.size(); ++i) {
-                                        double dist = hole.points[i].distance_to(center);
-                                        diameter_min = std::min(diameter_min, dist);
-                                        diameter_max = std::max(diameter_max, dist);
-                                        diameter_sum += dist;
-                                    }
-                                    //also use center of lines to check it's not a rectangle
-                                    double diameter_line_min = std::numeric_limits<float>::max(), diameter_line_max = 0;
-                                    Lines hole_lines = hole.lines();
-                                    for (Line l : hole_lines) {
-                                        Point midline = (l.a + l.b) / 2;
-                                        double dist = center.distance_to(midline);
-                                        diameter_line_min = std::min(diameter_line_min, dist);
-                                        diameter_line_max = std::max(diameter_line_max, dist);
-                                    }
-
-
-                                    // SCALED_EPSILON was a bit too harsh. Now using a config, as some may want some harsh setting and some don't.
-                                    coord_t max_variation = std::max(SCALED_EPSILON, scale_(this->m_layers[layer_idx]->m_regions[region_idx]->region().config().hole_to_polyhole_threshold.get_abs_value(unscaled(diameter_sum / hole.points.size()))));
-                                    bool twist = this->m_layers[layer_idx]->m_regions[region_idx]->region().config().hole_to_polyhole_twisted.value;
-                                    if (diameter_max - diameter_min < max_variation * 2 && diameter_line_max - diameter_line_min < max_variation * 2) {
-                                        layerid2center[layer_idx].emplace_back(
-                                            std::tuple<Point, float, int, coord_t, bool>{center, diameter_max, layer->m_regions[region_idx]->region().config().perimeter_extruder.value, max_variation, twist}, & hole);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // for layer->slices, it will be also replaced later.
-            }
-        });
-        //sort holes per center-diameter
-        std::map<std::tuple<Point, float, int, coord_t, bool>, std::vector<std::pair<Polygon*, int>>> id2layerz2hole;
-
-        //search & find hole that span at least X layers
-        const size_t min_nb_layers = 2;
-        for (size_t layer_idx = 0; layer_idx < this->m_layers.size(); ++layer_idx) {
-            for (size_t hole_idx = 0; hole_idx < layerid2center[layer_idx].size(); ++hole_idx) {
-                //get all other same polygons
-                std::tuple<Point, float, int, coord_t, bool>& id = layerid2center[layer_idx][hole_idx].first;
-                float max_z = layers()[layer_idx]->print_z;
-                std::vector<std::pair<Polygon*, int>> holes;
-                holes.emplace_back(layerid2center[layer_idx][hole_idx].second, layer_idx);
-                for (size_t search_layer_idx = layer_idx + 1; search_layer_idx < this->m_layers.size(); ++search_layer_idx) {
-                    if (layers()[search_layer_idx]->print_z - layers()[search_layer_idx]->height - max_z > EPSILON) break;
-                    //search an other polygon with same id
-                    for (size_t search_hole_idx = 0; search_hole_idx < layerid2center[search_layer_idx].size(); ++search_hole_idx) {
-                        std::tuple<Point, float, int, coord_t, bool>& search_id = layerid2center[search_layer_idx][search_hole_idx].first;
-                        if (std::get<2>(id) == std::get<2>(search_id)
-                            && std::get<0>(id).distance_to(std::get<0>(search_id)) < std::get<3>(id)
-                            && std::abs(std::get<1>(id) - std::get<1>(search_id)) < std::get<3>(id)
-                            ) {
-                            max_z = layers()[search_layer_idx]->print_z;
-                            holes.emplace_back(layerid2center[search_layer_idx][search_hole_idx].second, search_layer_idx);
-                            layerid2center[search_layer_idx].erase(layerid2center[search_layer_idx].begin() + search_hole_idx);
-                            search_hole_idx--;
-                            break;
-                        }
-                    }
-                }
-                //check if strait hole or first layer hole (cause of first layer compensation)
-                if (holes.size() >= min_nb_layers || (holes.size() == 1 && holes[0].second == 0)) {
-                    id2layerz2hole.emplace(std::move(id), std::move(holes));
-                }
-            }
-        }
-        //create a polyhole per id and replace holes points by it.
-        for (auto entry : id2layerz2hole) {
-            Polygons polyholes = create_polyholes(std::get<0>(entry.first), std::get<1>(entry.first), scale_(print()->config().nozzle_diameter.get_at(std::get<2>(entry.first) - 1)), std::get<4>(entry.first));
-            for (auto& poly_to_replace : entry.second) {
-                Polygon polyhole = polyholes[poly_to_replace.second % polyholes.size()];
-                //search the clone in layers->slices
-                for (ExPolygon& explo_slice : m_layers[poly_to_replace.second]->lslices) {
-                    for (Polygon& poly_slice : explo_slice.holes) {
-                        if (poly_slice.points == poly_to_replace.first->points) {
-                            poly_slice.points = polyhole.points;
-                        }
-                    }
-                }
-                // copy
-                poly_to_replace.first->points = polyhole.points;
-            }
-        }
-    }
-
     // 1) Merges typed region slices into stInternal type.
     // 2) Increases an "extra perimeters" counter at region slices where needed.
     // 3) Generates perimeters, gap fills and fill regions (fill regions of type stInternal).
@@ -290,16 +150,19 @@ namespace Slic3r {
         // but we don't generate any extra perimeter if fill density is zero, as they would be floating
         // inside the object - infill_only_where_needed should be the method of choice for printing
         // hollow objects
-    for (size_t region_id = 0; region_id < this->num_printing_regions(); ++ region_id) {
-        const PrintRegion &region = this->printing_region(region_id);
+        for (size_t region_id = 0; region_id < this->num_printing_regions(); ++ region_id) {
+            const PrintRegion &region = this->printing_region(region_id);
             if (!region.config().extra_perimeters || region.config().perimeters == 0 || region.config().fill_density == 0 || this->layer_count() < 2)
                 continue;
-
+            // use an antomic idx instead of the range, to avoid a thread being very late because it's on the difficult layers.
+            std::atomic_size_t next_layer_idx(0);
             BOOST_LOG_TRIVIAL(debug) << "Generating extra perimeters for region " << region_id << " in parallel - start";
             tbb::parallel_for(
                 tbb::blocked_range<size_t>(0, m_layers.size() - 1),
-                [this, &region, region_id](const tbb::blocked_range<size_t>& range) {
-                for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
+                [this, &region, region_id, &next_layer_idx](const tbb::blocked_range<size_t>& range) {
+                //TODO: find a better wya to just fire the threads.
+                //for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
+                for (size_t layer_idx = next_layer_idx++; layer_idx < m_layers.size() - 1; layer_idx = next_layer_idx++) {
                     m_print->throw_if_canceled();
                     LayerRegion &layerm                     = *m_layers[layer_idx]->get_region(region_id);
                     const LayerRegion &upper_layerm         = *m_layers[layer_idx+1]->get_region(region_id);
@@ -354,10 +217,14 @@ namespace Slic3r {
         }
 
         BOOST_LOG_TRIVIAL(debug) << "Generating perimeters in parallel - start";
+        // use an antomic idx instead of the range, to avoid a thread being very late because it's on the difficult layers.
+        //TODO: sort the layers by difficulty (difficult first) (number of points, region, surfaces, .. ?) (and use parallel_for_each( list.begin(), list.end(), ApplyFoo() );)
+        std::atomic_size_t next_layer_idx(0);
         tbb::parallel_for(
             tbb::blocked_range<size_t>(0, m_layers.size()),
-            [this, &atomic_count, nb_layers_update](const tbb::blocked_range<size_t>& range) {
-            for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
+            [this, &atomic_count, nb_layers_update, &next_layer_idx](const tbb::blocked_range<size_t>& range) {
+            //for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
+            for (size_t layer_idx = next_layer_idx++; layer_idx < m_layers.size(); layer_idx = next_layer_idx++) {
                 std::chrono::time_point<std::chrono::system_clock> start_make_perimeter = std::chrono::system_clock::now();
                 m_print->throw_if_canceled();
                 m_layers[layer_idx]->make_perimeters();
@@ -415,6 +282,7 @@ namespace Slic3r {
         // Then the classifcation of $layerm->slices is transfered onto 
         // the $layerm->fill_surfaces by clipping $layerm->fill_surfaces
         // by the cummulative area of the previous $layerm->fill_surfaces.
+        m_print->set_status( 0, L("Detect surfaces types"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
         this->detect_surfaces_type();
         m_print->throw_if_canceled();
 
@@ -422,11 +290,17 @@ namespace Slic3r {
         // Here the stTop / stBottomBridge / stBottom infill is turned to just stInternal if zero top / bottom infill layers are configured.
         // Also tiny stInternal surfaces are turned to stInternalSolid.
         BOOST_LOG_TRIVIAL(info) << "Preparing fill surfaces..." << log_memory_info();
-        for (auto* layer : m_layers)
-            for (auto* region : layer->m_regions) {
+        for (size_t layer_idx = 0; layer_idx < m_layers.size(); ++layer_idx) {
+            Layer *layer = m_layers[layer_idx];
+            m_print->set_status(int(100 * layer_idx / m_layers.size()),
+                                L("Prepare fill surfaces: layer %s / %s"),
+                                {std::to_string(layer_idx), std::to_string(m_layers.size())},
+                                PrintBase::SlicingStatus::SECONDARY_STATE);
+            for (auto *region : layer->m_regions) {
                 region->prepare_fill_surfaces();
                 m_print->throw_if_canceled();
             }
+        }
 
         // solid_infill_below_area has just beeing applied at the end of prepare_fill_surfaces()
         apply_solid_infill_below_layer_area();
@@ -440,10 +314,12 @@ namespace Slic3r {
         // 3) Clip the internal surfaces by the grown top/bottom surfaces.
         // 4) Merge surfaces with the same style. This will mostly get rid of the overlaps.
         //FIXME This does not likely merge surfaces, which are supported by a material with different colors, but same properties.
+        m_print->set_status( 20, L("Process external surfaces"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
         this->process_external_surfaces();
         m_print->throw_if_canceled();
 
         // Add solid fills to ensure the shell vertical thickness.
+        m_print->set_status( 40, L("Discover shells"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
         this->discover_vertical_shells();
         m_print->throw_if_canceled();
 
@@ -469,6 +345,7 @@ namespace Slic3r {
         m_print->throw_if_canceled();
 
     //as there is some too thin solid surface, please deleted them and merge all of the surfacesthat are contigous.
+        m_print->set_status( 55, L("Clean surfaces"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
         this->clean_surfaces();
 
 #ifdef SLIC3R_DEBUG_SLICE_PROCESSING
@@ -487,6 +364,7 @@ namespace Slic3r {
     //FIXME The surfaces are supported by a sparse infill, but the sparse infill is only as large as the area to support.
     // Likely the sparse infill will not be anchored correctly, so it will not work as intended.
     // Also one wishes the perimeters to be supported by a full infill.
+        m_print->set_status( 70, L("Clip surfaces"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
         this->clip_fill_surfaces();
         m_print->throw_if_canceled();
 
@@ -522,6 +400,7 @@ namespace Slic3r {
         m_print->throw_if_canceled();
 
         // combine fill surfaces to honor the "infill every N layers" option
+        m_print->set_status( 85, L("Combine infill"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
         this->combine_infill();
         m_print->throw_if_canceled();
 
@@ -554,12 +433,12 @@ namespace Slic3r {
     void PrintObject::_compute_max_sparse_spacing()
     {
         m_max_sparse_spacing = 0;
-        std::atomic_int64_t max_sparse_spacing;
-        //tbb::parallel_for(
-        //    tbb::blocked_range<size_t>(0, m_layers.size()),
-        //    [this, &max_sparse_spacing](const tbb::blocked_range<size_t>& range) {
-        //for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
-        for (size_t layer_idx = 0; layer_idx < m_layers.size(); ++layer_idx) {
+        std::atomic_int64_t max_sparse_spacing(0);
+        tbb::parallel_for(
+            tbb::blocked_range<size_t>(0, m_layers.size()),
+            [this, &max_sparse_spacing](const tbb::blocked_range<size_t>& range) {
+        for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
+        //for (size_t layer_idx = 0; layer_idx < m_layers.size(); ++layer_idx) {
             m_print->throw_if_canceled();
             const Layer *layer = m_layers[layer_idx];
             for (const LayerRegion *layerm : layer->regions()) {
@@ -569,17 +448,14 @@ namespace Slic3r {
                         coord_t spacing = layerm->region().flow(*this, frInfill, layer->height, layer->id()).scaled_spacing();
                         // update atomic to max
                         int64_t prev_value = max_sparse_spacing.load();
-                        std::cout<<"will update "<<max_sparse_spacing.load()<<"=="<<prev_value<<" to "<<spacing<<"\n";
                         while (prev_value < int64_t(spacing) &&
                                !max_sparse_spacing.compare_exchange_weak(prev_value, int64_t(spacing))) {
-                            std::cout<<"can't update "<<max_sparse_spacing<<"\n";
                         }
-                        std::cout<<"it ahs been updated to "<<max_sparse_spacing.load()<<" from "<<prev_value<<" -> "<<spacing<<"\n";
                     }
                 }
             }
         }
-        //});     
+        });     
         m_max_sparse_spacing = max_sparse_spacing.load();
     }
 
@@ -587,7 +463,6 @@ namespace Slic3r {
     {
         // prerequisites
         this->prepare_infill();
-
         m_print->set_status(35, L("Infilling layers"));
         m_print->set_status(0, L("Infilling layer %s / %s"), { std::to_string(0), std::to_string(m_layers.size()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
         if (this->set_started(posInfill)) {
@@ -599,10 +474,14 @@ namespace Slic3r {
             const int nb_layers_update = std::max(1, (int)m_layers.size() / 20);
 
             BOOST_LOG_TRIVIAL(debug) << "Filling layers in parallel - start";
+            // use an antomic idx instead of the range, to avoid a thread being very late because it's on the difficult layers.
+            std::atomic_size_t next_layer_idx(0);
             tbb::parallel_for(
                 tbb::blocked_range<size_t>(0, m_layers.size()),
-                [this, &adaptive_fill_octree = adaptive_fill_octree, &support_fill_octree = support_fill_octree, &lightning_generator, &atomic_count, nb_layers_update](const tbb::blocked_range<size_t>& range) {
-                for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
+                [this, &adaptive_fill_octree = adaptive_fill_octree, &support_fill_octree = support_fill_octree, &lightning_generator, &atomic_count, nb_layers_update, &next_layer_idx]
+                (const tbb::blocked_range<size_t>& range) {
+                //for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
+                for (size_t layer_idx = next_layer_idx++; layer_idx < m_layers.size(); layer_idx = next_layer_idx++) {
                     std::chrono::time_point<std::chrono::system_clock> start_make_fill = std::chrono::system_clock::now();
                     m_print->throw_if_canceled();
                     m_layers[layer_idx]->make_fills(adaptive_fill_octree.get(), support_fill_octree.get(), lightning_generator.get());
@@ -897,17 +776,19 @@ bool PrintObject::invalidate_state_by_config_options(
                 opt_key == "layer_height"
                 || opt_key == "first_layer_height"
                 || opt_key == "mmu_segmented_region_max_width"
-                || opt_key == "exact_last_layer_height"
+                // || opt_key == "exact_last_layer_height"
                 || opt_key == "raft_contact_distance"
                 || opt_key == "raft_interface_layer_height"
                 || opt_key == "raft_layers"
                 || opt_key == "raft_layer_height"
-                || opt_key == "slice_closing_radius"
                 || opt_key == "clip_multipart_objects"
                 || opt_key == "first_layer_size_compensation"
                 || opt_key == "first_layer_size_compensation_layers"
                 || opt_key == "elephant_foot_min_width"
                 || opt_key == "dont_support_bridges"
+                || opt_key == "overhangs_max_slope"
+                || opt_key == "overhangs_bridge_threshold"
+                || opt_key == "overhangs_bridge_upper_layers"
                 || opt_key == "slice_closing_radius"
                 || opt_key == "slicing_mode"
                 || opt_key == "support_material_contact_distance_type"
@@ -984,7 +865,7 @@ bool PrintObject::invalidate_state_by_config_options(
                 || opt_key == "ironing_type"
                 || opt_key == "solid_infill_below_area"
                 || opt_key == "solid_infill_below_layer_area"
-                || opt_key == "solid_infill_below_thickness"
+                || opt_key == "solid_infill_below_width"
                 || opt_key == "solid_infill_extruder"
                 || opt_key == "solid_infill_every_layers"
                 || opt_key == "solid_over_perimeters"
@@ -1000,6 +881,7 @@ bool PrintObject::invalidate_state_by_config_options(
                 || opt_key == "fill_aligned_z"
                 || opt_key == "fill_angle"
                 || opt_key == "fill_angle_cross"
+                || opt_key == "fill_angle_follow_model"
                 || opt_key == "fill_angle_increment"
                 || opt_key == "fill_angle_template"
                 || opt_key == "fill_top_flow_ratio"
@@ -2741,6 +2623,7 @@ PrintRegionConfig region_config_from_model_volume(const PrintRegionConfig &defau
                 object_first_layer_height = std::fmin(object_first_layer_height, config().first_layer_height.get_abs_value(nozzle_diameter));
             }
         }
+        assert(object_first_layer_height < 1000000000);
         return object_first_layer_height;
     }
 
