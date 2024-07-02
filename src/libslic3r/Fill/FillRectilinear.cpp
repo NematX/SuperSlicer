@@ -3416,6 +3416,9 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
     std::vector<ExtrusionEntityCollection*> all_multipaths;
     std::unique_ptr<ExtrusionEntityCollection> current_paths = std::make_unique<ExtrusionEntityCollection>();
     current_paths->set_can_sort_reverse(false, true);
+    //TODO : move current_paths to ExtrusionMultiPath
+    //std::unique_ptr<ExtrusionMultiPath> current_paths = std::make_unique<ExtrusionMultiPath>();
+    //current_paths->set_can_reverse(true);
     ExtrusionRole good_role = getRoleFromSurfaceType(params, surface);
 
     struct VerticalSegments
@@ -3665,39 +3668,78 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
                 poly.clear();
                 Point last_point(end_print_point);
                 double length1 = 0;
-                size_t idx_pt      = intersec_end.iSegment;
-                size_t last_idx    = intersec_end_next.iSegment;
+                size_t idx_pt      = (intersec_end.iSegment + 1) % offset_hole_poly->size();
+                size_t last_idx    = (intersec_end_next.iSegment + 1) % offset_hole_poly->size();
+#ifdef _DEBUG
+                Polyline poly1;
+                poly1.append(last_point);
+#endif
                 while (idx_pt != last_idx) {
                     length1 += last_point.distance_to(offset_hole_poly->points[idx_pt]);
                     last_point = offset_hole_poly->points[idx_pt];
+#ifdef _DEBUG
+                    poly1.append(last_point);
+#endif
                     // go next point
                     if (++idx_pt >= offset_hole_poly->size())
                         idx_pt = 0;
                 }
                 length1 += last_point.distance_to(Point(vseg.sil.pos, intersec_end_next.pos()));
+#ifdef _DEBUG
+                poly1.append(Point(vseg.sil.pos, intersec_end_next.pos()));
+#endif
                 // other dir
                 double   length2 = 0;
                 last_point = end_print_point;
-                idx_pt   = (intersec_end.iSegment == 0 ? offset_hole_poly->size() - 1 : intersec_end.iSegment - 1);
-                last_idx = (intersec_end_next.iSegment == 0 ? offset_hole_poly->size() - 1 : intersec_end_next.iSegment - 1);
+                idx_pt   = intersec_end.iSegment;
+                last_idx = intersec_end_next.iSegment;
+#ifdef _DEBUG
+                Polyline poly2;
+                poly2.append(last_point);
+#endif
                 while (idx_pt != last_idx) {
                     length2 += last_point.distance_to(offset_hole_poly->points[idx_pt]);
                     last_point = offset_hole_poly->points[idx_pt];
+#ifdef _DEBUG
+                    poly2.append(last_point);
+#endif
                     // go next point
                     if (--idx_pt >= offset_hole_poly->size())
                         idx_pt = offset_hole_poly->size() - 1;
                 }
                 length2 += last_point.distance_to(Point(vseg.sil.pos, intersec_end_next.pos()));
+#ifdef _DEBUG
+                poly2.append(Point(vseg.sil.pos, intersec_end_next.pos()));
+                
+                {
+                    static int        iRun = 0;
+                    std::stringstream filename;
+                    filename << this->layer_id << "_" << iRun++ << "_";
+                    filename << "FillRectilinear_holes_choice_"<<(length1 > length2)<< ".svg";
+                    ::Slic3r::SVG svg(filename.str()); // , scale_(1.));
+                    svg.draw(to_polylines(poly_with_offset.polygons_outer), "black", scale_(.050));
+                    svg.draw(to_polylines(poly_with_offset.polygons_src), "grey", scale_(.045));
+                    svg.draw(to_polylines(poly_with_offset.polygons_inner), "white", scale_(.040));
+                    svg.draw(hole_poly_ref.split_at_first_point(), "pink", scale_(.035));
+                    svg.draw(offset_hole_poly->split_at_first_point(), "yellow", scale_(0.03));
+                    svg.draw(offset_hole_poly->points[idx_pt], "yellow", scale_(0.05));
+                    svg.draw(poly1, "blue", scale_(.025));
+                    svg.draw(poly2, "green", scale_(.025));
+                    svg.draw(end_print_point, "orange", scale_(0.04));
+                    svg.draw(Point(vseg.sil.pos, intersec_end_next.pos()), "red", scale_(.03));
+                }
+#endif
                 // TODO: do both travel at the same time, end the loop when finishing one.
-                Polyline &poly_next = vseg.segments[i_seg + 1];
+                //Polyline &poly_next = vseg.segments[i_seg + 1];
                 if (length1 > length2) {
                     //create via second path
                     poly.append(end_print_point);
-                    idx_pt   = (intersec_end.iSegment == 0 ? offset_hole_poly->size() - 1 : intersec_end.iSegment - 1);
-                    last_idx = (intersec_end_next.iSegment == 0 ? offset_hole_poly->size() - 1 : intersec_end_next.iSegment - 1);
+                    idx_pt   = intersec_end.iSegment;
+                    last_idx = intersec_end_next.iSegment;
                     while (idx_pt != last_idx) {
-                        if(poly.back().distance_to_square(poly_next.front()) < poly.back().distance_to_square(offset_hole_poly->points[idx_pt]))
-                            break;
+                        // (bad) shortcut if possible
+                        //if(poly.back().distance_to_square(poly_next.front()) < poly.back().distance_to_square(offset_hole_poly->points[idx_pt]))
+                        //    break;
                         poly.append(offset_hole_poly->points[idx_pt]);
                         // go next point
                         if (--idx_pt >= offset_hole_poly->size())
@@ -3706,17 +3748,19 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
                 } else {
                     //create via first path
                     poly.append(end_print_point);
-                    idx_pt      = intersec_end.iSegment;
-                    last_idx    = intersec_end_next.iSegment;
+                    size_t idx_pt      = (intersec_end.iSegment + 1) % offset_hole_poly->size();
+                    size_t last_idx    = (intersec_end_next.iSegment + 1) % offset_hole_poly->size();
                     while (idx_pt != last_idx) {
-                        if(poly.back().distance_to_square(poly_next.front()) < poly.back().distance_to_square(offset_hole_poly->points[idx_pt]))
-                            break;
+                        // (bad) shortcut if possible
+                        //if(poly.back().distance_to_square(poly_next.front()) < poly.back().distance_to_square(offset_hole_poly->points[idx_pt]))
+                        //    break;
                         poly.append(offset_hole_poly->points[idx_pt]);
                         // go next point
                         if (++idx_pt >= offset_hole_poly->size())
                             idx_pt = 0;
                     }
                 }
+                assert(poly.size() > 1);
 
                 // Save travel (if needed)
                 if (poly.size() > 1) {
@@ -3755,6 +3799,9 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
             assert(poly.empty());
         }
         if (!current_paths->empty()) {
+            if (current_paths->entities().size() == 1) {
+                ((ExtrusionPath*)current_paths->entities().front())->set_can_reverse(true);
+            }
             all_multipaths.push_back(current_paths.get());
             coll->append(current_paths);
             current_paths = std::make_unique<ExtrusionEntityCollection>();
