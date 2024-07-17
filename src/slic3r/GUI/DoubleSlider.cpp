@@ -776,9 +776,11 @@ wxString Control::get_label(int tick, LabelType label_type/* = ltHeightWithLayer
     if (m_draw_mode == dmSequentialGCodeView)
         return wxString::Format("%lu", static_cast<unsigned long>(m_alternate_values[value]));
 
+    int decimals = std::max(0, std::min(6, atoi(Slic3r::GUI::get_app_config()->get("gcodeviewer_decimals").c_str())));
+
     wxString str = m_values.empty() ?
-        wxString::Format("%.*f", 2, m_label_koef * value) :
-        wxString::Format("%.*f", 2, m_values[value]);
+        Slic3r::to_string_nozero(m_label_koef * value, decimals) :
+        Slic3r::to_string_nozero(m_values[value], decimals);
     if (label_type == ltHeight)
         return str;
 
@@ -839,7 +841,7 @@ wxString Control::get_label(int tick, LabelType label_type/* = ltHeightWithLayer
                 } else {
                     layer_height = m_values.empty() ? m_label_koef : m_values[value] - (value > 1 ? m_values[value - 1] : 0);
                 }
-                str = str + comma + wxString::Format("%.*f", 3, layer_height);
+                str = str + comma + Slic3r::to_string_nozero(layer_height, decimals);
                 comma = "\n";
             }
             if (show_ltime && !m_layers_times.empty()) {
