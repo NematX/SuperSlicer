@@ -55,6 +55,7 @@ group:General wipe
 	end_line
 group:others
     setting:idx:extruder_pressure_factor
+    setting:idx:split_extrusion_acceleration
 group:Retraction when tool is disabled (advanced settings for multi-extruder setups)
 	setting:label$Minimum retraction:idx:retract_length_toolchange
 	setting:label$Extra unretraction:idx:retract_restart_extra_toolchange

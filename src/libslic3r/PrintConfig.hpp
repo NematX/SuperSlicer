@@ -1160,6 +1160,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionBool,                start_gcode_manual))
     ((ConfigOptionBool,                single_extruder_multi_material))
     ((ConfigOptionBool,                single_extruder_multi_material_priming))
+    ((ConfigOptionBools,               split_extrusion_acceleration))
     ((ConfigOptionStrings,             tool_name))
     ((ConfigOptionString,              toolchange_gcode))
     ((ConfigOptionFloat,               travel_speed))

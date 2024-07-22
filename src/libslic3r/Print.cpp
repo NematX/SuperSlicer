@@ -186,6 +186,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
         "printer_notes",
         "remaining_times",
         "remaining_times_type",
+        "split_extrusion_acceleration",
         "travel_ramping_lift",
         "travel_initial_part_length",
         "travel_slope",

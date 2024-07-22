@@ -7,7 +7,8 @@
 
 namespace Slic3r {
 
-    
+//#pragma optimize("", off)
+
 PressureAdvance::PressureAdvance(const GCodeWriter &writer, const FullPrintConfig &print_config, uint16_t current_extruder_id)
     : m_current_extruder(current_extruder_id)
     , m_config(print_config)
@@ -69,14 +70,23 @@ const std::string &PressureAdvance::process_gcode(const std::string &gcode, bool
         if (data.is_useful_move())
             m_buffer_useful_size += data.max_axle_xyz;
 
-    if (!gcode.empty())
-        m_parser.parse_buffer(gcode, [this](GCodeReader &reader, const GCodeReader::GCodeLine &line) {
-            /*m_process_output += line.raw() + "\n";*/
-            this->_process_gcode_line(reader, line);
-        });
+    float pressure_factor = this->m_config.extruder_pressure_factor.get_float(m_current_extruder);
+    m_print_tag = this->m_config.split_extrusion_acceleration.get_bool(m_current_extruder);
+    if (m_print_tag || pressure_factor > 0) {
+        if (!gcode.empty())
+            m_parser.parse_buffer(gcode, [this](GCodeReader &reader, const GCodeReader::GCodeLine &line) {
+                /*m_process_output += line.raw() + "\n";*/
+                this->_process_gcode_line(reader, line);
+            });
 
-    if (do_flush) {
-        flush();
+        if (do_flush) {
+            flush();
+        }
+    } else {
+        if (do_flush) {
+            flush();
+        }
+        m_process_output += gcode;
     }
 
     return m_process_output;
@@ -325,10 +335,11 @@ void PressureAdvance::update_last_move(size_t last_move_idx, double junction_axl
                     loop_last_move->speed_end = loop_junction_speed;
                     double loop_last_move_time_s = std::abs(loop_last_move->speed_end - loop_last_move->speed_start) / loop_last_move->max_axle_acceleration;
                     double loop_last_move_e_speed = loop_last_move->speed_end * loop_last_move->de / loop_last_move->max_axle;
-                    loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
-                        std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
-                        std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
-                        " ; decel direct";
+                    if (m_print_tag)
+                        loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
+                            std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
+                            std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
+                            " ; decel direct";
                     //std::cout << " f/a -> d\n";
                     loop_last_move->check_integrity();
                 } else {
@@ -364,16 +375,18 @@ void PressureAdvance::update_last_move(size_t last_move_idx, double junction_axl
                         double first_part_time_s = first_part.max_axle / first_part.speed_start;
                         double first_part_e_speed = first_part.speed_end * first_part.de / first_part.max_axle;
                         assert(std::abs(first_part.de / first_part_time_s - first_part_e_speed) < EPSILON /100);
-                        first_part.comment = std::string(" ;F") + std::to_string(int(first_part.speed_end * 60)) +
-                            std::string(" ;H") + std::to_string(int(first_part_e_speed * 60000)/1000.) +
-                            std::string(" ;T") + std::to_string(int(first_part_time_s*1000000)) +
-                            " ; steady " + std::to_string(int(first_part.speed_start * 60));
+                        if (m_print_tag)
+                            first_part.comment = std::string(" ;F") + std::to_string(int(first_part.speed_end * 60)) +
+                                std::string(" ;H") + std::to_string(int(first_part_e_speed * 60000)/1000.) +
+                                std::string(" ;T") + std::to_string(int(first_part_time_s*1000000)) +
+                                " ; steady " + std::to_string(int(first_part.speed_start * 60));
                         double loop_last_move_time_s = std::abs(loop_last_move->speed_end - loop_last_move->speed_start) / loop_last_move->max_axle_acceleration;
                         double loop_last_move_e_speed = loop_last_move->speed_end * loop_last_move->de / loop_last_move->max_axle;
-                        loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
-                            std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
-                            std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
-                            std::string(" ; decel ") + std::to_string(int(loop_last_move->speed_start * 60)) +
+                        if (m_print_tag)
+                            loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
+                                std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
+                                std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
+                                std::string(" ; decel ") + std::to_string(int(loop_last_move->speed_start * 60)) +
                                                   std::string("->") + std::to_string(int(loop_last_move->speed_end * 60));
                                                   //std::string(",d=") + std::to_string(Vec2d(loop_last_move->dx, loop_last_move->dy).norm())+
                                                   //std::string(",px=") + std::to_string(loop_last_move->x + loop_last_move->dx)+
@@ -415,17 +428,19 @@ void PressureAdvance::update_last_move(size_t last_move_idx, double junction_axl
                         loop_last_move->speed_end   = loop_junction_speed;
                         double first_part_time_s = std::abs(first_part.speed_end - first_part.speed_start) / first_part.max_axle_acceleration;
                         double first_part_e_speed = first_part.speed_end * first_part.de / first_part.max_axle;
-                        first_part.comment = std::string(" ;F") + std::to_string(int(first_part.speed_end * 60)) +
-                            std::string(" ;H") + std::to_string(int(first_part_e_speed * 60000)/1000.) +
-                            std::string(" ;T") + std::to_string(int(first_part_time_s*1000000)) +
-                            std::string(" ; accel ") + std::to_string(int(first_part.speed_start * 60)) +
+                        if (m_print_tag)
+                            first_part.comment = std::string(" ;F") + std::to_string(int(first_part.speed_end * 60)) +
+                                std::string(" ;H") + std::to_string(int(first_part_e_speed * 60000)/1000.) +
+                                std::string(" ;T") + std::to_string(int(first_part_time_s*1000000)) +
+                                std::string(" ; accel ") + std::to_string(int(first_part.speed_start * 60)) +
                                           std::string("->") + std::to_string(int(first_part.speed_end * 60));
                         double loop_last_move_time_s = std::abs(loop_last_move->speed_end - loop_last_move->speed_start) / loop_last_move->max_axle_acceleration;
                         double loop_last_move_e_speed = loop_last_move->speed_end * loop_last_move->de / loop_last_move->max_axle;
-                        loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
-                            std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
-                            std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
-                            std::string(" ; decel ") + std::to_string(int(loop_last_move->speed_start * 60)) +
+                        if (m_print_tag)
+                            loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
+                                std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
+                                std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
+                                std::string(" ; decel ") + std::to_string(int(loop_last_move->speed_start * 60)) +
                                           std::string("->") + std::to_string(int(loop_last_move->speed_end * 60));
                         //std::cout << " a -> a & d\n";
                         first_part.check_integrity();
@@ -451,10 +466,11 @@ void PressureAdvance::update_last_move(size_t last_move_idx, double junction_axl
                 assert(loop_last_idx != previous_idx);
                 double loop_last_move_time_s = std::abs(loop_last_move->speed_end - loop_last_move->speed_start) / loop_last_move->max_axle_acceleration;
                 double loop_last_move_e_speed = loop_last_move->speed_end * loop_last_move->de / loop_last_move->max_axle;
-                loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
-                    std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
-                    std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
-                    std::string(" ; decel ") + std::to_string(int(loop_last_move->speed_start * 60)) +
+                if (m_print_tag)
+                    loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
+                        std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
+                        std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
+                        std::string(" ; decel ") + std::to_string(int(loop_last_move->speed_start * 60)) +
                                           std::string("->") + std::to_string(int(loop_last_move->speed_end * 60));
                 if (previous_idx < m_buffer.size()) {
                     // it exists. iterate the loop
@@ -479,11 +495,12 @@ void PressureAdvance::update_last_move(size_t last_move_idx, double junction_axl
             loop_last_move->update_axis_values(xyz_decimals, e_decimals, m_relative_e, get_pressure_factor());
             double loop_last_move_time_s = std::abs(loop_last_move->speed_end - loop_last_move->speed_start) / loop_last_move->max_axle_acceleration;
             double loop_last_move_e_speed = loop_last_move->speed_end * loop_last_move->de / loop_last_move->max_axle;
-            loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
-                std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
-                std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
-                std::string(" ; decel ") + std::to_string(int(loop_last_move->speed_start * 60)) +
-                                     std::string("->") + std::to_string(int(loop_last_move->speed_end * 60));
+            if (m_print_tag)
+                loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
+                    std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000) / 1000.) +
+                    std::string(" ;T") + std::to_string(int(loop_last_move_time_s * 1000000)) +
+                    std::string(" ; decel ") + std::to_string(int(loop_last_move->speed_start * 60)) +
+                    std::string("->") + std::to_string(int(loop_last_move->speed_end * 60));
             //std::cout << " d -> d (" << loop_last_idx << ") , iter(";
             // iterate
             size_t previous_idx = get_last_move_idx(loop_last_idx);
@@ -552,17 +569,19 @@ void PressureAdvance::update_last_move(size_t last_move_idx, double junction_axl
                 put_in_buffer(*loop_last_move);
                 double first_part_time_s = std::abs(first_part.speed_end - first_part.speed_start) / first_part.max_axle_acceleration;
                 double first_part_e_speed = first_part.speed_end * first_part.de / first_part.max_axle;
-                first_part.comment = std::string(" ;F") + std::to_string(int(first_part.speed_end * 60)) +
-                    std::string(" ;H") + std::to_string(int(first_part_e_speed * 60000)/1000.) +
-                    std::string(" ;T") + std::to_string(int(first_part_time_s*1000000)) +
-                    std::string(" ; accel ") + std::to_string(int(first_part.speed_start * 60)) +
-                                     std::string("->") + std::to_string(int(first_part.speed_end * 60));
+                if (m_print_tag)
+                    first_part.comment = std::string(" ;F") + std::to_string(int(first_part.speed_end * 60)) +
+                        std::string(" ;H") + std::to_string(int(first_part_e_speed * 60000) / 1000.) +
+                        std::string(" ;T") + std::to_string(int(first_part_time_s * 1000000)) +
+                        std::string(" ; accel ") + std::to_string(int(first_part.speed_start * 60)) +
+                        std::string("->") + std::to_string(int(first_part.speed_end * 60));
                 double loop_last_move_time_s = std::abs(loop_last_move->speed_end - loop_last_move->speed_start) / loop_last_move->max_axle_acceleration;
                 double loop_last_move_e_speed = loop_last_move->speed_end * loop_last_move->de / loop_last_move->max_axle;
-                loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
-                    std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
-                    std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
-                    std::string(" ; decel ") + std::to_string(int(loop_last_move->speed_start * 60)) +
+                if (m_print_tag)
+                    loop_last_move->comment = std::string(" ;F") + std::to_string(int(loop_last_move->speed_end * 60)) +
+                        std::string(" ;H") + std::to_string(int(loop_last_move_e_speed * 60000)/1000.) +
+                        std::string(" ;T") + std::to_string(int(loop_last_move_time_s*1000000)) +
+                        std::string(" ; decel ") + std::to_string(int(loop_last_move->speed_start * 60)) +
                                      std::string("->") + std::to_string(int(loop_last_move->speed_end * 60));
                 //std::cout << " a -> a & d (2)\n";
                 first_part.check_integrity();
@@ -687,7 +706,7 @@ void PressureAdvance::_process_gcode_line(GCodeReader &reader, const GCodeReader
             if (line.raw().size() > 10 && line.raw().rfind(";TYPE:", 0) == 0) {
                 // get the type of the next extrusions
                 std::string extrusion_string = line.raw().substr(6, line.raw().size() - 6);
-                current_role                 = ExtrusionEntity::string_to_role(extrusion_string);
+                current_role                 = Slic3r::string_to_gcode_extrusion_role(extrusion_string);
             }
             if (line.raw().size() > 16) {
                 if (line.raw().rfind("; custom gcode", 0) != std::string::npos)
@@ -859,10 +878,11 @@ void PressureAdvance::_process_gcode_line(GCodeReader &reader, const GCodeReader
                     junction_speed = 0;
                 } else {
                     // else, compute junction_speed via the angle between the two (180 -> 90° : 1->0mm/s, <90: 0mm/s)
-                    Point  p_last_begin(-last_move->dx, -last_move->dy);
+                    Point  p_last_begin(scale_t(-last_move->dx), scale_t(-last_move->dy));
                     Point  p_junction(0, 0);
-                    Point  p_current_end(new_data->dx, new_data->dy);
-                    angle = p_junction.ccw_angle(p_last_begin, p_current_end);
+                    Point  p_current_end(scale_t(new_data->dx), scale_t(new_data->dy));
+                    assert(ccw_angle_old_test(p_junction, p_last_begin, p_current_end) - abs_angle(angle_ccw(p_last_begin - p_junction, p_current_end - p_junction))< 0.0000001);
+                    angle = abs_angle(angle_ccw(p_last_begin - p_junction, p_current_end - p_junction));
                     if (angle > PI)
                         angle = (2 * PI) - angle;
                     assert(angle >= 0 && angle <= PI);
@@ -918,10 +938,11 @@ void PressureAdvance::_process_gcode_line(GCodeReader &reader, const GCodeReader
                         new_data->update_axis_values(xyz_decimals, e_decimals, m_relative_e, get_pressure_factor());
                         const double new_data_time_s = std::abs(max_delta_axle_speed) / new_data->max_axle_acceleration;
                         const double new_data_e_speed = new_data->speed_end * new_data->de / new_data->max_axle;
-                        new_data->comment = std::string(" ;F") + std::to_string(int(new_data->speed_end * 60)) +
-                            std::string(" ;H") + std::to_string(int(new_data_e_speed * 60000)/1000.) +
-                            std::string(" ;T") + std::to_string(int(new_data_time_s*1000000)) +
-                            std::string(" ; accel ") +
+                        if (m_print_tag)
+                            new_data->comment = std::string(" ;F") + std::to_string(int(new_data->speed_end * 60)) +
+                                std::string(" ;H") + std::to_string(int(new_data_e_speed * 60000)/1000.) +
+                                std::string(" ;T") + std::to_string(int(new_data_time_s*1000000)) +
+                                std::string(" ; accel ") +
                                             std::to_string(int(new_data->speed_start * 60)) + std::string(" -> ") +
                                             std::to_string(int(new_data->speed_end * 60));
                     } else {
@@ -962,21 +983,22 @@ void PressureAdvance::_process_gcode_line(GCodeReader &reader, const GCodeReader
                         put_in_buffer(*new_data);
                         const double first_part_time_s = std::abs(first_part.speed_end - first_part.speed_start) / first_part.max_axle_acceleration;
                         const double first_part_e_speed = first_part.speed_end * first_part.de;
-                        first_part.comment = std::string(" ;F") + std::to_string(int(first_part.speed_end * 60)) +
-                            std::string(" ;H") + std::to_string(int(first_part_e_speed * 60000)/1000.) +
-                            std::string(" ;T") + std::to_string(int(first_part_time_s*1000000)) +
-                            std::string(" ; accel ") +
-                                             std::to_string(int(first_part.speed_start * 60)) + std::string(" -> ") +
-                                             std::to_string(int(first_part.speed_end * 60));
-                                                  //std::string(",d=") + std::to_string(Vec2d(first_part.dx, first_part.dy).norm())+
-                                                  //std::string(",ma=") + std::to_string(dist_axle_accel);
+                        if (m_print_tag)
+                            first_part.comment = std::string(" ;F") + std::to_string(int(first_part.speed_end * 60)) +
+                                std::string(" ;H") + std::to_string(int(first_part_e_speed * 60000) / 1000.) +
+                                std::string(" ;T") + std::to_string(int(first_part_time_s * 1000000)) +
+                                std::string(" ; accel ") + std::to_string(int(first_part.speed_start * 60)) +
+                                std::string(" -> ") + std::to_string(int(first_part.speed_end * 60));
+                        // std::string(",d=") + std::to_string(Vec2d(first_part.dx, first_part.dy).norm())+
+                        // std::string(",ma=") + std::to_string(dist_axle_accel);
                         const double new_data_time_s = new_data->max_axle / new_data->speed_end;
                         const double new_data_e_speed = new_data->speed_end * new_data->de / new_data->max_axle;
                         assert(std::abs(new_data->de / new_data_time_s - new_data_e_speed) < EPSILON /100);
-                        new_data->comment = std::string(" ;F") + std::to_string(int(new_data->speed_end * 60)) +
-                            std::string(" ;H") + std::to_string(int(new_data_e_speed * 60000)/1000.) +
-                            std::string(" ;T") + std::to_string(int(new_data_time_s*1000000)) +
-                            std::string(" ; steady ") + std::to_string(int(new_data->speed_end * 60));
+                        if (m_print_tag)
+                            new_data->comment = std::string(" ;F") + std::to_string(int(new_data->speed_end * 60)) +
+                                std::string(" ;H") + std::to_string(int(new_data_e_speed * 60000) / 1000.) +
+                                std::string(" ;T") + std::to_string(int(new_data_time_s * 1000000)) +
+                                std::string(" ; steady ") + std::to_string(int(new_data->speed_end * 60));
                         first_part.check_integrity();
                         new_data->check_integrity();
                         first_part.update_axis_values(xyz_decimals, e_decimals, m_relative_e, get_pressure_factor());
@@ -1030,7 +1052,7 @@ double PressureAdvance::compute_pressure_change_mm_filament(const BufferData &co
 void PressureAdvance::write_buffer_data()
 {
     BufferData &frontdata = m_buffer.front();
-    if (frontdata.comment.empty() || !this->m_config.gcode_comments.value)
+    if (frontdata.comment.empty() || !(this->m_config.gcode_comments.value || m_print_tag))
         m_process_output += frontdata.raw  + "\n";
     else
         m_process_output += frontdata.raw + "; " + frontdata.comment + "\n";

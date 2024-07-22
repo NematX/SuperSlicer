@@ -8,7 +8,7 @@
 
 #include "../Point.hpp"
 #include "../GCodeReader.hpp"
-#include "../GCodeWriter.hpp"
+#include "GCodeWriter.hpp"
 
 #include <deque>
 #include <regex>
@@ -173,7 +173,7 @@ private:
     const GCodeWriter& m_writer;
 
     //current value (at the back of the buffer), when parsing a new line
-    ExtrusionRole current_role = ExtrusionRole::erCustom;
+    GCodeExtrusionRole current_role = GCodeExtrusionRole::Custom;
     // in unit/second
     double m_current_speed = 1000 / 60.0;
     double m_current_acceleration = 150;
@@ -181,6 +181,7 @@ private:
     double m_current_retract_acceleration = 150;
     bool m_is_custom_gcode = false;
     uint16_t m_current_extruder = 0;
+    bool m_print_tag = false;
     // false if speed is for each axle, true if dx & dy are combined for speed & accel command.
     // TODO: struct printer type (cartesian, corexy, delta)
     bool m_speedxy = false;

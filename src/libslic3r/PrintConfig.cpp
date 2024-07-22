@@ -5515,6 +5515,13 @@ void PrintConfigDef::init_fff_params()
     def->mode = comSimpleAE | comPrusa;
     def->set_default_value(new ConfigOptionBool(false));
 
+    def = this->add("split_extrusion_acceleration", coBools);
+    def->label = L("Tag each acceleration and deceleration");
+    def->tooltip = L("Split each extruison into acceleration, constant speed and deceleration. add a tag in comment about the speeds.");
+    def->mode = comExpert | comSuSi;
+    def->is_vector_extruder = true;
+    def->set_default_value(new ConfigOptionBools{false});
+
     def = this->add("standby_temperature_delta", coInt);
     def->label = L("Temperature variation");
     // TRN PrintSettings : "Ooze prevention" > "Temperature variation"
@@ -7199,6 +7206,7 @@ void PrintConfigDef::init_extruder_option_keys()
         "retract_speed",
         "seam_gap",
         "seam_gap_external",
+        "split_extrusion_acceleration",
         "tool_name",
         "travel_lift_before_obstacle",
         "travel_max_lift",
@@ -9124,6 +9132,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "solid_infill_extrusion_spacing",
 "solid_infill_fan_speed",
 "solid_infill_overlap",
+"split_extrusion_acceleration",
 "start_gcode_manual",
 "solid_infill_below_layer_area",
 "solid_infill_below_width",
