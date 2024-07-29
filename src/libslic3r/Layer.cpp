@@ -720,6 +720,7 @@ void Layer::make_perimeters()
                             && config.overhangs_reverse         == other_config.overhangs_reverse
                             && config.overhangs_reverse_threshold == other_config.overhangs_reverse_threshold
                             && config.perimeter_acceleration    == other_config.perimeter_acceleration
+                            && config.perimeter_direction       == other_config.perimeter_direction
                             && config.perimeter_extrusion_width == other_config.perimeter_extrusion_width
                             && config.perimeter_loop            == other_config.perimeter_loop
                             && config.perimeter_loop_seam       == other_config.perimeter_loop_seam
@@ -1176,7 +1177,7 @@ void Layer::sort_perimeters_into_islands(
         const PrintConfig       &print_config  = this->object()->print()->config();
         const PrintRegionConfig &region_config = this_layer_region.region().config();
         const auto               bbox_eps      = scaled<coord_t>(
-            EPSILON + print_config.gcode_resolution.value +
+            EPSILON + print_config.gcode_min_resolution.value +
             (region_config.fuzzy_skin.value == FuzzySkinType::None ? 0. : region_config.fuzzy_skin_thickness.value 
                 //FIXME it looks as if Arachne could extend open lines by fuzzy_skin_point_dist, which does not seem right.
                 + region_config.fuzzy_skin_point_dist.value));

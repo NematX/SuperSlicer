@@ -43,6 +43,10 @@ group:Quality
 		setting:width$5:thin_walls_overlap
 		setting:thin_walls_merge
 	end_line
+	line:Perimeter Direction
+		setting:label$Default:width$18:perimeter_direction
+		setting:label$Reverse on Even layers:sidetext_width$2:perimeter_reverse
+	end_line
 group:Avoid crossing perimeters
 	line:Activate
 		setting:label$_:avoid_crossing_perimeters
@@ -62,7 +66,6 @@ group:label_width$12:Overhangs
 	line:Extrusion direction
 		setting:sidetext_width$2:overhangs_reverse
 		setting:label_width$12:width$5:overhangs_reverse_threshold
-		setting:label$All perimeters:sidetext_width$2:perimeter_reverse
 	end_line
 group:sidetext_width$5:Seam
 	line:Algorithm

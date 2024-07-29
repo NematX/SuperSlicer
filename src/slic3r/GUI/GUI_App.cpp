@@ -283,8 +283,10 @@ public:
         wxString credit_and_author = m_constant_text.credits;
         if (!m_author.empty())
             credit_and_author += "\n\n" + m_author;
-        memDc.DrawLabel(credit_and_author, banner_rect, wxALIGN_BOTTOM | wxALIGN_LEFT);
         int credits_height = memDc.GetMultiLineTextExtent(credit_and_author).GetY();
+        //print from bottom
+        memDc.DrawLabel(credit_and_author, banner_rect, wxALIGN_BOTTOM | wxALIGN_LEFT);
+
         int text_height    = memDc.GetTextExtent("text").GetY();
 
         // calculate position for the dynamic text
@@ -1347,7 +1349,7 @@ bool GUI_App::on_init_inner()
 
         // make a bitmap with dark grey banner on the left side
         scrn = new SplashScreen(bmp.IsOk() ? bmp : SplashScreen::MakeBitmap(get_bmp_bundle(SLIC3R_APP_KEY, 600)->GetPreferredBitmapSizeAtScale(1.0)),
-                                wxSPLASH_CENTRE_ON_SCREEN | wxSPLASH_TIMEOUT, 4000, splashscreen_pos);
+                                wxSPLASH_CENTRE_ON_SCREEN | wxSPLASH_TIMEOUT, 4000, splashscreen_pos, artist);
 
         if (!default_splashscreen_pos)
             // revert "restore_win_position" value if application wasn't crashed
@@ -2999,9 +3001,9 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
     menu->Append(local_menu, _L("&Configuration"));
 }
 
-void GUI_App::open_preferences(const std::string& highlight_option /*= std::string()*/, const std::string& tab_name/*= std::string()*/)
+void GUI_App::open_preferences(const std::string& highlight_option /*= std::string()*/, const std::string& group_name/*= std::string()*/)
 {
-    mainframe->preferences_dialog->show(highlight_option, tab_name);
+    mainframe->preferences_dialog->show(highlight_option, group_name);
 
     if (mainframe->preferences_dialog->recreate_GUI())
         recreate_GUI(_L("Restart application") + dots);

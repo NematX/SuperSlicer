@@ -1371,9 +1371,19 @@ bool GCodeViewer::is_loaded(const GCodeProcessorResult& gcode_result) {
 
 void GCodeViewer::load(const GCodeProcessorResult& gcode_result, const Print& print)
 {
+    if (!m_gcode_result.has_value())
+        m_gcode_result = gcode_result;
+    assert(&m_gcode_result->get() == &gcode_result);
+    if (!m_print.has_value())
+        m_print = print;
+    assert(&m_print->get() == &print);
+
     // avoid processing if called with the same gcode_result
+    // unless you switch to/from VolumetricRate/VolumetricFlow
     if (m_last_result_id == gcode_result.id &&
-        (m_last_view_type == m_view_type || (m_last_view_type != EViewType::VolumetricRate && m_view_type != EViewType::VolumetricRate)))
+        (m_last_view_type == m_view_type || 
+            (m_last_view_type != EViewType::VolumetricRate && m_view_type != EViewType::VolumetricRate &&
+             m_last_view_type != EViewType::VolumetricFlow && m_view_type != EViewType::VolumetricFlow)))
         return;
 
     m_last_result_id = gcode_result.id;
@@ -1463,6 +1473,9 @@ void GCodeViewer::refresh(const GCodeProcessorResult& gcode_result, const std::v
 
     if (m_moves_count == 0)
         return;
+
+    // save for refresh without calling the glpreview/glcanvas
+    m_last_str_tool_colors = str_tool_colors;
 
     wxBusyCursor busy;
 
@@ -4314,7 +4327,7 @@ void GCodeViewer::render_legend(float& legend_height)
                          _u8L("Tool"),
                          _u8L("Filament"),
                          _u8L("Color Print") };
-        view_options_id = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+        view_options_id = { 0, 1, 2, 3, 4, 5, 8, 9, 6, 7, 10, 11, 12 };
         assert(view_options_id.size() == size_t(EViewType::Count));
         assert(view_options_id.back() < size_t(EViewType::Count));
     }
@@ -4330,7 +4343,7 @@ void GCodeViewer::render_legend(float& legend_height)
                          _u8L("Tool"),
                          _u8L("Filament"),
                          _u8L("Color Print") };
-        view_options_id = { 0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 12 };
+        view_options_id = { 0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12 };
         assert(view_options_id.size() == size_t(EViewType::Count) - 2);
         assert(view_options_id.back() < size_t(EViewType::Count));
         if (view_type == int(EViewType::LayerTime) || view_type == int(EViewType::Chronology) )
@@ -4345,8 +4358,15 @@ void GCodeViewer::render_legend(float& legend_height)
     if (old_view_type != view_type) {
         set_view_type(static_cast<EViewType>(view_type));
         wxGetApp().plater()->set_keep_current_preview_type(true);
-        wxGetApp().plater()->refresh_print();
+        //wxGetApp().plater()->refresh_print(); //doesn't work anymore, as there is a check to avoid redrawing uselessy, now call this->load(m_gcode_result->get(), m_print->get()) directly
+        if (m_gcode_result.has_value() && m_print.has_value()) {
+            this->load(m_gcode_result->get(), m_print->get());
+            this->refresh(m_gcode_result->get(), m_last_str_tool_colors);
+            wxGetApp().plater()->get_current_canvas3D()->set_as_dirty();
+            wxGetApp().plater()->get_current_canvas3D()->request_extra_frame();
+        }
         view_type_changed = true;
+        ImGui::ResetMaxCursorScreenPos();
     }
 
     // extrusion paths section -> title
@@ -4727,7 +4747,11 @@ void GCodeViewer::render_legend(float& legend_height)
           if (imgui.button(btn_text, ImVec2(-1.0f, 0.0f), true)) {
               m_extrusions.role_visibility_flags = custom_visible ? m_extrusions.role_visibility_flags & ~(1 << int(GCodeExtrusionRole::Custom)) :
                   m_extrusions.role_visibility_flags | (1 << int(GCodeExtrusionRole::Custom));
-              wxGetApp().plater()->refresh_print();
+              // note: the visibility doesn't deactivate if we change the m_view_type ...
+              // update buffers' render paths
+              refresh_render_paths(false, false);
+              wxGetApp().plater()->update_preview_moves_slider();
+              wxGetApp().plater()->get_current_canvas3D()->set_as_dirty();
           }
         }
     }
@@ -4990,13 +5014,22 @@ void GCodeViewer::render_legend(float& legend_height)
             set_options_visibility_from_flags(new_flags);
 
             const unsigned int diff_flags = flags ^ new_flags;
-            if (m_view_type == GCodeViewer::EViewType::Feedrate && is_flag_set(diff_flags, static_cast<unsigned int>(Preview::OptionType::Travel)))
-                wxGetApp().plater()->refresh_print();
-            else {
+            bool refreshed = false;
+            if (m_view_type == GCodeViewer::EViewType::Feedrate && is_flag_set(diff_flags, static_cast<unsigned int>(Preview::OptionType::Travel))) {
+                // don't need a full refresh_print, just a refresh to recompute the speed scale.
+                if (m_gcode_result.has_value()) {
+                    this->refresh(m_gcode_result->get(), m_last_str_tool_colors);
+                    refreshed = true;
+                }
+            }
+            if (!refreshed) {
                 bool keep_first = m_sequential_view.current.first != m_sequential_view.global.first;
                 bool keep_last = m_sequential_view.current.last != m_sequential_view.global.last;
-                wxGetApp().plater()->get_current_canvas3D()->refresh_gcode_preview_render_paths(keep_first, keep_last);
+                refresh_render_paths(keep_first, keep_last);
             }
+
+            wxGetApp().plater()->get_current_canvas3D()->set_as_dirty();
+            wxGetApp().plater()->get_current_canvas3D()->request_extra_frame();
             wxGetApp().plater()->update_preview_moves_slider();
         }
 
@@ -5013,6 +5046,13 @@ void GCodeViewer::render_legend(float& legend_height)
     ImGui::Separator();
     ImGui::Spacing();
     ImGui::Spacing();
+
+    // reset max width here, because buttons will take all the width -> they block the resize.
+    // icons are the true max width anyway, so it's reset just before them.
+    if (old_view_type != view_type) {
+        ImGui::ResetMaxCursorScreenPos();
+    }
+
     toggle_button(Preview::OptionType::Travel, _u8L("Travel"), [&imgui](ImGuiWindow& window, const ImVec2& pos, float size) {
         imgui.draw_icon(window, pos, size, ImGui::LegendTravel);
         });
@@ -5032,7 +5072,15 @@ void GCodeViewer::render_legend(float& legend_height)
     toggle_button(Preview::OptionType::Seams, _u8L("Seams"), [&imgui](ImGuiWindow& window, const ImVec2& pos, float size) {
         imgui.draw_icon(window, pos, size, ImGui::LegendSeams);
         });
-    ImGui::SameLine();
+    if (!wxGetApp().is_gcode_viewer()) {
+        ImGui::SameLine();
+        toggle_button(Preview::OptionType::Shells, _u8L("Shells"), [&imgui](ImGuiWindow& window, const ImVec2& pos, float size) {
+            imgui.draw_icon(window, pos, size, ImGui::LegendShells);
+            });
+    }
+    // put icons on two line if not FeatureType, as only FeatureType is very wide.
+    if(m_view_type == EViewType::FeatureType)
+        ImGui::SameLine();
     toggle_button(Preview::OptionType::ToolChanges, _u8L("Tool changes"), [&imgui](ImGuiWindow& window, const ImVec2& pos, float size) {
         imgui.draw_icon(window, pos, size, ImGui::LegendToolChanges);
         });
@@ -5053,12 +5101,6 @@ void GCodeViewer::render_legend(float& legend_height)
         imgui.draw_icon(window, pos, size, ImGui::LegendCOG);
         });
     ImGui::SameLine();
-    if (!wxGetApp().is_gcode_viewer()) {
-        toggle_button(Preview::OptionType::Shells, _u8L("Shells"), [&imgui](ImGuiWindow& window, const ImVec2& pos, float size) {
-            imgui.draw_icon(window, pos, size, ImGui::LegendShells);
-            });
-        ImGui::SameLine();
-    }
     toggle_button(Preview::OptionType::ToolMarker, _u8L("Tool marker"), [&imgui](ImGuiWindow& window, const ImVec2& pos, float size) {
         imgui.draw_icon(window, pos, size, ImGui::LegendToolMarker);
         });

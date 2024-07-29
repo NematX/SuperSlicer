@@ -500,6 +500,7 @@ static std::vector<std::string> s_Preset_print_options {
         "overhangs_reverse",
         "overhangs_reverse_threshold",
         "perimeter_reverse",
+        "perimeter_direction",
         "seam_position",
         "seam_angle_cost",
         "seam_notch_all",
@@ -710,7 +711,7 @@ static std::vector<std::string> s_Preset_print_options {
         "bridge_overlap_min",
         "first_layer_flow_ratio",
         "second_layer_flow_ratio",
-        "clip_multipart_objects", "enforce_full_fill_volume",
+        "enforce_full_fill_volume",
         "external_infill_margin", "bridged_infill_margin",
         "small_area_infill_flow_compensation", "small_area_infill_flow_compensation_model",
         // compensation
@@ -759,7 +760,6 @@ static std::vector<std::string> s_Preset_print_options {
         "resolution",
         "resolution_internal",
         "bridge_precision",
-        "gcode_resolution", //TODO what to do with it?
         "curve_smoothing_precision",
         "curve_smoothing_cutoff_dist",
         "curve_smoothing_angle_convex",
@@ -896,8 +896,10 @@ static std::vector<std::string> s_Preset_printer_options {
     "use_relative_e_distances",
     "use_firmware_retraction", "use_volumetric_e", "variable_layer_height",
     "lift_min",
-            "min_length",
-            "max_gcode_per_second",
+    "gcode_command_buffer",
+    "gcode_min_length",
+    "gcode_min_resolution",
+    "max_gcode_per_second",
     //FIXME the print host keys are left here just for conversion from the Printer preset to Physical Printer preset.
     "host_type", "print_host", "printhost_apikey", "printhost_cafile", "printhost_port",
     "single_extruder_multi_material", 

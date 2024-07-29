@@ -3550,10 +3550,11 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
         for (size_t i_seg = 0; i_seg < vseg.segments.size(); i_seg++) {
             Polyline &poly = vseg.segments[i_seg];
             assert(poly.size() > 1);
-            std::unique_ptr<ExtrusionPath> path(new ExtrusionPath(good_role,
-                                                                  params.flow.mm3_per_mm() * params.flow_mult,
-                                                                  (float) (params.flow.width() * params.flow_mult),
-                                                                  (float) params.flow.height(), true));
+            std::unique_ptr<ExtrusionPath> path(
+                new ExtrusionPath({good_role,
+                                   {params.flow.mm3_per_mm() * params.flow_mult,
+                                    (float) (params.flow.width() * params.flow_mult), (float) params.flow.height()}},
+                                  true));
             path->polyline = poly;
             current_paths->append(path);
             // Create travel
@@ -3618,9 +3619,11 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
                                     ) {
                                     // found one, add it
                                     std::unique_ptr<ExtrusionPath> path(
-                                        new ExtrusionPath(good_role, params.flow.mm3_per_mm() * params.flow_mult,
-                                                          (float) (params.flow.width() * params.flow_mult),
-                                                          (float) params.flow.height(), true));
+                                        new ExtrusionPath({good_role,
+                                                           {params.flow.mm3_per_mm() * params.flow_mult,
+                                                            (float) (params.flow.width() * params.flow_mult),
+                                                            (float) params.flow.height()}},
+                                                          true));
                                     last_length    = poly_other.length();
                                     path->polyline = std::move(poly_other);
                                     bunch_paths->append(path);
@@ -3791,14 +3794,14 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
                     //    svg.draw(poly, "blue", scale_t(0.01));
                     ExtrusionPath *path;
                     if (params.config->fill_rectilinearholes_travel_flow_ratio == 0) {
-                        path = new ExtrusionPath(ExtrusionRole::erRectilinearAroundHoleInfillTravel, 0, 0,
-                                                 (float) params.flow.height(),
+                        path = new ExtrusionPath({ExtrusionRole::RectilinearAroundHoleInfillTravel,
+                                                  {0, 0, (float) params.flow.height()}},
                                                  true);
                     } else {
-                        path = new ExtrusionPath(ExtrusionRole::erRectilinearAroundHoleInfillTravel,
-                                                 params.config->fill_rectilinearholes_travel_flow_ratio.get_abs_value(
-                                                     params.flow.mm3_per_mm() * params.flow_mult),
-                                                 (float) (params.flow.width() * 0.1), (float) params.flow.height(),
+                        path = new ExtrusionPath({ExtrusionRole::RectilinearAroundHoleInfillTravel,
+                                                  {params.config->fill_rectilinearholes_travel_flow_ratio
+                                                       .get_abs_value(params.flow.mm3_per_mm() * params.flow_mult),
+                                                   (float) (params.flow.width() * 0.1), (float) params.flow.height()}},
                                                  true);
                     }
                     path->polyline = std::move(poly);
@@ -3808,10 +3811,10 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
                 assert(poly.empty());
             } else {
                 //// last seg. don't need to add travel. but still has bunch the lines.
-                //std::unique_ptr<ExtrusionPath> path(new ExtrusionPath(good_role,
+                //std::unique_ptr<ExtrusionPath> path(new ExtrusionPath({good_role,{
                 //                                                  params.flow.mm3_per_mm() * params.flow_mult,
                 //                                                  (float) (params.flow.width() * params.flow_mult),
-                //                                                  (float) params.flow.height(), false));
+                //                                                  (float) params.flow.height()}}, false));
                 //path->polyline = std::move(poly);
                 //current_paths->append(path);
                 poly.clear();
@@ -3844,11 +3847,11 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
             // No need to translate, the absolute position is irrelevant.
             // it->translate(- rotate_vector.second(0), - rotate_vector.second(1));
             // assert(! it->has_duplicate_points());
-            path.polyline.as_polyline().remove_duplicate_points();
-            path.polyline.as_polyline().rotate(rotate_vector.first);
+            path.polyline.normalize(); // remove point too enar to each other
+            path.polyline.rotate(rotate_vector.first);
             // FIXME rather simplify the paths to avoid very short edges?
             // assert(! it->has_duplicate_points());
-            path.polyline.as_polyline().remove_duplicate_points();
+            //path.polyline.normalize();
         }
     }visitor;
     visitor.rotate_vector = rotate_vector;

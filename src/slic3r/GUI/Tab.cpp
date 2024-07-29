@@ -150,6 +150,8 @@ void Tab::create_preset_tab()
 #endif //__WINDOWS__
 
     m_preset_bundle = wxGetApp().preset_bundle.get();
+    // Index of the last icon inserted into m_treectrl (need for init, as init will create isons)
+    m_icon_count = -1;
     init();
 
     // Vertical sizer to hold the choice menu and the rest of the page.
@@ -323,8 +325,6 @@ void Tab::create_preset_tab()
     m_treectrl->SetBackgroundColour(m_parent->GetBackgroundColour());
 #endif
     m_left_sizer->Add(m_treectrl, 1, wxEXPAND);
-    // Index of the last icon inserted into m_treectrl
-    m_icon_count = -1;
     m_treectrl->AddRoot("root");
     m_treectrl->SetIndent(0);
     wxGetApp().UpdateDarkUI(m_treectrl);
@@ -486,6 +486,7 @@ int Tab::get_icon_id(const wxString& title, const std::string& icon)
             m_category_icon[title] = icon;
         }
     }
+    assert(icon_idx >= 0 && (icon_idx == 0 || icon_idx < m_scaled_icons_list.size()));
     return icon_idx;
 }
 
@@ -1418,7 +1419,7 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
         update_wiping_button_visibility();
 
     if (opt_key == "extruders_count") {
-        wxGetApp().plater()->on_extruders_change(boost::any_cast<int>(value));
+        wxGetApp().plater()->on_extruders_change(boost::any_cast<int32_t>(value));
     }
 
     if (opt_key == "duplicate_distance") {
@@ -1468,6 +1469,22 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
         // And call of the update() can causes a redundant check of the config values,
         // see https://github.com/prusa3d/PrusaSlicer/issues/7146
         return;
+    }
+    
+    if ("fill_density" == opt_key && m_config->get_float("fill_density") >= 100 && m_config->get_int("solid_infill_every_layers") != 1)
+    {
+        const wxString msg_text = _(L("You set the sparse infill to have 100% fill density. If you want to have only solid infill, you should set 'solid_infill_every_layers' to 1."
+            "\n\nIf not, then the sparse infill will still be considered as 'sparse' even at 100% density."
+            " This can be useful if you want the 'sparse area' to be printed quicker, or with wider extrusions."));
+        RichMessageDialog dialog(m_parent, msg_text, _(L("100% density on sparse infill")), wxICON_WARNING | wxYES_NO);
+        dialog.SetYesNoLabels(_L("Only solid"), _L("Keep sparse"));
+        int res = dialog.ShowModal();
+        if (res == wxID_YES) {
+            boost::any val = int32_t(1);
+            m_config->opt_int("solid_infill_every_layers") = 1;
+            //m_config->set_key_value("solid_infill_every_layers", new ConfigOptionInt(1));
+            this->on_value_change("solid_infill_every_layers", val);
+        }
     }
 
     update();
@@ -1536,7 +1553,8 @@ void Tab::activate_option(const std::string& opt_key, const wxString& category)
             set_focus(field->getWindow());
     }
 
-    m_highlighter.init(get_custom_ctrl_with_blinking_ptr(opt_key));
+    auto [custom_ctrl, blink_ptr] = get_custom_ctrl_with_blinking_ptr(opt_key);
+    m_highlighter.init(custom_ctrl, blink_ptr);
 }
 
 void TabFrequent::activate_option(const std::string &opt_key, const wxString &category){
@@ -4302,6 +4320,7 @@ void Tab::rebuild_page_tree()
     {
         if (!p->get_show())
             continue;
+        assert(p->iconID() < this->m_scaled_icons_list.size());
         auto itemId = m_treectrl->AppendItem(rootItem, translate_category(p->title(), type()), p->iconID());
         m_treectrl->SetItemTextColour(itemId, p->get_item_colour());
         m_treectrl->SetItemFont(itemId, wxGetApp().normal_font());
@@ -5991,6 +6010,7 @@ Page::Page(Tab* tab, wxWindow* parent, const wxString& title, int iconID) :
         m_iconID(iconID)
 {
     assert(m_tab);
+    assert(m_iconID >= 0 && m_iconID < 1000);
     if (parent)
         m_vsizer = (wxBoxSizer*)parent->GetSizer();
     m_item_color = &wxGetApp().get_label_clr_default();

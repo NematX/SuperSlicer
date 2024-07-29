@@ -1243,7 +1243,7 @@ void Sidebar::jump_to_option(size_t selected)
 {
     const Search::Option& opt = p->searcher.get_option(selected);
     if (opt.type == Preset::TYPE_PREFERENCES)
-        wxGetApp().open_preferences(boost::nowide::narrow(opt.key), boost::nowide::narrow(opt.group));
+        wxGetApp().open_preferences(opt.opt_key(), boost::nowide::narrow(opt.group));
     else {
     ConfigOptionMode mode = wxGetApp().get_mode();
     if ((opt.tags & mode) != mode) {
@@ -1270,7 +1270,7 @@ void Sidebar::jump_to_option(size_t selected)
         }
     }
 
-        wxGetApp().get_tab(opt.type)->activate_option(opt.opt_key_with_idx(), boost::nowide::narrow(opt.category));
+        wxGetApp().get_tab(opt.type, false)->activate_option(opt.opt_key_with_idx(), boost::nowide::narrow(opt.category));
     }
 
 }
@@ -2235,7 +2235,7 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
 {
     background_process.set_fff_print(&fff_print);
     background_process.set_sla_print(&sla_print);
-    background_process.set_gcode_result(&gcode_result);
+    background_process.set_gcode_result(gcode_result);
     background_process.set_thumbnail_cb([this](const ThumbnailsParams& params) { return this->generate_thumbnails(params, Camera::EType::Ortho); });
     background_process.set_slicing_completed_event(EVT_SLICING_COMPLETED);
     background_process.set_finished_event(EVT_PROCESS_COMPLETED);
@@ -2252,7 +2252,7 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
     this->q->Bind(EVT_SLICING_UPDATE, &priv::on_slicing_update, this);
 
     view3D = new View3D(q, bed, &model, config, &background_process);
-    preview = new Preview(q, bed, &model, config, &background_process, &gcode_result, [this]() { schedule_background_process(); });
+    preview = new Preview(q, bed, &model, config, background_process, gcode_result, [this]() { schedule_background_process(); });
 
 #ifdef __APPLE__
     // set default view_toolbar icons size equal to GLGizmosManager::Default_Icons_Size
@@ -2749,7 +2749,14 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                 if (load_config) {
                     if (!config.empty()) {
                         const auto* post_process = config.opt<ConfigOptionStrings>("post_process");
+                        size_t max_size = 0;
                         if (post_process != nullptr && !post_process->empty()) {
+                            for (std::string str : post_process->get_values()) {
+                                boost::trim(str);
+                                max_size = std::max(max_size, str.size());
+                            }
+                        }
+                        if (max_size > 0) {
                             // TRN The placeholder is either "3MF" or "AMF"
                             wxString msg = GUI::format_wxstr(_L("The selected %1% file contains a post-processing script.\n"
                                 "Please review the script carefully before exporting G-code."), type_3mf ? "3MF" : "AMF" );
@@ -5985,7 +5992,7 @@ protected:
 LoadProjectsDialog::LoadProjectsDialog(const std::vector<fs::path>& paths)
     : DPIDialog(static_cast<wxWindow*>(wxGetApp().mainframe), wxID_ANY,
         format_wxstr(_L("%1% - Multiple projects file"), SLIC3R_APP_NAME), wxDefaultPosition,
-        wxDefaultSize, wxDEFAULT_DIALOG_STYLE)
+        wxDefaultSize, wxDEFAULT_DIALOG_STYLE, "loadproject")
 {
     SetFont(wxGetApp().normal_font());
 
@@ -6376,7 +6383,7 @@ protected:
 ProjectDropDialog::ProjectDropDialog(const std::string& filename)
     : DPIDialog(static_cast<wxWindow*>(wxGetApp().mainframe), wxID_ANY,
         format_wxstr("%1% - %2%", SLIC3R_APP_NAME, _L("Load project file")), wxDefaultPosition,
-        wxDefaultSize, wxDEFAULT_DIALOG_STYLE)
+        wxDefaultSize, wxDEFAULT_DIALOG_STYLE, "projectdrop")
 {
     SetFont(wxGetApp().normal_font());
 
@@ -8147,10 +8154,10 @@ void Plater::on_activate()
 }
 
 // Get vector of extruder colors considering filament color, if extruder color is undefined.
-std::vector<std::string> Plater::get_extruder_colors_from_plater_config(const GCodeProcessorResult* const result) const
+std::vector<std::string> Plater::get_extruder_colors_from_plater_config(std::optional<std::reference_wrapper<const GCodeProcessorResult>> result) const
 {
-    if (wxGetApp().is_gcode_viewer() && result != nullptr)
-        return result->extruder_colors;
+    if (wxGetApp().is_gcode_viewer() && result.has_value())
+        return result->get().extruder_colors;
     else {
         const Slic3r::DynamicPrintConfig* config = &wxGetApp().preset_bundle->printers.get_edited_preset().config;
         std::vector<std::string> extruder_colors;
@@ -8173,13 +8180,13 @@ std::vector<std::string> Plater::get_extruder_colors_from_plater_config(const GC
 /* Get vector of colors used for rendering of a Preview scene in "Color print" mode
  * It consists of extruder colors and colors, saved in model.custom_gcode_per_print_z
  */
-std::vector<std::string> Plater::get_colors_for_color_print(const GCodeProcessorResult* const result) const
+std::vector<std::string> Plater::get_colors_for_color_print(std::optional<std::reference_wrapper<const GCodeProcessorResult>> result) const
 {
     std::vector<std::string> colors = get_extruder_colors_from_plater_config(result);
     colors.reserve(colors.size() + p->model.custom_gcode_per_print_z.gcodes.size());
 
-    if (wxGetApp().is_gcode_viewer() && result != nullptr) {
-        for (const CustomGCode::Item& code : result->custom_gcode_per_print_z) {
+    if (wxGetApp().is_gcode_viewer() && result.has_value()) {
+        for (const CustomGCode::Item& code : result->get().custom_gcode_per_print_z) {
             if (code.type == CustomGCode::ColorChange)
                 colors.emplace_back(code.color);
         }
