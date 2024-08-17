@@ -13,7 +13,7 @@
 #include <optional>
 
 #include "libslic3r.h"
-#include "GCode/GcodeFormatter.hpp"
+#include "GCode/GCodeFormatter.hpp"
 #include "Point.hpp"
 
 namespace Slic3r {
@@ -43,7 +43,7 @@ public:
     virtual std::pair<double, double> extrude(double dE);
     virtual std::pair<double, double> retract(double retract_length, std::optional<double> restart_extra, std::optional<double> restart_extra_from_toolchange);
     virtual std::pair<double, double> unretract();
-    virtual void   reset_retract();
+    virtual void                      reset_retract();
     virtual bool                      need_unretract();
     // How much to retract yet before retract_length is reached?
     // The value is quantized to G-code resolution.

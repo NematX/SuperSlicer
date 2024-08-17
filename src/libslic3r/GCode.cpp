@@ -1445,7 +1445,7 @@ void GCodeGenerator::_do_export(Print& print_mod, GCodeOutputStream &file, Thumb
     const PrintObject *first_object         = print.objects().front();
     const double       layer_height         = first_object->config().layer_height.value;
 
-    const double       first_layer_height   = print.get_first_layer_height();
+    const double       first_layer_height   = print.get_min_first_layer_height();
     if (!export_to_binary_gcode) {
         for (size_t region_id = 0; region_id < print.num_print_regions(); ++ region_id) {
             const PrintRegion &region = print.get_print_region(region_id);
@@ -2726,6 +2726,7 @@ void GCodeGenerator::_print_first_layer_bed_temperature(std::string &out, const 
 // M191 - Set chamber Temperature and Wait
 void GCodeGenerator::_print_first_layer_chamber_temperature(std::string &out, const Print &print, const std::string &gcode, uint16_t first_printing_extruder_id, bool wait)
 {
+    bool autoemit = print.config().autoemit_temperature_commands;
     // Initial bed temperature based on the first extruder.
     int  temp = print.config().chamber_temperature.get_at(first_printing_extruder_id);
     //disable bed temp control if 0
@@ -2733,12 +2734,12 @@ void GCodeGenerator::_print_first_layer_chamber_temperature(std::string &out, co
     // Is the bed temperature set by the provided custom G-code?
     int  temp_by_gcode     = -1;
     bool temp_set_by_gcode = custom_gcode_sets_temperature(gcode, 141, 191, false, temp_by_gcode);
-    if (temp_set_by_gcode && temp_by_gcode >= 0 && temp_by_gcode < 1000)
+    if (autoemit && temp_set_by_gcode && temp_by_gcode >= 0 && temp_by_gcode < 1000)
         temp = temp_by_gcode;
     // Always call m_writer.set_chamber_temperature() so it will set the internal "current" state of the chamber temp as if
     // the custom start G-code emited these.
     std::string set_temp_gcode = m_writer.set_chamber_temperature(temp, wait);
-    if (!temp_set_by_gcode && !set_temp_gcode.empty())
+    if (autoemit && !temp_set_by_gcode && !set_temp_gcode.empty())
         out += (set_temp_gcode);
 }
 
@@ -3205,9 +3206,15 @@ LayerResult GCodeGenerator::process_layer(
         m_enable_loop_clipping = !enable;
     }
 
-
     std::string gcode;
     assert(is_decimal_separator_point()); // for the sprintfs
+
+    // unless this layer print only this object, it needs to end here so the layer change won't be skipped.
+    if (layers.size() > 1
+        || layers.front().object()->id() != m_gcode_label_objects_last_object_id
+        || layers.front().object()->instances().size() > 1) {
+        ensure_end_object_change_labels(gcode);
+    }
 
     // add tag for processor
     gcode += ";" + GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Layer_Change) + "\n";
@@ -3240,6 +3247,7 @@ LayerResult GCodeGenerator::process_layer(
             print.config().before_layer_gcode.value, m_writer.tool()->id(), &config)
             + "\n";
     }
+
     // print z move to next layer UNLESS (HACK for superslicer#1775)
     // if it's going to the first layer, then we may want to delay the move in these condition:
     // there is no "after layer change gcode" and it's the first move from the unknown
@@ -3616,8 +3624,8 @@ void GCodeGenerator::process_layer_single_object(
                 m_avoid_crossing_perimeters.use_external_mp_once();
             m_current_instance = next_instance;
             this->set_origin(unscale(offset));
-            assert(!m_gcode_label_objects_in_session);
             m_gcode_label_objects_start = m_label_objects.start_object(instance, GCode::LabelObjects::IncludeName::No);
+            m_gcode_label_objects_last_object_id = print_object.id();
             
             if (!print_args.print_instance.print_object.config().object_gcode.value.empty()) {
                 DynamicConfig config;

@@ -1915,6 +1915,7 @@ void PrintConfigDef::init_fff_params()
         "Usual values are between 0.9 and 1.1. If you think you need to change this more, "
         "check filament diameter and your firmware E steps.");
     def->mode = comSimpleAE | comPrusa;
+    def->min = 0;
     def->max = 2;
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionFloats { 1. });
@@ -1930,7 +1931,8 @@ void PrintConfigDef::init_fff_params()
         " Its only purpose is to offer the same functionality but on a per-object basis."); // TODO: replace "against" with "with"?
     def->sidetext = L("%");
     def->mode = comSimpleAE | comSuSi;
-    def->min = 2;
+    def->min = 0;
+    def->max = 200;
     def->set_default_value(new ConfigOptionPercent(100));
 
     def = this->add("extrusion_width", coFloatOrPercent);
@@ -10941,6 +10943,7 @@ OtherPresetsConfigDef::OtherPresetsConfigDef()
     def->label = L("Filament preset name");
     def->tooltip = L("Names of the filament presets used for slicing. The variable is a vector "
                      "containing one name for each extruder.");
+    def->is_vector_extruder = true;
 
     def = this->add("printer_preset", coString);
     def->label = L("Printer preset name");
