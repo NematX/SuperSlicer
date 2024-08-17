@@ -242,13 +242,13 @@ ExtrusionLoop::ClosestPathPoint ExtrusionLoop::get_closest_path_and_point(const 
     double           min2_non_overhang = std::numeric_limits<double>::max();
     for (const ExtrusionPath &path : this->paths) {
         std::pair<int, Point> foot_pt_ = path.polyline.foot_pt(point);
-        double d2 = (foot_pt_.second - point).cast<double>().squaredNorm();
+        double                d2       = (foot_pt_.second - point).cast<double>().squaredNorm();
         if (d2 < min2) {
             out.foot_pt     = foot_pt_.second;
             out.path_idx    = &path - &this->paths.front();
             out.segment_idx = foot_pt_.first;
             min2            = d2;
-            }
+        }
         if (prefer_non_overhang && !path.role().is_bridge() && d2 < min2_non_overhang) {
             best_non_overhang.foot_pt     = foot_pt_.second;
             best_non_overhang.path_idx    = &path - &this->paths.front();

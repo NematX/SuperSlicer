@@ -475,8 +475,8 @@ public:
     bool            is_clockwise() const { return this->area() < 0; }
     // Used by PerimeterGenerator to reorient extrusion loops. (old make_clockwise() and make_counter_clockwise())
     void            reverse() override;
-    const Point& first_point() const override { return this->paths.front().polyline.front(); }
-    const Point& last_point() const override { assert(this->first_point() == this->paths.back().polyline.back()); return this->first_point(); }
+    const Point&    first_point() const override { return this->paths.front().polyline.front(); }
+    const Point&    last_point() const override { assert(this->first_point() == this->paths.back().polyline.back()); return this->first_point(); }
     // Is it really what you can call a middle point?: 
     const Point&    middle_point() const override { auto& path = this->paths[this->paths.size() / 2]; return path.polyline.middle(); }
     Polygon polygon() const;
@@ -630,7 +630,7 @@ struct HasThisRoleVisitor : public HasRoleVisitor{
 class ConfigOptionFloatOrPercent;
 class SimplifyVisitor : public ExtrusionVisitorRecursive {
     ArcFittingType                    m_use_arc_fitting;
-    coordf_t m_scaled_resolution;
+    coordf_t                          m_scaled_resolution;
     const ConfigOptionFloatOrPercent* m_arc_fitting_tolearance;
 public:
     SimplifyVisitor(coordf_t scaled_resolution, ArcFittingType use_arc_fitting, const ConfigOptionFloatOrPercent *arc_fitting_tolearance)
