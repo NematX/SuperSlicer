@@ -79,7 +79,7 @@ int main(int argc, char const *argv[])
 
     const char* target = argv[1];
     const char* filename = argv[2];
-    
+
     const auto error_exit = [=](const char* error) {
         std::cerr << "Target: " << target << " @"<< filename << "\n\tError: " << error << std::endl;
         std::exit(-2);

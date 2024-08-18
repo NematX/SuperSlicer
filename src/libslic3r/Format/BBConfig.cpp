@@ -597,8 +597,8 @@ void very_complicated_convert(ConfigSubstitutionContext &unconverted_config, Con
             double overhangs_max_slope = std::tan(make_overhang_printable_angle) * layer_height;
             conf_to_read_and_update.set_deserialize("overhangs_max_slope",
                                                     Slic3r::to_string_nozero(overhangs_max_slope, 3));
-            conf_to_read_and_update.set_deserialize("overhangs_bridge_threshold", "-1");
-            conf_to_read_and_update.set_deserialize("overhangs_bridge_upper_layers", "-1");
+            conf_to_read_and_update.set_deserialize("overhangs_bridge_threshold", "!0");
+            conf_to_read_and_update.set_deserialize("overhangs_bridge_upper_layers", "!0");
             unconverted_config.erase("make_overhang_printable");
             unconverted_config.erase("make_overhang_printable_angle");
         } else {
@@ -822,11 +822,18 @@ bool read_json_file_bambu(const std_path &temp_file,
             continue;
         if (auto it = key_translation_map.find(key); it != key_translation_map.end())
             key = it->second;
+        
         std::string check_val = values[0];
         PrintConfigDef::handle_legacy(key, values[0], false);
-        assert(check_val == values[0]); // can't change a vec value, sadly.
-        if (!key.empty())
+        if (!key.empty()) {
+            if (check_val != values[0]) {
+                for (size_t idx = 1; idx < values.size(); ++idx) {
+                    PrintConfigDef::handle_legacy(key, values[0], false);
+                    assert(!key.empty());
+                }
+            }
             good_key_vector_values[key] = values;
+        }
         //else
         //    config_substitutions.substitutions.push_back(ConfigSubstitution{ nullptr, entry.first+std::string(" : ")+(values.empty()?"":values.front()), nullptr});
     }

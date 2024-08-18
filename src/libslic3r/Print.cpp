@@ -106,11 +106,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
         "deretract_speed",
         "disable_fan_first_layers",
         "duplicate_distance",
-        "enable_dynamic_fan_speeds",
-          "overhang_fan_speed_0",
-          "overhang_fan_speed_1",
-          "overhang_fan_speed_2",
-          "overhang_fan_speed_3",
+        "overhangs_dynamic_fan_speed",
         "enforce_retract_first_layer",
         "end_gcode",
         "end_filament_gcode",
@@ -1160,13 +1156,13 @@ void Print::process()
     bool something_done = !is_step_done_unguarded(psSkirtBrim);
     BOOST_LOG_TRIVIAL(info) << "Starting the slicing process." << log_memory_info();
 
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, m_objects.size(), 1), [this](const tbb::blocked_range<size_t> &range) {
-        for (size_t idx = range.begin(); idx < range.end(); ++idx) {
+    Slic3r::parallel_for(size_t(0), m_objects.size(),
+        [this](const size_t idx) {
             m_objects[idx]->make_perimeters();
             m_objects[idx]->infill();
             m_objects[idx]->ironing();
         }
-    }, tbb::simple_partitioner());
+    );
 
     // The following step writes to m_shared_regions, it should not run in parallel.
     for (PrintObject *obj : m_objects)
@@ -1176,14 +1172,14 @@ void Print::process()
     alert_when_supports_needed();
 
     this->set_status(50, L("Generating support material"));
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, m_objects.size(), 1), [this](const tbb::blocked_range<size_t> &range) {
-        for (size_t idx = range.begin(); idx < range.end(); ++idx) {
+    Slic3r::parallel_for(size_t(0), m_objects.size(),
+        [this](const size_t idx) {
             PrintObject &obj = *m_objects[idx];
             obj.generate_support_material();
             obj.estimate_curled_extrusions();
             obj.calculate_overhanging_perimeters();
         }
-    }, tbb::simple_partitioner());
+    );
 
     if (this->set_started(psWipeTower)) {
         m_wipe_tower_data.clear();
@@ -1223,15 +1219,13 @@ void Print::process()
                     obj->m_instances.emplace_back();
                     this->_make_skirt({ obj }, obj->m_skirt, obj->m_skirt_first_layer);
                     obj->m_instances = copies;
-#ifdef _DEBUG
-                    obj->m_skirt.start_visit(CheckOrientation(true));
-#endif
+                    DEBUG_VISIT(obj->m_skirt, CheckOrientation(true))
+                    DEBUG_VISIT(obj->m_skirt, LoopAssertVisitor())
                 }
             } else {
                 this->_make_skirt(m_objects, m_skirt, m_skirt_first_layer);
-#ifdef _DEBUG
-                m_skirt.start_visit(CheckOrientation(true));
-#endif
+                DEBUG_VISIT(m_skirt, CheckOrientation(true))
+                DEBUG_VISIT(m_skirt, LoopAssertVisitor())
             }
         }
 
@@ -1337,12 +1331,15 @@ void Print::process()
                     std::set<uint16_t> set_extruders = this->object_extruders(m_objects);
                     append(set_extruders, this->support_material_extruders());
                     Flow        flow = this->brim_flow(set_extruders.empty() ? get_print_region(0).config().perimeter_extruder - 1 : *set_extruders.begin(), m_default_object_config);
+                    assert(m_brim.empty());
                     if (brim_config.brim_ears)
                         make_brim_ears(*this, flow, obj_group, brim_area, m_brim);
                     else
                         make_brim(*this, flow, obj_group, brim_area, m_brim);
+                    DEBUG_VISIT(m_brim, LoopAssertVisitor())
                     if (brim_config.brim_width_interior > 0)
                         make_brim_interior(*this, flow, obj_group, brim_area, m_brim);
+                    DEBUG_VISIT(m_brim, LoopAssertVisitor())
                 }
             }
         }
@@ -1663,16 +1660,12 @@ void Print::_make_skirt(const PrintObjectPtrs &objects, ExtrusionEntityCollectio
             // The skirt lenght is not limited, extrude the skirt with the 1st extruder only.
         }
     }
-#ifdef _DEBUG
-    out.start_visit(CheckOrientation{true});
-#endif
+    DEBUG_VISIT(out, CheckOrientation(true))
     // Brims were generated inside out, reverse to print the outmost contour first.
     out.reverse();
     if (out_first_layer)
         out_first_layer->reverse();
-#ifdef _DEBUG
-    out.start_visit(CheckOrientation(true));
-#endif
+    DEBUG_VISIT(out, CheckOrientation(true))
 
     // Remember the outer edge of the last skirt line extruded as m_skirt_convex_hull.
     for (Polygon &poly : offset(convex_hull, distance + 0.5f * float(this->skirt_flow(extruders[extruders.size() - 1]).scaled_spacing()), ClipperLib::jtRound, float(scale_(0.1))))

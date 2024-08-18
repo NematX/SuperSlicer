@@ -157,7 +157,7 @@ public:
     /// Returns a flattened copy of this ExtrusionEntityCollection. That is, all of the items in its entities() vector are not collections.
     /// You should be iterating over flatten().entities() if you are interested in the underlying ExtrusionEntities (and don't care about hierarchy).
     /// \param preserve_ordering Flag to method that will flatten if and only if the underlying collection is sortable when True (default: False).
-    ExtrusionEntityCollection flatten(bool preserve_ordering = false) const;
+    ExtrusionEntityCollection flatten(bool preserve_ordering) const;
     void flatten(bool preserve_ordering, ExtrusionEntityCollection& out) const;
     double total_volume() const override { double volume=0.; for (const auto& ent : entities()) volume+=ent->total_volume(); return volume; }
 
@@ -177,7 +177,7 @@ public:
             extrusion_entity->collect_points(dst);
     }
 
-    double length() const override {
+    coordf_t length() const override {
         throw Slic3r::RuntimeError("Calling length() on a ExtrusionEntityCollection");
         return 0.;        
     }
@@ -187,10 +187,9 @@ public:
                 return false;
         return true;
     }
+    using ExtrusionEntity::visit;
     virtual void visit(ExtrusionVisitor &visitor) override { visitor.use(*this); };
     virtual void visit(ExtrusionVisitorConst &visitor) const override{ visitor.use(*this); };
-    void start_visit(ExtrusionVisitor &&visitor) { visitor.use(*this); };
-    void start_visit(ExtrusionVisitorConst &&visitor) const{ visitor.use(*this); };
 };
 
 //// visitors /////

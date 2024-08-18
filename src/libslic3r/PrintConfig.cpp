@@ -39,6 +39,7 @@
 #include <boost/thread.hpp>
 #include <boost/nowide/iostream.hpp>
 
+#include <algorithm>
 #include <float.h>
 
 namespace Slic3r {
@@ -388,6 +389,14 @@ static void assign_printer_technology_to_unknown(t_optiondef_map &options, Print
 namespace {
     const int max_temp = 1500;
 };
+
+ConfigOption *disable_defaultoption(ConfigOption *option) {
+    return option->set_can_be_disabled(true);
+}
+
+ConfigOptionVectorBase *disable_defaultoption(ConfigOptionVectorBase *option) {
+    return (ConfigOptionVectorBase *)option->set_can_be_disabled(true);
+}
 
 PrintConfigDef::PrintConfigDef()
 {
@@ -799,13 +808,15 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Bridges fan speed");
     def->category = OptionCategory::cooling;
     def->tooltip = L("This fan speed is enforced during bridges and overhangs. It won't slow down the fan if it's currently running at a higher speed."
-        "\nSet to -1 to disable this override (Bridges will use default fan speed)."
+        "\nSet to 0 to stop the fan."
+        "\nIf disabled, default fan speed will be used."
         "\nCan be disabled by disable_fan_first_layers and increased by low layer time.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comAdvancedE | comPrusa;
     def->is_vector_extruder = true;
+    def->can_be_disabled = true;
     def->set_default_value(new ConfigOptionInts{ 100 });
 
     def = this->add("bridge_type", coEnum);
@@ -824,10 +835,7 @@ void PrintConfigDef::init_fff_params()
         { "height", L("Layer height") },
         { "flow", L("Keep current flow") },
     });
-    def->min = -1;
-    def->max = 100;
     def->mode = comAdvancedE | comSuSi;
-    def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionEnum<BridgeType>{ BridgeType::btFromNozzle });
 
     def = this->add("bridge_flow_ratio", coPercent);
@@ -923,103 +931,6 @@ void PrintConfigDef::init_fff_params()
         "\nBe aware that the brim may be truncated if objects are too close together..");
     def->mode = comAdvancedE | comSuSi;
     def->set_default_value(new ConfigOptionBool(false));
-
-    def             = this->add("enable_dynamic_overhang_speeds", coBool);
-    def->label      = L("Enable dynamic overhang speeds");
-    def->category   = OptionCategory::speed;
-    def->tooltip    = L("This setting enables dynamic speed control on overhangs.");
-    def->mode       = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionBool(false));
-
-    // TRN PrintSettings : "Dynamic overhang speed"
-    auto overhang_speed_setting_description = L("Overhang size is expressed as a percentage of overlap of the extrusion with the previous layer: "
-                        "100% would be full overlap (no overhang), while 0% represents full overhang (floating extrusion, bridge). "
-                        "Speeds for overhang sizes in between are calculated via linear interpolation. "
-                        "If set as percentage, the speed is calculated over the external perimeter speed. "
-                        "Note that the speeds generated to gcode will never exceed the max volumetric speed value.");
-
-    def             = this->add("overhang_speed_0", coFloatOrPercent);
-    def->label      = L("speed for 0% overlap (bridge)");
-    def->category   = OptionCategory::speed;
-    def->tooltip    = overhang_speed_setting_description;
-    def->sidetext   = L("mm/s or %");
-    def->min        = 0;
-    def->mode       = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionFloatOrPercent(15, false));
-
-    def             = this->add("overhang_speed_1", coFloatOrPercent);
-    def->label      = L("speed for 25% overlap");
-    def->category   = OptionCategory::speed;
-    def->tooltip    = overhang_speed_setting_description;
-    def->sidetext   = L("mm/s or %");
-    def->min        = 0;
-    def->mode       = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionFloatOrPercent(15, false));
-
-    def             = this->add("overhang_speed_2", coFloatOrPercent);
-    def->label      = L("speed for 50% overlap");
-    def->category   = OptionCategory::speed;
-    def->tooltip    = overhang_speed_setting_description;
-    def->sidetext   = L("mm/s or %");
-    def->min        = 0;
-    def->mode       = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionFloatOrPercent(20, false));
-
-    def             = this->add("overhang_speed_3", coFloatOrPercent);
-    def->label      = L("speed for 75% overlap");
-    def->category   = OptionCategory::speed;
-    def->tooltip    = overhang_speed_setting_description;
-    def->sidetext   = L("mm/s or %");
-    def->min        = 0;
-    def->mode       = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionFloatOrPercent(25, false));
-
-    def          = this->add("enable_dynamic_fan_speeds", coBools);
-    def->label   = L("Enable dynamic fan speeds");
-    def->tooltip = L("This setting enables dynamic fan speed control on overhangs.");
-    def->mode    = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionBools{false});
-
-    // TRN FilamentSettings : "Dynamic fan speeds"
-    auto fan_speed_setting_description = L("Overhang size is expressed as a percentage of overlap of the extrusion with the previous layer: "
-        "100% would be full overlap (no overhang), while 0% represents full overhang (floating extrusion, bridge). "
-        "Fan speeds for overhang sizes in between are calculated via linear interpolation.");
-
-    def           = this->add("overhang_fan_speed_0", coInts);
-    def->label    = L("speed for 0% overlap (bridge)");
-    def->tooltip  = fan_speed_setting_description;
-    def->sidetext = L("%");
-    def->min      = 0;
-    def->max      = 100;
-    def->mode     = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionInts{0});
-
-    def           = this->add("overhang_fan_speed_1", coInts);
-    def->label    = L("speed for 25% overlap");
-    def->tooltip  = fan_speed_setting_description;
-    def->sidetext = L("%");
-    def->min      = 0;
-    def->max      = 100;
-    def->mode     = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionInts{0});
-
-    def           = this->add("overhang_fan_speed_2", coInts);
-    def->label    = L("speed for 50% overlap");
-    def->tooltip  = fan_speed_setting_description;
-    def->sidetext = L("%");
-    def->min      = 0;
-    def->max      = 100;
-    def->mode     = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionInts{0});
-
-    def           = this->add("overhang_fan_speed_3", coInts);
-    def->label    = L("speed for 75% overlap");
-    def->tooltip  = fan_speed_setting_description;
-    def->sidetext = L("%");
-    def->min      = 0;
-    def->max      = 100;
-    def->mode     = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionInts{0});
 
     def = this->add("brim_width", coFloat);
     def->label = L("Brim width");
@@ -1357,12 +1268,13 @@ void PrintConfigDef::init_fff_params()
     def->tooltip  = L(
         "Default speed for the fan, to set the speed for features where there is no fan control. Useful for PLA and other low-temp filament."
         "\nSet 0 to disable the fan by default. Useful for ABS and other high-temp filaments."
-        "\nSet -1 to disable. if disabled, the beahavior isn't defined yet. The goal is to avoid adding fan speed commands.");
+        "\nIf disabled, no fan speed command will be emmited when possible (if a feature set a speed, it won't be reverted).");
     def->mode               = comSimpleAE | comSuSi;
-    def->min                = -1;
+    def->min                = 0;
     def->max                = 100;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts({-1}));
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
     def->aliases = { "min_fan_speed" }; // only if "fan_always_on"
 
     def = this->add("default_print_profile", coString);
@@ -1652,17 +1564,18 @@ void PrintConfigDef::init_fff_params()
     def = this->add("external_perimeter_fan_speed", coInts);
     def->label = L("External perimeter fan speed");
     def->tooltip = L("When set to a non-zero value this fan speed is used only for external perimeters (visible ones) and thin walls."
-                    "\nSet to 1 to disable the fan."
-                    "\nSet to -1 to use the normal fan speed on external perimeters."
-                    "External perimeters can benefit from higher fan speed to improve surface finish, "
+                    "\nSet to 0 to stop the fan."
+                    "\nIf disabled, the default fan speed will be used."
+                    "\nExternal perimeters can benefit from higher fan speed to improve surface finish, "
                     "while internal perimeters, infill, etc. benefit from lower fan speed to improve layer adhesion."
                     "\nCan be disabled by disable_fan_first_layers, slowed down by full_fan_speed_layer and increased by low layer time.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comAdvancedE | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts { -1 });
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
 
     def = this->add("external_perimeter_overlap", coPercent);
     def->label = L("external perimeter overlap");
@@ -2956,15 +2869,16 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Gap fill fan speed");
     def->category = OptionCategory::cooling;
     def->tooltip = L("This fan speed is enforced during all gap fill Perimeter moves"
-        "\nSet to 1 to disable fan."
-        "\nSet to -1 to disable this override (Gap Fill will use default fan speed)."
+        "\nSet to 0 to stop the fan."
+        "\nIf disabled, default fan speed will be used."
         "\nCan be disabled by disable_fan_first_layers, slowed down by full_fan_speed_layer and increased by low layer time.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comExpert | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts{ -1 });
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
 
     def = this->add("gap_fill_flow_match_perimeter", coPercent);
     def->label = L("Cap with perimeter flow");
@@ -3404,15 +3318,16 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Internal Infill fan speed");
     def->category = OptionCategory::cooling;
     def->tooltip = L("This fan speed is enforced during all Internal Infill moves"
-        "\nSet to 1 to disable fan."
-        "\nSet to -1 to disable this override (Internal Infill will use default fan speed)."
+        "\nSet to 0 to stop the fan."
+        "\nIf disabled, default fan speed will be used."
         "\nCan be disabled by disable_fan_first_layers, slowed down by full_fan_speed_layer and increased by low layer time.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comExpert | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts{ -1 });
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
 
     def = this->add("infill_first", coBool);
     def->label = L("Infill before perimeters");
@@ -3501,14 +3416,16 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Infill bridges fan speed");
     def->category = OptionCategory::cooling;
     def->tooltip = L("This fan speed is enforced during all infill bridges. It won't slow down the fan if it's currently running at a higher speed."
-        "\nSet to -1 to disable this override (Internal bridges will use Bridges fan speed)."
+        "\nSet to 0 to stop the fan."
+        "\nIf disabled, Bridge fan speed will be used."
         "\nCan be disabled by disable_fan_first_layers and increased by low layer time.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comAdvancedE | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts{ -1 });
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
     def->aliases = { "bridge_internal_fan_speed" };
 
     def = this->add("internal_bridge_speed", coFloatOrPercent);
@@ -3733,7 +3650,6 @@ void PrintConfigDef::init_fff_params()
     def->sidetext = L("mm");
     def->min = 0;
     def->mode = comExpert | comSuSi;
-    def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionFloat(0));
 
     def = this->add("machine_limits_usage", coEnum);
@@ -4204,19 +4120,116 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionFloatOrPercent(0,false));
 
+    def = this->add("overhangs_bridge_threshold", coFloat);
+    def->label = L("Bridge max length");
+    def->category = OptionCategory::slicing;
+    def->tooltip = L("Maximum distance for bridges. If the distance is over that, it will be considered as overhangs for 'overhangs_max_slope'."
+                    "\nIf disabled, accept all distances."
+                    "\nSet to 0 to ignore bridges.");
+    def->sidetext = L("mm");
+    def->min = 0;
+    def->can_be_disabled = true;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(disable_defaultoption(new ConfigOptionFloat(0)));
+
+    def = this->add("overhangs_bridge_upper_layers", coInt);
+    def->label = L("Consider upper bridges");
+    def->category = OptionCategory::slicing;
+    def->tooltip = L("Don't put overhangs if the area will filled in next layer by bridges."
+                    "\nIf disabled, accept all upper layers."
+                    "\nSet to 0 to only consider our layer bridges.");
+    def->sidetext = L("layers");
+    def->min = 0;
+    def->can_be_disabled = true;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionInt(2));
+
+    def             = this->add("overhangs_dynamic_fan_speed", coGraphs);
+    def->label      = L("Dynamic overhang speeds");
+    def->category   = OptionCategory::speed;
+    def->tooltip    = L("This setting can only works correctly if dynamic speed is also enabled (overhangs_dynamic_fan_speed)."
+        "\nOverhang size is expressed as a percentage of overlap of the extrusion with the previous layer: "
+        "100% would be full overlap (no overhang), while 0% represents full overhang (floating extrusion, bridge)."
+        "\nFan speeds for overhang sizes in between are calculated via linear interpolation."
+        "\nIf enabled, overhangs_fan_speed is disabled, as the fan speed for full overhang is used.");
+    def->sidetext   = L("%");
+    def->is_vector_extruder = true;
+    def->can_be_disabled = true;
+    def->mode       = comExpert | comPrusa;
+    def->set_default_value(disable_defaultoption(new ConfigOptionGraphs({GraphData(0,4, GraphData::GraphType::LINEAR,
+        {{0,100},{25,80},{50,60},{75,40},{100,20}}
+    )})));
+    def->graph_settings = std::make_shared<GraphSettings>();
+    def->graph_settings->title       = L("Overhangs fan speed by % of overlap");
+    def->graph_settings->description = L("Choose the Overhangs maximu fan speed for each percentage of overlap with the layer below."
+        "If the current fan speed (from perimeter, external, of default) is higher, then this setting won't slow the fan."
+        "\n100% overlap is when the extrusion is fully on top of the previous layer's extrusion."
+        "\n0% overlap is when the extrusion centerline is at a distance of 'overhangs threshold for speed'(overhangs_bridge_threshold)"
+        "\nfrom the nearest extrusion of the previous layer.");
+    def->graph_settings->x_label     = L("overlap % with previous layer");
+    def->graph_settings->y_label     = L("Fan speed (%)");
+    def->graph_settings->null_label  = L("No fan speed");
+    def->graph_settings->label_min_x = L("");
+    def->graph_settings->label_max_x = L("");
+    def->graph_settings->label_min_y = L("");
+    def->graph_settings->label_max_y = L("");
+    def->graph_settings->min_x       = 0;
+    def->graph_settings->max_x       = 100;
+    def->graph_settings->step_x      = 1.;
+    def->graph_settings->min_y       = 0;
+    def->graph_settings->max_y       = 100;
+    def->graph_settings->step_y      = 1.;
+    def->graph_settings->allowed_types = {GraphData::GraphType::LINEAR, GraphData::GraphType::SQUARE, GraphData::GraphType::SPLINE};
+
+    def             = this->add("overhangs_dynamic_speed", coGraph);
+    def->label      = L("Dynamic overhang speeds");
+    def->category   = OptionCategory::speed;
+    def->tooltip    = L("Overhang size is expressed as a percentage of overlap of the extrusion with the previous layer:"
+                        " 100% would be full overlap (no overhang), while 0% represents full overhang (floating extrusion, bridge)."
+                        " Speeds for overhang sizes in between are calculated via linear interpolation,"
+                        " as a percentage between the (external) perimeter speed and the overhang speed."
+                        "\nNote that the speeds generated to gcode will never exceed the max volumetric speed value.");
+    def->sidetext   = L("mm/s");
+    def->can_be_disabled = true;
+    def->mode       = comExpert | comPrusa;
+    def->set_default_value(disable_defaultoption(new ConfigOptionGraph(GraphData(0,4, GraphData::GraphType::LINEAR,
+        {{0,0},{25,10},{50,40},{75,70},{100,100}}
+    ))));
+    def->graph_settings = std::make_shared<GraphSettings>();
+    def->graph_settings->title       = L("Overhangs speed ratio by % of overlap");
+    def->graph_settings->description = L("Choose the Overhangs speed for each percentage of overlap with the layer below."
+        "\nThe speed is a percentage ratio between overhangs speed (for 0% overlap) and perimeter / external perimeter speed (for 100% overlap)."
+        "\n100% overlap is when the extrusion is fully on top of the previous layer's extrusion."
+        "\n0% overlap is when the extrusion centerline is at a distance of 'overhangs threshold for speed'(overhangs_bridge_threshold)"
+        "\nfrom the nearest extrusion of the previous layer.");
+    def->graph_settings->x_label     = L("overlap % with previous layer");
+    def->graph_settings->y_label     = L("Speed ratio (%)");
+    def->graph_settings->null_label  = L("Uses overhangs speed");
+    def->graph_settings->label_min_x = L("");
+    def->graph_settings->label_max_x = L("");
+    def->graph_settings->label_min_y = L("");
+    def->graph_settings->label_max_y = L("");
+    def->graph_settings->min_x       = 0;
+    def->graph_settings->max_x       = 100;
+    def->graph_settings->step_x      = 1.;
+    def->graph_settings->min_y       = 0;
+    def->graph_settings->max_y       = 100;
+    def->graph_settings->step_y      = 1.;
+    def->graph_settings->allowed_types = {GraphData::GraphType::LINEAR, GraphData::GraphType::SQUARE, GraphData::GraphType::SPLINE};
+
     def = this->add("overhangs_fan_speed", coInts);
     def->label = L("Overhangs Perimeter fan speed");
     def->category = OptionCategory::cooling;
     def->tooltip = L("This fan speed is enforced during all Overhang Perimeter moves"
-        "\nSet to 1 to disable fan."
-        "\nSet to -1 to disable this override (Overhang Perimeter use default fan speed)."
-        "\nCan be disabled by disable_fan_first_layers and increased by low layer time.");
+        "\nIf disabled, the previous (perimeter) fan speed will be used."
+        "\nCan be overriden by disable_fan_first_layers and increased by low layer time.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comAdvancedE | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts{ -1 });
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
 
     def = this->add("overhangs_max_slope", coFloatOrPercent);
     def->label = L("Overhangs max slope");
@@ -4231,28 +4244,6 @@ void PrintConfigDef::init_fff_params()
     def->min = 0;
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionFloatOrPercent(0, false));
-
-    def = this->add("overhangs_bridge_threshold", coFloat);
-    def->label = L("Bridge max length");
-    def->category = OptionCategory::slicing;
-    def->tooltip = L("Maximum distance for bridges. If the distance is over that, it will be considered as overhangs for 'overhangs_max_slope'."
-                    "\nSet to -1 to accept all distances."
-                    "\nSet to 0 to ignore bridges.");
-    def->sidetext = L("mm");
-    def->min = -1;
-    def->mode = comExpert | comSuSi;
-    def->set_default_value(new ConfigOptionFloat(-1));
-
-    def = this->add("overhangs_bridge_upper_layers", coInt);
-    def->label = L("Consider upper bridges");
-    def->category = OptionCategory::slicing;
-    def->tooltip = L("Don't put overhangs if the area will filled in next layer by bridges."
-                    "\nSet to -1 to accept all upper layers."
-                    "\nSet to 0 to only consider our layer bridges.");
-    def->sidetext = L("layers");
-    def->min = -1;
-    def->mode = comExpert | comSuSi;
-    def->set_default_value(new ConfigOptionInt(0));
 
     def = this->add("overhangs_speed", coFloatOrPercent);
     def->label = L("Overhangs");
@@ -4287,9 +4278,10 @@ void PrintConfigDef::init_fff_params()
     def->category = OptionCategory::perimeter;
     def->tooltip = L("Minimum unsupported width for an extrusion to apply the bridge fan & overhang speed to this overhang."
         " Can be in mm or in a % of the nozzle diameter."
-        " Set to 0 to deactivate overhangs.");
+        " If dynamic speed is used, then the dynamic speed will be used between 0% threshold and this setting threshold.");
     def->ratio_over = "nozzle_diameter";
     def->min = 0;
+    def->can_be_disabled = true;
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionFloatOrPercent(55,true));
 
@@ -4299,10 +4291,11 @@ void PrintConfigDef::init_fff_params()
     def->category = OptionCategory::perimeter;
     def->tooltip = L("Minimum unsupported width for an extrusion to apply the bridge flow to this overhang."
         " Can be in mm or in a % of the nozzle diameter."
-        " Set to 0 to deactivate bridge flow for overhangs.");
+        " It uses the threshold for overhangs speed if this one as a higher value as this one.");
     def->ratio_over = "nozzle_diameter";
     def->min = 0;
     def->max_literal = { 10, true };
+    def->can_be_disabled = true;
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionFloatOrPercent(75, true));
 
@@ -4434,7 +4427,6 @@ void PrintConfigDef::init_fff_params()
     def->sidetext = L("mm or %");
     def->aliases = { "perimeters_extrusion_width" };
     def->ratio_over = "nozzle_diameter";
-    def->is_vector_extruder = true;
     def->min = 0;
     def->max = 1000;
     def->max_literal = { 10, true };
@@ -4473,15 +4465,16 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Internal Perimeter fan speed");
     def->category = OptionCategory::cooling;
     def->tooltip = L("This fan speed is enforced during all Perimeter moves"
-        "\nSet to 1 to disable fan."
-        "\nSet to -1 to disable this override (Internal Perimeter use default fan speed)."
+        "\nSet to 0 to stop the fan."
+        "\nIf disabled, default fan speed will be used."
         "\nCan be disabled by disable_fan_first_layers, slowed down by full_fan_speed_layer and increased by low layer time.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comExpert | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts{ -1 });
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
 
     def = this->add("perimeter_loop", coBool);
     def->label = L("Perimeters loop");
@@ -4571,15 +4564,16 @@ void PrintConfigDef::init_fff_params()
     def->category = OptionCategory::perimeter;
     def->tooltip = L("This option sets the number of perimeters to have over holes."
                    " Note that if a hole-perimeter fuse with the contour, then it will go around like a contour perimeter.."
-                   "\nSet to -1 to deactivate, then holes will have the same number of perimeters as contour."
+                   "\nIf disabled, holes will have the same number of perimeters as contour."
                    "\nNote that Slic3r may increase this number automatically when it detects "
                    "sloping surfaces which benefit from a higher number of perimeters "
                    "if the Extra Perimeters option is enabled.");
     def->sidetext = L("(minimum).");
-    def->min = -1;
+    def->min = 0;
     def->max = 10000;
+    def->can_be_disabled = true;
     def->mode = comAdvancedE | comSuSi;
-    def->set_default_value(new ConfigOptionInt(-1));
+    def->set_default_value(disable_defaultoption(new ConfigOptionInt(0)));
 
     def = this->add("post_process", coStrings);
     def->label = L("Post-processing scripts");
@@ -5462,15 +5456,16 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Solid Infill fan speed");
     def->category = OptionCategory::cooling;
     def->tooltip = L("This fan speed is enforced during all Solid Infill moves"
-        "\nSet to 1 to disable fan."
-        "\nSet to -1 to disable this override (Solid Infill will use default fan speed)."
+        "\nSet to 0 to stop the fan."
+        "\nIf disabled, default fan speed will be used."
         "\nCan be disabled by disable_fan_first_layers, slowed down by full_fan_speed_layer and increased by low layer time.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comExpert | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts{ -1 });
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
 
     def = this->add("solid_infill_speed", coFloatOrPercent);
     def->label = L("Solid");
@@ -5846,15 +5841,16 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Support Material fan speed");
     def->category = OptionCategory::cooling;
     def->tooltip = L("This fan speed is enforced during all support moves"
-        "\nSet to 0 to disable fan."
-        "\nSet to -1 to disable this override (Support will use default fan speed)."
+        "\nSet to 0 to stop the fan."
+        "\nIf disabled, default fan speed will be used."
         "\nCan be disabled by disable_fan_first_layers, slowed down by full_fan_speed_layer.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comExpert | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts{ -1 });
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
 
     def = this->add("support_material_interface_angle", coFloat);
     def->label = L("Pattern angle");
@@ -5881,15 +5877,16 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Support interface fan speed");
     def->category = OptionCategory::cooling;
     def->tooltip = L("This fan speed is enforced during all support interfaces, to be able to weaken their bonding with a high fan speed."
-        "\nSet to 0 to disable the fan."
-        "\nSet to -1 to disable this override (Support Interface will use Support)."
+        "\nSet to 0 to stop the fan."
+        "\nIf disabled, Support Material fan speed will be used."
         "\nCan only be overriden by disable_fan_first_layers.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comAdvancedE | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts{ -1 });
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
 
 
     def = this->add("support_material_interface_contact_loops", coBool);
@@ -5926,20 +5923,20 @@ void PrintConfigDef::init_fff_params()
     def = this->add("support_material_bottom_interface_layers", coInt);
     def->label = L("Bottom interface layers");
     def->category = OptionCategory::support;
-    def->tooltip = L("Number of interface layers to insert between the object(s) and support material. "
-        "Set to -1 to use support_material_interface_layers");
+    def->tooltip = L("Number of interface layers to insert between the object(s) and support material."
+        "\nIf disabled, support_material_interface_layers value is used");
     def->sidetext = L("layers");
-    def->min = -1;
+    def->min = 0;
+    def->can_be_disabled = true;
     def->set_enum_values(ConfigOptionDef::GUIType::i_enum_open, {
     //TRN Print Settings: "Bottom interface layers". Have to be as short as possible
-        { "-1", L("Same as top") },
         { "0", L("0 (off)") },
         { "1", L("1 (light)") },
         { "2", L("2 (default)") },
         { "3", L("3 (heavy)") }
     });
     def->mode = comAdvancedE | comPrusa;
-    def->set_default_value(new ConfigOptionInt(-1));
+    def->set_default_value(disable_defaultoption(new ConfigOptionInt(0)));
 
     def = this->add("support_material_closing_radius", coFloat);
     def->label = L("Closing radius");
@@ -6427,15 +6424,16 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Top Solid fan speed");
     def->category = OptionCategory::cooling;
     def->tooltip = L("This fan speed is enforced during all top fills (including ironing)."
-        "\nSet to 1 to disable the fan."
-        "\nSet to -1 to disable this override (Top Solid Infill will use Solid Infill)."
+        "\nSet to 0 to stop the fan."
+        "\nIf disabled, Solid Infill fan speed will be used."
         "\nCan be disabled by disable_fan_first_layers, slowed down by full_fan_speed_layer.");
     def->sidetext = L("%");
-    def->min = -1;
+    def->min = 0;
     def->max = 100;
     def->mode = comAdvancedE | comSuSi;
     def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionInts{ -1 });
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts({ 100 })));
 
     def = this->add("top_infill_extrusion_width", coFloatOrPercent);
     def->label = L("Top solid infill");
@@ -6934,7 +6932,6 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("This string is edited by a Dialog and contains XY compensations for different hole diameters."
                     "\nThe graph is in mm of compensation per mm of diameter.");
     def->mode = comExpert | comSuSi;
-    def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionGraph(GraphData(0,0, GraphData::GraphType::LINEAR, {})));
     def->graph_settings = std::make_shared<GraphSettings>();
     def->graph_settings->title       = L("Compensation per hole diameter");
@@ -7138,42 +7135,45 @@ void PrintConfigDef::init_fff_params()
         "seam_gap"}) {
         auto it_opt = options.find(opt_key);
         assert(it_opt != options.end());
-        def = this->add_nullable(std::string("filament_") + opt_key, it_opt->second.type);
+        def = this->add(std::string("filament_") + opt_key, it_opt->second.type);
+        def->can_be_disabled = true;
+        def->is_optional = true;
         def->label      = it_opt->second.label;
         def->full_label = it_opt->second.full_label;
         def->tooltip    = it_opt->second.tooltip;
         def->sidetext   = it_opt->second.sidetext;
         def->mode       = it_opt->second.mode;
         // create default value with the default value is taken from the default value of the config.
-        // put a nil value as first entry.
+        // put a disbaled value as first entry.
         switch (def->type) {
         case coBools: {
-            ConfigOptionBoolsNullable* opt = new ConfigOptionBoolsNullable(it_opt->second.default_value.get()->get_bool());
-            opt->set_at(ConfigOptionBoolsNullable::NIL_VALUE(), 0);
+            ConfigOptionBools *opt = new ConfigOptionBools({it_opt->second.default_value.get()->get_bool()});
+            opt->set_can_be_disabled(true);
             def->set_default_value(opt);
             break;
         }
         case coFloats: {
-            ConfigOptionFloatsNullable *opt = new ConfigOptionFloatsNullable(it_opt->second.default_value.get()->get_float());
-            opt->set_any(ConfigOptionFloatNullable::create_any_nil(), 0);
+            ConfigOptionFloats *opt = new ConfigOptionFloats({it_opt->second.default_value.get()->get_float()});
+            opt->set_can_be_disabled(true);
             def->set_default_value(opt);
             break;
         }
         case coPercents: {
-            ConfigOptionPercentsNullable *opt = new ConfigOptionPercentsNullable(it_opt->second.default_value.get()->get_float());
-            opt->set_any(ConfigOptionFloatNullable::create_any_nil(), 0);
+            ConfigOptionPercents *opt = new ConfigOptionPercents({it_opt->second.default_value.get()->get_float()});
+            opt->set_can_be_disabled(true);
             def->set_default_value(opt);
             break;
         }
         case coFloatsOrPercents: {
-            ConfigOptionFloatsOrPercentsNullable*opt = new ConfigOptionFloatsOrPercentsNullable(
-                static_cast<const ConfigOptionFloatsOrPercents*>(it_opt->second.default_value.get())->get_at(0));
-            opt->set_any(ConfigOptionFloatsOrPercents::create_any_nil(), 0);
+            ConfigOptionFloatsOrPercents*opt = new ConfigOptionFloatsOrPercents(
+                {static_cast<const ConfigOptionFloatsOrPercents*>(it_opt->second.default_value.get())->get_at(0)});
+            opt->set_can_be_disabled(true);
             def->set_default_value(opt);
             break;
         }
         default: assert(false);
         }
+        assert(!def->default_value->is_enabled());
     }
 }
 
@@ -7768,15 +7768,16 @@ void PrintConfigDef::init_sla_params()
     def->mode = comSimpleAE | comPrusa;
     def->set_default_value(new ConfigOptionFloat(0.3));
 
-    def = this->add_nullable("idle_temperature", coInts);
+    def = this->add("idle_temperature", coInts);
     def->label = L("Idle temperature");
     def->tooltip = L("Nozzle temperature when the tool is currently not used in multi-tool setups."
-                     "This is only used when 'Ooze prevention' is active in Print Settings.");
+                     "\nThis is only used when 'Ooze prevention' is active in Print Settings.");
     def->sidetext = L("°C");
     def->min = 0;
     def->max = max_temp;
+    def->can_be_disabled = true;
     def->mode = comSimpleAE | comPrusa;
-    def->set_default_value(new ConfigOptionIntsNullable { ConfigOptionIntNullable::nil_value() });
+    def->set_default_value(disable_defaultoption(new ConfigOptionInts{30}));
 
     def = this->add("bottle_volume", coFloat);
     def->label = L("Bottle volume");
@@ -8201,7 +8202,9 @@ void PrintConfigDef::init_sla_params()
         }) {
         auto it_opt = options.find(opt_key);
         assert(it_opt != options.end());
-        def = this->add_nullable(std::string("material_ow_") + opt_key, it_opt->second.type);
+        def = this->add(std::string("material_ow_") + opt_key, it_opt->second.type);
+        def->can_be_disabled = true;
+        def->is_optional = true;
         def->label = it_opt->second.label;
         def->full_label = it_opt->second.full_label;
         def->tooltip = it_opt->second.tooltip;
@@ -8209,11 +8212,7 @@ void PrintConfigDef::init_sla_params()
         def->min  = it_opt->second.min;
         def->max  = it_opt->second.max;
         def->mode = it_opt->second.mode;
-        switch (def->type) {
-        case coFloat: def->set_default_value(new ConfigOptionFloatNullable{ it_opt->second.default_value->get_float() }); break;
-        case coInt:   def->set_default_value(new ConfigOptionIntNullable{ it_opt->second.default_value->get_int() }); break;
-        default: assert(false);
-        }
+        def->set_default_value(it_opt->second.default_value->clone());
     }
 }
 
@@ -8240,6 +8239,8 @@ static std::set<std::string> PrintConfigDef_ignore = {
 //    "infill_only_where_needed", <- ignore only if deactivated
     "gcode_binary", // Introduced in 2.7.0-alpha1, removed in 2.7.1 (replaced by binary_gcode).
     "gcode_resolution", // now in printer config.
+    "enable_dynamic_fan_speeds", "overhang_fan_speed_0","overhang_fan_speed_1","overhang_fan_speed_2","overhang_fan_speed_3", // converted in composite_legacy
+    "enable_dynamic_overhang_speeds", "overhang_speed_0", "overhang_speed_1", "overhang_speed_2", "overhang_speed_3", // converted in composite_legacy
 };
 
 void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &value, bool remove_unkown_keys)
@@ -8499,14 +8500,90 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
                 if (alias == opt_key) {
                     // translate
                     opt_key = entry.first;
-                    return;
+                    goto use_alias;
                 }
             }
         }
         if (remove_unkown_keys) {
             opt_key = "";
         }
-        return;
+    use_alias:;
+        if (!print_config_def.has(opt_key)) {
+            return;
+        }
+    }
+
+    //fan speed: activate disable.
+    if (opt_key.find("_fan_speed") != std::string::npos) {
+        if ("max_fan_speed" != opt_key && "filament_toolchange_part_fan_speed" != opt_key && "min_fan_speed" != opt_key
+            && "overhangs_dynamic_fan_speed" != opt_key && "enable_dynamic_fan_speeds" != opt_key && opt_key.find("overhang_fan_speed_") == std::string::npos) {
+            assert(print_config_def.get(opt_key) && print_config_def.get(opt_key)->type == coInts);
+            //if vector, split it.
+            ConfigOptionInts opt_decoder;
+            opt_decoder.set_can_be_disabled();
+            opt_decoder.deserialize(value);
+            for (size_t idx = 0; idx < opt_decoder.size(); ++idx) {
+                if (opt_decoder.is_enabled(idx)) {
+                    if (opt_decoder.get_at(idx) < 0) {
+                        opt_decoder.set_at(100, idx);
+                        opt_decoder.set_enabled(false, idx);
+                    } else if (opt_decoder.get_at(idx) <= 1) {
+                        // for now, still consider "1" as a "0", to be able to import old config where the 1 means 0
+                        // (and 0 was disable).
+                        opt_decoder.set_at(0, idx);
+                    }
+                }
+            }
+            value = opt_decoder.serialize();
+        }
+    }
+
+    if (value == "-1") {
+        if ("overhangs_bridge_threshold" == opt_key) {value = "!0";}
+        if ("overhangs_bridge_upper_layers" == opt_key) {value = "!2";}
+        if ("perimeters_hole" == opt_key) {value = "!0";}
+        if ("support_material_bottom_interface_layers" == opt_key) {value = "!0";}
+    }
+    //nil-> disabled
+    if (value.find("e+") != std::string::npos) {
+        const ConfigOptionDef *def = print_config_def.get(opt_key);
+        if (def && def->can_be_disabled) {
+            ConfigOption *default_opt = def->default_value->clone();
+            default_opt->deserialize(value);
+            float max_value = std::numeric_limits<int32_t>::max() / 2;
+            switch (default_opt->type()) {
+            case coInt:
+            case coPercent:
+            case coFloat:
+            case coFloatOrPercent:
+            case coInts:
+            case coPercents:
+            case coFloats:
+            case coFloatsOrPercents: {
+                for (size_t idx = 0; idx < default_opt->size(); idx++) {
+                    if (std::abs(default_opt->get_float(idx)) > std::numeric_limits<int>::max() / 2) {
+                        default_opt->set(def->default_value.get(), idx);
+                        default_opt->set_enabled(false, idx);
+                    }
+                }
+            }
+            break;
+            default:;
+            }
+            value = default_opt->serialize();
+            delete default_opt;
+        }
+    }
+    //nil-> disabled
+    if (value.find("nil") != std::string::npos) {
+        const ConfigOptionDef *def = print_config_def.get(opt_key);
+        assert(def && def->can_be_disabled);
+        if (def && def->can_be_disabled) {
+            ConfigOption *default_opt = def->default_value->clone();
+            default_opt->set_enabled(false);
+            value = default_opt->serialize();
+            delete default_opt;
+        }
     }
 }
 
@@ -8515,6 +8592,127 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
 // Don't convert single options here, implement such conversion in PrintConfigDef::handle_legacy() instead.
 void PrintConfigDef::handle_legacy_composite(DynamicPrintConfig &config, std::vector<std::pair<t_config_option_key, std::string>> &opt_deleted)
 {
+    std::map<t_config_option_key, std::string> useful_items;
+    for (auto& opt_pair : opt_deleted) {
+        t_config_option_key &opt_key = opt_pair.first;
+        std::string &value = opt_pair.second;
+        if (opt_key.find("overhang_fan_speed_") != std::string::npos) {
+            useful_items[opt_key] = value;
+            opt_key = "";
+        }
+        if ("enable_dynamic_fan_speeds" == opt_key) {
+            useful_items[opt_key] = value;
+            opt_key = "";
+        }
+        if (opt_key.find("overhang_speed_") != std::string::npos) {
+            useful_items[opt_key] = value;
+            opt_key = "";
+        }
+        if ("enable_dynamic_overhang_speeds" == opt_key) {
+            useful_items[opt_key] = value;
+            opt_key = "";
+        }
+    }
+    if (useful_items.find("enable_dynamic_overhang_speeds") != useful_items.end()) {
+        ConfigOptionBool enable_dynamic_overhang_speeds;
+        enable_dynamic_overhang_speeds.deserialize(useful_items["enable_dynamic_overhang_speeds"]);
+        std::vector<ConfigOptionFloatOrPercent> values;
+        values.resize(4);
+        values[0].deserialize(useful_items["overhang_speed_0"]);
+        values[1].deserialize(useful_items["overhang_speed_1"]);
+        values[2].deserialize(useful_items["overhang_speed_2"]);
+        values[3].deserialize(useful_items["overhang_speed_3"]);
+        double external_perimeter_speed = config.get_computed_value("external_perimeter_speed");
+        double max = external_perimeter_speed;
+        double min = external_perimeter_speed;
+        for (int x = 0; x < values.size(); ++x) {
+            if (values[x].percent) {
+                min = std::min(min, values[x].get_abs_value(external_perimeter_speed));
+                max = std::max(max, values[x].get_abs_value(external_perimeter_speed));
+            } else {
+                min = std::min(min, values[x].value);
+                max = std::max(max, values[x].value);
+            }
+        }
+        //can't have both (min < external_perimeter_speed) & (max > external_perimeter_speed) at same time.
+        if (min < external_perimeter_speed) {
+            config.set_key_value("overhangs_speed", new ConfigOptionFloatOrPercent(min, false));
+            max = external_perimeter_speed;
+        } else if (max > external_perimeter_speed) {
+            config.set_key_value("overhangs_speed", new ConfigOptionFloatOrPercent(max, false));
+            min = external_perimeter_speed;
+        } else {
+            assert(min == max && min ==external_perimeter_speed);
+        }
+        ConfigOptionGraph opt;
+        opt.set_can_be_disabled();
+        // extract values
+        Pointfs graph_curve;
+        for (int x = 0; x < values.size(); ++x) {
+            double speed = std::clamp(values[x].value, min, max);
+            if (values[x].percent) {
+                speed = values[x].get_abs_value(external_perimeter_speed);
+            }
+            double percent = (speed - min) / (max - min);
+            if (min == external_perimeter_speed) {
+                percent = 1 - percent;
+            }
+            graph_curve.push_back(Vec2d(x * 25, int(percent * 100)));
+        }
+        if (min == external_perimeter_speed) {
+            graph_curve.push_back(Vec2d(100, 0));
+        } else {
+            graph_curve.push_back(Vec2d(100, 100));
+        }
+        opt.value = GraphData(graph_curve);
+        opt.set_enabled(enable_dynamic_overhang_speeds.value);
+        config.set_key_value("overhangs_dynamic_speed", opt.clone());
+    }
+    if (useful_items.find("enable_dynamic_fan_speeds") != useful_items.end()) {
+        ConfigOptionBools enable_dynamic_fan_speeds;
+        enable_dynamic_fan_speeds.deserialize(useful_items["enable_dynamic_fan_speeds"]);
+        auto *external_perimeter_fan_speed = config.option<ConfigOptionInts>("external_perimeter_fan_speed");
+        auto *perimeter_fan_speed = config.option<ConfigOptionInts>("perimeter_fan_speed");
+        auto *default_fan_speed = config.option<ConfigOptionInts>("default_fan_speed");
+        std::vector<ConfigOptionFloats> values;
+        values.resize(4);
+        values[0].deserialize(useful_items["overhang_fan_speed_0"]);
+        values[1].deserialize(useful_items["overhang_fan_speed_1"]);
+        values[2].deserialize(useful_items["overhang_fan_speed_2"]);
+        values[3].deserialize(useful_items["overhang_fan_speed_3"]);
+        ConfigOptionGraphs opt;
+        opt.set_can_be_disabled();
+        std::vector<GraphData> graph_data;
+        // while there is a value
+        assert(enable_dynamic_fan_speeds.size() == values[0].size());
+        assert(values[0].size() == values[1].size());
+        assert(values[0].size() == values[2].size());
+        assert(values[0].size() == values[3].size());
+        for(int idx = 0 ;idx < enable_dynamic_fan_speeds.size(); ++idx) {
+            // extract values
+            Pointfs graph_curve;
+            for (int x = 0; x < values.size(); ++x) {
+                graph_curve.push_back(Vec2d(x*25, values[x].get_at(idx)));
+            }
+            if (external_perimeter_fan_speed && external_perimeter_fan_speed->is_enabled(idx)) {
+                graph_curve.push_back(Vec2d(100, external_perimeter_fan_speed->get_at(idx)));
+            } else if (perimeter_fan_speed && perimeter_fan_speed->is_enabled(idx)) {
+                graph_curve.push_back(Vec2d(100, perimeter_fan_speed->get_at(idx)));
+            } else if (default_fan_speed && default_fan_speed->is_enabled(idx)) {
+                graph_curve.push_back(Vec2d(100, default_fan_speed->get_at(idx)));
+            } else {
+                graph_curve.push_back(Vec2d(100, graph_curve.back().y()));
+            }
+            graph_data.emplace_back(graph_curve);
+        }
+        // recreate fan speed graph
+        opt.set(graph_data);
+        for (int idx = 0; idx < enable_dynamic_fan_speeds.size(); ++idx) {
+            opt.set_enabled(enable_dynamic_fan_speeds.get_at(idx), idx);
+        }
+        config.set_key_value("overhangs_dynamic_fan_speed", opt.clone());
+    }
+
     //if (config.has("thumbnails")) {
     //    std::string extention;
     //    if (config.has("thumbnails_format")) {
@@ -8629,8 +8827,10 @@ std::map<std::string,std::string> PrintConfigDef::from_prusa(t_config_option_key
     if (("brim_width" == opt_key || "brim_width_interior" == opt_key) && all_conf.option("brim_separation") ) {
         // add brim_separation to brim_width & brim_width_interior
         float val = boost::lexical_cast<float>(value);
-        val += all_conf.option("brim_separation")->get_float();
-        value = boost::lexical_cast<std::string>(val);
+        if (val > 0) {
+            val += all_conf.option("brim_separation")->get_float();
+            value = boost::lexical_cast<std::string>(val);
+        }
     }
     if ("fill_pattern" == opt_key && "alignedrectilinear" == value) {
         value = "rectilinear";
@@ -8792,19 +8992,24 @@ void _deserialize_maybe_from_prusa(const std::map<t_config_option_key, std::stri
                                            bool                                       with_phony,
                                            bool                                       check_prusa)
 {
-    std::map<t_config_option_key, std::string> unknown_keys;
+    std::vector<std::pair<t_config_option_key, std::string>> deleted_keys;
+    std::vector<std::pair<t_config_option_key, std::string>> unknown_keys;
     const ConfigDef *def = config.def();
     for (const auto &[key, value] : settings) {
         try {
             t_config_option_key opt_key = key;
             std::string opt_value = value;
             PrintConfigDef::handle_legacy(opt_key, opt_value, false);
-            if (!opt_key.empty())
-                if (!def->has(opt_key) || (check_prusa && prusa_import_to_review_keys.find(opt_key) != prusa_import_to_review_keys.end())) {
-                    unknown_keys.emplace(key, value);
+            if (!opt_key.empty()) {
+                if (!def->has(opt_key) ||
+                    (check_prusa && prusa_import_to_review_keys.find(opt_key) != prusa_import_to_review_keys.end())) {
+                    unknown_keys.emplace_back(key, value);
                 } else {
                     config.set_deserialize(opt_key, opt_value, config_substitutions);
                 }
+            } else {
+                deleted_keys.emplace_back(key, value);
+            }
         } catch (UnknownOptionException & /* e */) {
             // log & ignore
             if (config_substitutions.rule != ForwardCompatibilitySubstitutionRule::Disable)
@@ -8821,6 +9026,7 @@ void _deserialize_maybe_from_prusa(const std::map<t_config_option_key, std::stri
             config_substitutions.emplace(optdef,std::string(value), ConfigOptionUniquePtr(optdef->default_value->clone()));
         }
     }
+    config.handle_legacy_composite(deleted_keys);
     // from prusa: try again with from_prusa before handle_legacy
     if (check_prusa) {
         std::map<t_config_option_key, std::string> settings_to_change;
@@ -9379,13 +9585,21 @@ std::map<std::string, std::string> PrintConfigDef::to_prusa(t_config_option_key&
         value = Slic3r::find_full_path(value, value).generic_string();
     }
     if ("default_fan_speed" == opt_key) {
+        if (!value.empty() && value.front() == '!') {
+            value = "1";
+        }
         if (value == "0") {
             opt_key = "min_fan_speed";
-            value = all_conf.option("fan_printer_min_speed")->get_float();
+            value = std::to_string(all_conf.option("fan_printer_min_speed")->get_float());
             new_entries["fan_always_on"] = "0";
         } else {
             opt_key = "min_fan_speed";
             new_entries["fan_always_on"] = "1";
+        }
+    }
+    if ("bridge_fan_speed" == opt_key) {
+        if (!value.empty() && value.front() == '!') {
+            value = std::to_string(all_conf.option("fan_printer_min_speed")->get_float());
         }
     }
 
@@ -9674,7 +9888,7 @@ void DynamicPrintConfig::normalize_fdm()
             auto* opt = this->opt<ConfigOptionBools>("retract_layer_change", true);
             opt->set(std::vector<uint8_t>(opt->size(), false));  // set all values to false
             // Disable retract on layer change also for filament overrides.
-            auto* opt_n = this->opt<ConfigOptionBoolsNullable>("filament_retract_layer_change", true);
+            auto* opt_n = this->opt<ConfigOptionBools>("filament_retract_layer_change", true);
             opt_n->set(std::vector<uint8_t>(opt_n->size(), false));  // Set all values to false.
         }
         {
@@ -10328,8 +10542,8 @@ std::string validate(const FullPrintConfig& cfg)
         const ConfigOptionDef   *optdef = print_config_def.get(opt_key);
         assert(optdef != nullptr);
 
-        if (opt->nullable() && opt->is_nil()) {
-            // Do not check nil values
+        if (!opt->is_enabled()) {
+            // Do not check disabled values
             continue;
         }
 
@@ -10353,7 +10567,7 @@ std::string validate(const FullPrintConfig& cfg)
         {
             const auto* vec = static_cast<const ConfigOptionVector<double>*>(opt);
             for (size_t i = 0; i < vec->size(); ++i) {
-                if (vec->is_nil(i))
+                if (!vec->is_enabled(i))
                     continue;
                 double v = vec->get_at(i);
                 if (v < optdef->min || v > optdef->max) {
@@ -10367,7 +10581,7 @@ std::string validate(const FullPrintConfig& cfg)
         {
             const auto* vec = static_cast<const ConfigOptionVector<FloatOrPercent>*>(opt);
             for (size_t i = 0; i < vec->size(); ++i) {
-                if (vec->is_nil(i))
+                if (!vec->is_enabled(i))
                     continue;
                 const FloatOrPercent &v = vec->get_at(i);
                 if (v.value < optdef->min || v.value > optdef->max) {
@@ -10387,7 +10601,7 @@ std::string validate(const FullPrintConfig& cfg)
         {
             const auto* vec = static_cast<const ConfigOptionVector<int32_t>*>(opt);
             for (size_t i = 0; i < vec->size(); ++i) {
-                if (vec->is_nil(i))
+                if (!vec->is_enabled(i))
                     continue;
                 int v = vec->get_at(i);
                 if (v < optdef->min || v > optdef->max) {
