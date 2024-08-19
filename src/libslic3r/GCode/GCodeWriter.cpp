@@ -426,6 +426,18 @@ std::string GCodeWriter::write_acceleration(){
 
 std::string GCodeWriter::reset_e(bool force)
 {
+
+    if (FLAVOR_IS(gcfNematX)) {
+        // currently, reset the E can lead to overextrusion. So it's disabled for now.
+        return "";
+        //double retract_length = m_tool->retract_length();
+        //m_tool->reset_E(retract_length);
+        //std::string gcode = m_extrusion_axis + std::string("[SET_POSITION POS=") + std::to_string(retract_length) + std::string("]");
+        //if (this->config.gcode_comments) gcode += " ; reset extrusion distance";
+        //gcode +="\n";
+        //return gcode;
+    }
+
     this->m_de_left = 0;
 
     if (FLAVOR_IS(gcfMach3)
@@ -437,15 +449,6 @@ std::string GCodeWriter::reset_e(bool force)
         // if it was already at 0 (not modified with reset) and we don't force a G92 -> return
         if (!m_tool->reset_E() && !force)
             return "";
-    }
-
-    if (FLAVOR_IS(gcfNematX)) {
-        double retract_length = m_tool->retract_length();
-        m_tool->reset_E(retract_length);
-        std::string gcode = m_extrusion_axis + std::string("[SET_POSITION POS=") + std::to_string(retract_length) + std::string("]");
-        if (this->config.gcode_comments) gcode += " ; reset extrusion distance";
-        gcode +="\n";
-        return gcode;
     }
 
     if (! m_extrusion_axis.empty() && ! this->config.use_relative_e_distances) {
