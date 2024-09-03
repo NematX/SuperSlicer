@@ -6931,7 +6931,6 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("This string is edited by a Dialog and contains XY compensations for different hole diameters."
                     "\nThe graph is in mm of compensation per mm of diameter.");
     def->mode = comExpert | comSuSi;
-    def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionGraph(GraphData(0,0, GraphData::GraphType::LINEAR, {})));
     def->graph_settings = std::make_shared<GraphSettings>();
     def->graph_settings->title       = L("Compensation per hole diameter");
