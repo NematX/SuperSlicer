@@ -12,6 +12,7 @@
 #include "MultiMaterialSegmentation.hpp"
 #include "Print.hpp"
 #include "ShortestPath.hpp"
+#include "Thread.hpp"
 
 #include <boost/log/trivial.hpp>
 
@@ -662,7 +663,8 @@ void PrintObject::_min_overhang_threshold() {
         // get bridgeable area
         for (size_t region_idx = 0; region_idx < my_layer->m_regions.size(); ++region_idx) {
             LayerRegion* lregion = my_layer->get_region(region_idx);
-            if (lregion->region().config().overhangs_bridge_threshold.value != 0) {
+            if (lregion->region().config().overhangs_bridge_threshold.value != 0 ||
+                    !lregion->region().config().overhangs_bridge_threshold.is_enabled()) {
                 Surfaces & my_surfaces = lregion->m_slices.surfaces;
                 ExPolygons unsupported = to_expolygons(my_surfaces);
                 unsupported            = diff_ex(unsupported, lower_layer->lslices, ApplySafetyOffset::Yes);
@@ -678,13 +680,17 @@ void PrintObject::_min_overhang_threshold() {
                                                 bridgeFlow.scaled_spacing(),
                                                 scale_t(this->print()->config().bridge_precision.get_abs_value(bridgeFlow.spacing())),
                                                 layer_idx);
-                        detector.max_bridge_length = scale_d(std::max(0., lregion->region().config().overhangs_bridge_threshold.value));
+                        if (lregion->region().config().overhangs_bridge_threshold.is_enabled()) {
+                            detector.max_bridge_length = scale_d(std::max(0., lregion->region().config().overhangs_bridge_threshold.value));
+                        } else {
+                            detector.max_bridge_length = -1;
+                        }
                         if (detector.detect_angle(0))
                             append(bridged_area, union_ex(detector.coverage()));
                     }
                     // then, check other layers
                     size_t max_layer_idx = lregion->region().config().overhangs_bridge_upper_layers.value;
-                    if (max_layer_idx < 0) // -1 -> all layers
+                    if (!lregion->region().config().overhangs_bridge_upper_layers.is_enabled()) // disabled -> all layers
                         max_layer_idx = this->layers().size();
                     if (max_layer_idx > 0) { // 0 -> don't check other layers
                         max_layer_idx += layer_idx;
@@ -703,7 +709,9 @@ void PrintObject::_min_overhang_threshold() {
                             ExPolygons new_bridged_area;
                             for (size_t other_region_idx = 0; other_region_idx < my_layer->m_regions.size(); ++other_region_idx) {
                                 LayerRegion *other_lregion = my_layer->get_region(other_region_idx);
-                                if (other_lregion->region().config().overhangs_bridge_threshold.value != 0 && other_lregion->region().config().overhangs_max_slope > 0) {
+                                if ( (other_lregion->region().config().overhangs_bridge_threshold.value != 0 ||
+                                        !lregion->region().config().overhangs_bridge_threshold.is_enabled())
+                                    && other_lregion->region().config().overhangs_max_slope > 0) {
                                     coord_t enlargement = scale_t(my_layer->get_region(region_idx)->region().config().overhangs_max_slope.get_abs_value(unscaled(max_nz_diam)));
                                     enlargement = std::max(enlargement, max_nz_diam);
                                     Surfaces &my_surfaces = other_lregion->m_slices.surfaces;
@@ -716,7 +724,11 @@ void PrintObject::_min_overhang_threshold() {
                                                      scale_t(this->print()->config().bridge_precision.get_abs_value(bridgeFlow.spacing())),
                                                      other_layer_bridge_idx);
                                         detector.layer_id = other_layer_bridge_idx;
-                                        detector.max_bridge_length = scale_d(std::max(0., other_lregion->region().config().overhangs_bridge_threshold.value));
+                                        if (lregion->region().config().overhangs_bridge_threshold.is_enabled()) {
+                                            detector.max_bridge_length = scale_d(std::max(0., other_lregion->region().config().overhangs_bridge_threshold.value));
+                                        } else {
+                                            detector.max_bridge_length = -1;
+                                        }
                                         if (detector.detect_angle(0)) {
                                             append(new_bridged_area, union_ex(detector.coverage()));
                                         }
@@ -1343,10 +1355,8 @@ void PrintObject::slice_volumes()
         ////	0.f;
         // Uncompensated slices for the first layer in case the Elephant foot compensation is applied.
 	    //ExPolygons  lslices_1st_layer;
-	    tbb::parallel_for(
-	        tbb::blocked_range<size_t>(0, m_layers.size()),
-			[this](const tbb::blocked_range<size_t>& range) {
-	            for (size_t layer_id = range.begin(); layer_id < range.end(); ++ layer_id) {
+        Slic3r::parallel_for(size_t(0), m_layers.size(),
+            [this](const size_t layer_id) {
 	                m_print->throw_if_canceled();
 	                Layer *layer = m_layers[layer_id];
 	                // Apply size compensation and perform clipping of multi-part objects.
@@ -1536,9 +1546,9 @@ void PrintObject::slice_volumes()
                     //    m_layers.front()->lslices = offset_ex(std::move(m_layers.front()->lslices), -first_layer_compensation);
                     //    m_layers.front()->lslice_indices_sorted_by_print_order = chain_expolygons(layer.lslices);
                     //}
-	            }
-	        });
-	}
+                }
+            );
+    }
 
     m_print->throw_if_canceled();
     BOOST_LOG_TRIVIAL(debug) << "Slicing volumes - make_slices in parallel - end";
@@ -1583,13 +1593,13 @@ std::vector<Polygons> PrintObject::slice_support_volumes(const ModelVolumeType m
         if (merge) {
             std::vector<Polygons*> to_merge;
             to_merge.reserve(zs.size());
-            for (size_t i = 0; i < zs.size(); ++ i)
-                if (merge_layers[i])
+            for (size_t i = 0; i < zs.size(); ++ i) {
+                if (merge_layers[i]) {
                     to_merge.emplace_back(&slices[i]);
-            tbb::parallel_for(
-                tbb::blocked_range<size_t>(0, to_merge.size()),
-                [&to_merge](const tbb::blocked_range<size_t> &range) {
-                    for (size_t i = range.begin(); i < range.end(); ++ i)
+                }
+            }
+            Slic3r::parallel_for(size_t(0), to_merge.size(),
+                [&to_merge](const size_t i) {
                         *to_merge[i] = union_(*to_merge[i]);
             });
         }

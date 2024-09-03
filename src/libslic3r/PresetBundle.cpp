@@ -67,14 +67,14 @@ PresetBundle::PresetBundle() :
     this->filaments.default_preset().config.option<ConfigOptionStrings>("filament_settings_id", true)->set({""});
     this->filaments.default_preset().compatible_printers_condition();
     this->filaments.default_preset().inherits();
-	// Set all the nullable values to nils.
-	this->filaments.default_preset().config.null_nullables();
+	// Disable all the optionals values.
+	this->filaments.default_preset().config.disable_optionals();
 
     this->sla_materials.default_preset().config.optptr("sla_material_settings_id", true);
     this->sla_materials.default_preset().compatible_printers_condition();
     this->sla_materials.default_preset().inherits();
-    // Set all the nullable values to nils.
-    this->sla_materials.default_preset().config.null_nullables();
+	// Disable all the optionals values.
+    this->sla_materials.default_preset().config.disable_optionals();
 
     this->sla_prints.default_preset().config.optptr("sla_print_settings_id", true);
     this->sla_prints.default_preset().config.opt_string("output_filename_format", true) = "[input_filename_base].sl1";
@@ -783,6 +783,7 @@ DynamicPrintConfig PresetBundle::full_fff_config() const
                 // Setting a vector value from all filament_configs.
                 for (size_t i = 0; i < filament_opts.size(); ++ i)
                     filament_opts[i] = filament_configs[i]->option(key);
+                std::string opt_key_str = key;
                 static_cast<ConfigOptionVectorBase*>(opt_dst)->set(filament_opts);
             }
         }
