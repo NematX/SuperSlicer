@@ -182,7 +182,9 @@ void PrintObject::make_perimeters()
     if (! this->set_started(posPerimeters))
         return;
 
-    m_print->set_status(10, _u8L("Generating perimeters"));
+    m_print->set_status(objectstep_2_percent[PrintObjectStep::posPerimeters], _u8L("Generating perimeters"));
+    m_print->secondary_status_counter_add_max(m_layers.size());
+
     BOOST_LOG_TRIVIAL(info) << "Generating perimeters..." << log_memory_info();
     
     // Revert the typed slices into untyped slices.
@@ -195,10 +197,6 @@ void PrintObject::make_perimeters()
         m_typed_slices = false;
     }
 
-    // atomic counter for gui progress
-    std::atomic<int> atomic_count{ 0 };
-    int nb_layers_update = std::max(1, (int)m_layers.size() / 20);
-
     // compare each layer to the one below, and mark those slices needing
     // one additional inner perimeter, like the top of domed objects-
     
@@ -206,16 +204,16 @@ void PrintObject::make_perimeters()
     // but we don't generate any extra perimeter if fill density is zero, as they would be floating
     // inside the object - infill_only_where_needed should be the method of choice for printing
     // hollow objects
-        for (size_t region_id = 0; region_id < this->num_printing_regions(); ++ region_id) {
-            const PrintRegion &region = this->printing_region(region_id);
-            if (!region.config().extra_perimeters || region.config().perimeters == 0 ||
-                region.config().fill_density == 0 || this->layer_count() < 2) {
-                continue;
-            }
-            // use an antomic idx instead of the range, to avoid a thread being very late because it's on the difficult layers.
-            BOOST_LOG_TRIVIAL(debug) << "Generating extra perimeters for region " << region_id << " in parallel - start";
-            Slic3r::parallel_for(size_t(0), m_layers.size() - 1,
-                [this, &region, region_id](const size_t layer_idx) {
+    for (size_t region_id = 0; region_id < this->num_printing_regions(); ++ region_id) {
+        const PrintRegion &region = this->printing_region(region_id);
+        if (!region.config().extra_perimeters || region.config().perimeters == 0 ||
+            region.config().fill_density == 0 || this->layer_count() < 2) {
+            continue;
+        }
+        // use an antomic idx instead of the range, to avoid a thread being very late because it's on the difficult layers.
+        BOOST_LOG_TRIVIAL(debug) << "Generating extra perimeters for region " << region_id << " in parallel - start";
+        Slic3r::parallel_for(size_t(0), m_layers.size() - 1,
+            [this, &region, region_id](const size_t layer_idx) {
                     PRINT_OBJECT_TIME_LIMIT_MILLIS(PRINT_OBJECT_TIME_LIMIT_DEFAULT);
                     m_print->throw_if_canceled();
                     LayerRegion &layerm                     = *m_layers[layer_idx]->get_region(region_id);
@@ -265,31 +263,28 @@ void PrintObject::make_perimeters()
                                 printf("  adding %d more perimeter(s) at layer %zu\n", slice.extra_perimeters, layer_idx);
 #endif
                     }
-                }
+            }
         );
 
         m_print->throw_if_canceled();
         BOOST_LOG_TRIVIAL(debug) << "Generating extra perimeters for region " << region_id << " in parallel - end";
     }
 
-        BOOST_LOG_TRIVIAL(debug) << "Generating perimeters in parallel - start";
-        Slic3r::parallel_for(size_t(0), m_layers.size(),
-            [this, &atomic_count, nb_layers_update](const size_t layer_idx) {
+    BOOST_LOG_TRIVIAL(debug) << "Generating perimeters in parallel - start";
+    Slic3r::parallel_for(size_t(0), m_layers.size(),
+        [this](const size_t layer_idx) {
                 PRINT_OBJECT_TIME_LIMIT_MILLIS(PRINT_OBJECT_TIME_LIMIT_DEFAULT);
-                std::chrono::time_point<std::chrono::system_clock> start_make_perimeter = std::chrono::system_clock::now();
                 m_print->throw_if_canceled();
-                m_layers[layer_idx]->make_perimeters();
 
                 // updating progress
-                int nb_layers_done = (++atomic_count);
-                std::chrono::time_point<std::chrono::system_clock> end_make_perimeter = std::chrono::system_clock::now();
-                if (nb_layers_done % nb_layers_update == 0 || (static_cast<std::chrono::duration<double>>(end_make_perimeter - start_make_perimeter)).count() > 5) {
-                    m_print->set_status( int((nb_layers_done * 100) / m_layers.size()), L("Generating perimeters: layer %s / %s"), 
-                        { std::to_string(nb_layers_done), std::to_string(m_layers.size()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
-                }
-            }
-        );
-    m_print->set_status(100, "", PrintBase::SlicingStatus::SECONDARY_STATE);
+                int32_t nb_layers_done = m_print->secondary_status_counter_increment();
+                m_print->set_status( int((nb_layers_done * 100) / m_print->secondary_status_counter_get_max()), L("Generating perimeters: layer %s / %s"), 
+                    { std::to_string(nb_layers_done), std::to_string(m_print->secondary_status_counter_get_max()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
+
+                // make perimeters
+                m_layers[layer_idx]->make_perimeters();
+        }
+    );
     m_print->throw_if_canceled();
     BOOST_LOG_TRIVIAL(debug) << "Generating perimeters in parallel - end";
 
@@ -313,7 +308,19 @@ void PrintObject::prepare_infill()
     if (!this->set_started(posPrepareInfill))
         return;
 
-    m_print->set_status(30, L("Preparing infill"));
+    m_print->set_status(objectstep_2_percent[PrintObjectStep::posPrepareInfill], L("Preparing infill"));
+    if (m_print->objects().size() == 1) {
+        m_print->set_status(0, "", PrintBase::SlicingStatus::DEFAULT | PrintBase::SlicingStatus::SECONDARY_STATE);
+    } else {
+        // detect (33%)         -> 25   25
+        // prepare layers (1%)  -> 5    30
+        // discover shells (40%) -> 30  60
+        // process externals (12%) -> 15 75
+        // Clean surfaces (1%)  -> 5    80
+        // Put bridges over sparse infill (12%) -> 15 95
+        // Combine infill (1%) -> 5     100
+        m_print->secondary_status_counter_add_max(100);
+    }
 
     if (m_typed_slices) {
         // To improve robustness of detect_surfaces_type() when reslicing (working with typed slices), see GH issue #7442.
@@ -330,7 +337,15 @@ void PrintObject::prepare_infill()
     // Then the classifcation of $layerm->slices is transfered onto 
     // the $layerm->fill_surfaces by clipping $layerm->fill_surfaces
     // by the cummulative area of the previous $layerm->fill_surfaces.
-    m_print->set_status( 0, L("Detect surfaces types"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    if (m_print->objects().size() == 1) {
+        m_print->set_status(0, L("Detect surfaces types"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    } else {
+        int32_t advancement_count = m_print->secondary_status_counter_increment(25);
+        m_print->set_status(advancement_count * 100 / m_print->secondary_status_counter_get_max(), L("Process objects: % / %"),
+                            {std::to_string(advancement_count),
+                             std::to_string(m_print->secondary_status_counter_get_max())},
+                            PrintBase::SlicingStatus::SECONDARY_STATE);
+    }
     this->detect_surfaces_type();
     m_print->throw_if_canceled();
     
@@ -338,12 +353,21 @@ void PrintObject::prepare_infill()
     // Here the stTop / stBottomBridge / stBottom infill is turned to just stInternal if zero top / bottom infill layers are configured.
     // Also tiny stInternal surfaces are turned to stInternalSolid.
     BOOST_LOG_TRIVIAL(info) << "Preparing fill surfaces..." << log_memory_info();
+    if (m_print->objects().size() > 1) {
+        int32_t advancement_count = m_print->secondary_status_counter_increment(5);
+        m_print->set_status(advancement_count * 100 / m_print->secondary_status_counter_get_max(), L("Process objects: % / %"),
+                            {std::to_string(advancement_count),
+                             std::to_string(m_print->secondary_status_counter_get_max())},
+                            PrintBase::SlicingStatus::SECONDARY_STATE);
+    }
     for (size_t layer_idx = 0; layer_idx < m_layers.size(); ++layer_idx) {
         Layer *layer = m_layers[layer_idx];
-        m_print->set_status(int(100 * layer_idx / m_layers.size()),
-                            L("Prepare fill surfaces: layer %s / %s"),
-                            {std::to_string(layer_idx), std::to_string(m_layers.size())},
-                            PrintBase::SlicingStatus::SECONDARY_STATE);
+        if (m_print->objects().size() == 1) {
+            m_print->set_status(int(25 + (5 * layer_idx / m_layers.size())),
+                                L("Prepare fill surfaces: layer %s / %s"),
+                                {std::to_string(layer_idx), std::to_string(m_layers.size())},
+                                PrintBase::SlicingStatus::SECONDARY_STATE);
+        }
         for (auto *region : layer->m_regions) {
             region->prepare_fill_surfaces();
             m_print->throw_if_canceled();
@@ -352,7 +376,15 @@ void PrintObject::prepare_infill()
 
 
     // Add solid fills to ensure the shell vertical thickness.
-    m_print->set_status( 20, L("Discover shells"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    if (m_print->objects().size() == 1) {
+        m_print->set_status(30, L("Discover shells"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    } else {
+        int32_t advancement_count = m_print->secondary_status_counter_increment(30);
+        m_print->set_status(advancement_count * 100 / m_print->secondary_status_counter_get_max(), L("Process objects: % / %"),
+                            {std::to_string(advancement_count),
+                             std::to_string(m_print->secondary_status_counter_get_max())},
+                            PrintBase::SlicingStatus::SECONDARY_STATE);
+    }
     this->discover_vertical_shells();
     m_print->throw_if_canceled();
 
@@ -376,7 +408,15 @@ void PrintObject::prepare_infill()
     // 3) Clip the internal surfaces by the grown top/bottom surfaces.
     // 4) Merge surfaces with the same style. This will mostly get rid of the overlaps.
     //FIXME This does not likely merge surfaces, which are supported by a material with different colors, but same properties.
-    m_print->set_status( 40, L("Process external surfaces"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    if (m_print->objects().size() == 1) {
+        m_print->set_status( 60, L("Process external surfaces"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    } else {
+        int32_t advancement_count = m_print->secondary_status_counter_increment(15);
+        m_print->set_status(advancement_count * 100 / m_print->secondary_status_counter_get_max(), L("Process objects: % / %"),
+                            {std::to_string(advancement_count),
+                             std::to_string(m_print->secondary_status_counter_get_max())},
+                            PrintBase::SlicingStatus::SECONDARY_STATE);
+    }
     this->process_external_surfaces();
     m_print->throw_if_canceled();
 
@@ -402,7 +442,15 @@ void PrintObject::prepare_infill()
     m_print->throw_if_canceled();
 
     //as there is some too thin solid surface, please deleted them and merge all of the surfacesthat are contigous.
-    m_print->set_status( 55, L("Clean surfaces"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    if (m_print->objects().size() == 1) {
+        m_print->set_status( 75, L("Clean surfaces"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    } else {
+        int32_t advancement_count = m_print->secondary_status_counter_increment(5);
+        m_print->set_status(advancement_count * 100 / m_print->secondary_status_counter_get_max(), L("Process objects: % / %"),
+                            {std::to_string(advancement_count),
+                             std::to_string(m_print->secondary_status_counter_get_max())},
+                            PrintBase::SlicingStatus::SECONDARY_STATE);
+    }
     this->clean_surfaces();
 
 #ifdef SLIC3R_DEBUG_SLICE_PROCESSING
@@ -437,7 +485,15 @@ void PrintObject::prepare_infill()
     
     // the following step needs to be done before combination because it may need
     // to remove only half of the combined infill
-    m_print->set_status( 70, L("Put bridges over sparse infill"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    if (m_print->objects().size() == 1) {
+        m_print->set_status( 80, L("Put bridges over sparse infill"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    } else {
+        int32_t advancement_count = m_print->secondary_status_counter_increment(15);
+        m_print->set_status(advancement_count * 100 / m_print->secondary_status_counter_get_max(), L("Process objects: % / %"),
+                            {std::to_string(advancement_count),
+                             std::to_string(m_print->secondary_status_counter_get_max())},
+                            PrintBase::SlicingStatus::SECONDARY_STATE);
+    }
     this->bridge_over_infill();
     m_print->throw_if_canceled();
     this->replaceSurfaceType(stPosInternal | stDensSolid,
@@ -458,7 +514,15 @@ void PrintObject::prepare_infill()
     m_print->throw_if_canceled();
 
     // combine fill surfaces to honor the "infill every N layers" option
-    m_print->set_status( 85, L("Combine infill"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    if (m_print->objects().size() == 1) {
+        m_print->set_status( 95, L("Combine infill"), {}, PrintBase::SlicingStatus::SECONDARY_STATE);
+    } else {
+        int32_t advancement_count = m_print->secondary_status_counter_increment(5);
+        m_print->set_status(advancement_count * 100 / m_print->secondary_status_counter_get_max(), L("Process objects: % / %"),
+                            {std::to_string(advancement_count),
+                             std::to_string(m_print->secondary_status_counter_get_max())},
+                            PrintBase::SlicingStatus::SECONDARY_STATE);
+    }
     this->combine_infill();
     m_print->throw_if_canceled();
 
@@ -484,7 +548,14 @@ void PrintObject::prepare_infill()
 
     //compute m_max_sparse_spacing for fill_aligned_z
     _compute_max_sparse_spacing();
-
+    
+    if (m_print->objects().size() > 1) {
+        int32_t advancement_count = m_print->secondary_status_counter_increment(0);
+        m_print->set_status(advancement_count * 100 / m_print->secondary_status_counter_get_max(), L("Process objects: % / %"),
+                            {std::to_string(advancement_count),
+                             std::to_string(m_print->secondary_status_counter_get_max())},
+                            PrintBase::SlicingStatus::SECONDARY_STATE);
+    }
     this->set_done(posPrepareInfill);
 }
 
@@ -522,36 +593,29 @@ void PrintObject::infill()
     // prerequisites
     this->prepare_infill();
 
-    m_print->set_status(35, _u8L("Infilling layers"));
-    m_print->set_status(0, _u8L("Infilling layer %s / %s"),
-        { std::to_string(0), std::to_string(m_layers.size()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
+    //m_print->set_status(0, _u8L("Infilling layer %s / %s"),
+    //    { std::to_string(0), std::to_string(m_layers.size()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
     if (this->set_started(posInfill)) {
         // TRN Status for the Print calculation 
-        m_print->set_status(35, L("Infilling layers"));
-        m_print->set_status(0, L("Infilling layer %s / %s"), { std::to_string(0), std::to_string(m_layers.size()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
+        m_print->set_status(objectstep_2_percent[PrintObjectStep::posInfill], L("Infilling layers"));
+        m_print->secondary_status_counter_add_max(m_layers.size());
         const auto& adaptive_fill_octree = this->m_adaptive_fill_octrees.first;
         const auto& support_fill_octree = this->m_adaptive_fill_octrees.second;
 
-        // atomic counter for gui progress
-        std::atomic<int> atomic_count{ 0 };
-        const int nb_layers_update = std::max(1, (int)m_layers.size() / 20);
-
         BOOST_LOG_TRIVIAL(debug) << "Filling layers in parallel - start";
         Slic3r::parallel_for(size_t(0), m_layers.size(),
-            [this, &adaptive_fill_octree = adaptive_fill_octree, &support_fill_octree = support_fill_octree, &atomic_count, nb_layers_update]
+            [this, &adaptive_fill_octree = adaptive_fill_octree, &support_fill_octree = support_fill_octree]
             (const size_t layer_idx) {
                 PRINT_OBJECT_TIME_LIMIT_MILLIS(PRINT_OBJECT_TIME_LIMIT_DEFAULT);
+                    // updating progress
+                    int32_t nb_layers_done = m_print->secondary_status_counter_increment();
+                    m_print->set_status(100 * nb_layers_done / m_print->secondary_status_counter_get_max(), L("Infilling layer %s / %s"),
+                                    {std::to_string(nb_layers_done), std::to_string(m_print->secondary_status_counter_get_max())},
+                        PrintBase::SlicingStatus::SECONDARY_STATE);
+
                     std::chrono::time_point<std::chrono::system_clock> start_make_fill = std::chrono::system_clock::now();
                     m_print->throw_if_canceled();
                     m_layers[layer_idx]->make_fills(adaptive_fill_octree.get(), support_fill_octree.get(), this->m_lightning_generator.get());
-
-                    // updating progress
-                    int nb_layers_done = (++atomic_count);
-                    std::chrono::time_point<std::chrono::system_clock> end_make_fill = std::chrono::system_clock::now();
-                    if (nb_layers_done % nb_layers_update == 0 || (static_cast<std::chrono::duration<double>>(end_make_fill - start_make_fill)).count() > 5) {
-                        m_print->set_status( int((nb_layers_done * 100) / m_layers.size()), L("Infilling layer %s / %s"),
-                            { std::to_string(nb_layers_done), std::to_string(m_layers.size()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
-                    }
             }
         );
         m_print->set_status(100, "", PrintBase::SlicingStatus::SECONDARY_STATE);
@@ -567,11 +631,19 @@ void PrintObject::infill()
 void PrintObject::ironing()
 {
     if (this->set_started(posIroning)) {
+        m_print->set_status(objectstep_2_percent[PrintObjectStep::posIroning], L("Ironing"));
+        m_print->secondary_status_counter_add_max(m_layers.size());
         BOOST_LOG_TRIVIAL(debug) << "Ironing in parallel - start";
             // Ironing starting with layer 0 to support ironing all surfaces.
         Slic3r::parallel_for(size_t(0), m_layers.size(),
             [this](const size_t layer_idx) {
                 PRINT_OBJECT_TIME_LIMIT_MILLIS(PRINT_OBJECT_TIME_LIMIT_DEFAULT);
+                // updating progress
+                int32_t nb_layers_done = m_print->secondary_status_counter_increment();
+                m_print->set_status(100 * nb_layers_done / m_print->secondary_status_counter_get_max(), L("Ironing layer %s / %s"),
+                                {std::to_string(nb_layers_done), std::to_string(m_print->secondary_status_counter_get_max())},
+                    PrintBase::SlicingStatus::SECONDARY_STATE);
+
                 m_print->throw_if_canceled();
                 m_layers[layer_idx]->make_ironing();
             }
@@ -587,7 +659,15 @@ void PrintObject::generate_support_spots()
     assert(this->default_region_config(this->print()->default_region_config()).get_computed_value("perimeter_acceleration") > -1);
     if (this->set_started(posSupportSpotsSearch)) {
         BOOST_LOG_TRIVIAL(debug) << "Searching support spots - start";
-        m_print->set_status(65, _u8L("Searching support spots"));
+        m_print->set_status(objectstep_2_percent[PrintObjectStep::posSupportSpotsSearch], L("Searching support spots"));
+        if (m_print->objects().size() > 1) {
+            m_print->secondary_status_counter_add_max(1);
+            m_print->set_status(0. / m_print->objects().size(), L("Object %s / %s"),
+                            {std::to_string(0), std::to_string(m_print->objects().size())},
+                PrintBase::SlicingStatus::SECONDARY_STATE);
+        } else {
+            m_print->set_status(0, "", PrintBase::SlicingStatus::DEFAULT | PrintBase::SlicingStatus::SECONDARY_STATE);
+        }
         if (!this->shared_regions()->generated_support_points.has_value()) {
             PrintTryCancel                cancel_func = m_print->make_try_cancel();
             const PrintRegionConfig &region_config = this->default_region_config(this->print()->default_region_config());
@@ -604,6 +684,16 @@ void PrintObject::generate_support_spots()
             this->m_shared_regions->generated_support_points = {po_transform, supp_points, partial_objects};
             m_print->throw_if_canceled();
         }
+
+        // updating progress
+        if (m_print->objects().size() > 1) {
+            int32_t nb_objects_done = m_print->secondary_status_counter_increment();
+            m_print->set_status(100 * (nb_objects_done + 1) / m_print->secondary_status_counter_get_max(),
+                                L("Object %s / %s"),
+                                {std::to_string(nb_objects_done + 1), std::to_string(m_print->secondary_status_counter_get_max())},
+                                PrintBase::SlicingStatus::SECONDARY_STATE);
+        }
+
         BOOST_LOG_TRIVIAL(debug) << "Searching support spots - end";
         this->set_done(posSupportSpotsSearch);
     }
@@ -612,6 +702,15 @@ void PrintObject::generate_support_spots()
 void PrintObject::generate_support_material()
 {
     if (this->set_started(posSupportMaterial)) {
+        m_print->set_status(objectstep_2_percent[PrintObjectStep::posSupportMaterial], L("Generating support material"));
+        if (m_print->objects().size() > 1) {
+            m_print->secondary_status_counter_add_max(1);
+            m_print->set_status(0. / m_print->objects().size(), L("Object %s / %s"),
+                            {std::to_string(0), std::to_string(m_print->objects().size())},
+                PrintBase::SlicingStatus::SECONDARY_STATE);
+        } else {
+            m_print->set_status(0, "", PrintBase::SlicingStatus::DEFAULT | PrintBase::SlicingStatus::SECONDARY_STATE);
+        }
         this->clear_support_layers();
         if ((this->has_support() && m_layers.size() > 1) || (this->has_raft() && ! m_layers.empty())) {
             this->_generate_support_material();
@@ -626,6 +725,15 @@ void PrintObject::generate_support_material()
 #endif
         }
         this->set_done(posSupportMaterial);
+        
+        // updating progress
+        if (m_print->objects().size() > 1) {
+            int32_t nb_objects_done = m_print->secondary_status_counter_increment();
+            m_print->set_status(100 * (nb_objects_done + 1) / m_print->secondary_status_counter_get_max(),
+                                L("Object %s / %s"),
+                                {std::to_string(nb_objects_done + 1), std::to_string(m_print->secondary_status_counter_get_max())},
+                                PrintBase::SlicingStatus::SECONDARY_STATE);
+        }
     }
 }
 
@@ -635,17 +743,20 @@ void PrintObject::simplify_extrusion_path()
         const PrintConfig& print_config = this->print()->config();
         const bool spiral_mode = print_config.spiral_vase;
         const bool enable_arc_fitting = print_config.arc_fitting != ArcFittingType::Disabled && !spiral_mode;
-
-        m_print->set_status(0, L("Optimizing layer %s / %s"), { std::to_string(0), std::to_string(m_layers.size()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
+        m_print->secondary_status_counter_add_max(m_layers.size() + m_support_layers.size());
         BOOST_LOG_TRIVIAL(debug) << "Simplify extrusion path of object in parallel - start";
         //BBS: infill and walls
-        std::atomic<int> atomic_count{ 0 };
         Slic3r::parallel_for(size_t(0), m_layers.size(),
-            [this, &atomic_count](const size_t layer_idx) {
+            [this](const size_t layer_idx) {
                 m_print->throw_if_canceled();
                 m_layers[layer_idx]->simplify_extrusion_path();
-                int nb_layers_done = (++atomic_count);
-                m_print->set_status(int((nb_layers_done * 100) / m_layers.size()), L("Optimizing layer %s / %s"), { std::to_string(nb_layers_done), std::to_string(m_layers.size()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
+                
+                // updating progress
+                int32_t nb_layers_done = m_print->secondary_status_counter_increment() + 1;
+                m_print->set_status(int((nb_layers_done * 100) / m_print->secondary_status_counter_get_max()),
+                                L("Optimizing layer %s / %s"),
+                                {std::to_string(nb_layers_done), std::to_string(m_print->secondary_status_counter_get_max())},
+                                PrintBase::SlicingStatus::SECONDARY_STATE);
             }
         );
         //also simplify object skirt & brim
@@ -676,14 +787,17 @@ void PrintObject::simplify_extrusion_path()
 
         //BBS: share same progress
         BOOST_LOG_TRIVIAL(debug) << "Simplify extrusion path of support in parallel - start";
-        m_print->set_status(0, L("Optimizing support layer %s / %s"), { std::to_string(0), std::to_string(m_layers.size()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
-        atomic_count.store(0);
         Slic3r::parallel_for(size_t(0), m_support_layers.size(),
-            [this, &atomic_count](const size_t layer_idx) {
+            [this](const size_t layer_idx) {
                 m_print->throw_if_canceled();
                 m_support_layers[layer_idx]->simplify_support_extrusion_path();
-                int nb_layers_done = (++atomic_count);
-                m_print->set_status(int((nb_layers_done * 100) / m_layers.size()), L("Optimizing layer %s / %s"), { std::to_string(nb_layers_done), std::to_string(m_layers.size()) }, PrintBase::SlicingStatus::SECONDARY_STATE);
+
+                // updating progress
+                int32_t nb_layers_done = m_print->secondary_status_counter_increment() + 1;
+                m_print->set_status(int((nb_layers_done * 100) / m_print->secondary_status_counter_get_max()),
+                                L("Optimizing layer %s / %s"),
+                                {std::to_string(nb_layers_done), std::to_string(m_print->secondary_status_counter_get_max())},
+                                PrintBase::SlicingStatus::SECONDARY_STATE);
             }
         );
         m_print->throw_if_canceled();
@@ -695,11 +809,20 @@ void PrintObject::simplify_extrusion_path()
 void PrintObject::estimate_curled_extrusions()
 {
     if (this->set_started(posEstimateCurledExtrusions)) {
+        m_print->set_status(objectstep_2_percent[PrintObjectStep::posEstimateCurledExtrusions], L("Estimate curled extrusions"));
+        if (m_print->objects().size() > 1) {
+            m_print->secondary_status_counter_add_max(1);
+            m_print->set_status(0. / m_print->objects().size(), L("Object %s / %s"),
+                            {std::to_string(0), std::to_string(m_print->objects().size())},
+                PrintBase::SlicingStatus::SECONDARY_STATE);
+        } else {
+            m_print->set_status(0, "", PrintBase::SlicingStatus::DEFAULT | PrintBase::SlicingStatus::SECONDARY_STATE);
+        }
         if (this->print()->config().avoid_crossing_curled_overhangs ||
             std::any_of(this->print()->m_print_regions.begin(), this->print()->m_print_regions.end(),
                         [](const PrintRegion *region) { return region->config().overhangs_dynamic_speed.is_enabled(); })) {
             BOOST_LOG_TRIVIAL(debug) << "Estimating areas with curled extrusions - start";
-            m_print->set_status(88, _u8L("Estimating curled extrusions"));
+            m_print->set_status(objectstep_2_percent[PrintObjectStep::posEstimateCurledExtrusions], _u8L("Estimating curled extrusions"));
 
             // Estimate curling of support material and add it to the malformaition lines of each layer
             float                         support_flow_width = support_material_flow(this, this->config().layer_height).width();
@@ -714,6 +837,15 @@ void PrintObject::estimate_curled_extrusions()
             BOOST_LOG_TRIVIAL(debug) << "Estimating areas with curled extrusions - end";
         }
         this->set_done(posEstimateCurledExtrusions);
+        
+        // updating progress
+        if (m_print->objects().size() > 1) {
+            int32_t nb_objects_done = m_print->secondary_status_counter_increment();
+            m_print->set_status(100 * (nb_objects_done + 1) / m_print->secondary_status_counter_get_max(),
+                            L("Object %s / %s"),
+                            {std::to_string(nb_objects_done + 1), std::to_string(m_print->secondary_status_counter_get_max())},
+                            PrintBase::SlicingStatus::SECONDARY_STATE);
+        }
     }
 }
 
@@ -721,7 +853,7 @@ void PrintObject::calculate_overhanging_perimeters()
 {
     if (this->set_started(posCalculateOverhangingPerimeters)) {
         BOOST_LOG_TRIVIAL(debug) << "Calculating overhanging perimeters - start";
-        m_print->set_status(89, _u8L("Calculating overhanging perimeters"));
+        m_print->set_status(objectstep_2_percent[PrintObjectStep::posCalculateOverhangingPerimeters], _u8L("Calculating overhanging perimeters"));
         std::set<uint16_t>                      extruders;
         std::unordered_set<const PrintRegion *> regions_with_dynamic_speeds;
         for (const PrintRegion *pr : this->print()->m_print_regions) {
@@ -742,7 +874,7 @@ void PrintObject::calculate_overhanging_perimeters()
             std::unordered_map<size_t, AABBTreeLines::LinesDistancer<Linef>>      unscaled_polygons_lines;
             for (const Layer *l : this->layers()) {
                 curled_lines[l->id()]            = AABBTreeLines::LinesDistancer<CurledLine>{l->curled_lines};
-                unscaled_polygons_lines[l->id()] = AABBTreeLines::LinesDistancer<Linef>{to_unscaled_linesf(l->lslices)};
+                unscaled_polygons_lines[l->id()] = AABBTreeLines::LinesDistancer<Linef>{to_unscaled_linesf(l->lslices())};
             }
             curled_lines[size_t(-1)]            = {};
             unscaled_polygons_lines[size_t(-1)] = {};
@@ -1794,7 +1926,7 @@ void PrintObject::detect_surfaces_type()
                     if (upper_layer) {
                         ExPolygons upper_slices = interface_shells ? 
                             diff_ex(layerm_slices_surfaces, upper_layer->get_region(region_id)->slices().surfaces, ApplySafetyOffset::Yes) :
-                            diff_ex(layerm_slices_surfaces, upper_layer->lslices, ApplySafetyOffset::Yes);
+                            diff_ex(layerm_slices_surfaces, upper_layer->lslices(), ApplySafetyOffset::Yes);
                         surfaces_append(top, opening_ex(upper_slices, offset), stPosTop | stDensSolid);
                     } else {
                         // if no upper layer, all surfaces of this one are solid
@@ -1820,7 +1952,7 @@ void PrintObject::detect_surfaces_type()
                         surfaces_append(
                             bottom,
                             opening_ex(
-                                diff_ex(layerm_slices_surfaces, lower_layer->lslices, ApplySafetyOffset::Yes),
+                                diff_ex(layerm_slices_surfaces, lower_layer->lslices(), ApplySafetyOffset::Yes),
                                 offset),
                             surface_type_bottom_other);
                         // if user requested internal shells, we need to identify surfaces
@@ -1832,7 +1964,7 @@ void PrintObject::detect_surfaces_type()
                                 bottom,
                                 opening_ex(
                                     diff_ex(
-                                        intersection(layerm_slices_surfaces, lower_layer->lslices), // supported
+                                        intersection(layerm_slices_surfaces, lower_layer->lslices()), // supported
                                         lower_layer->get_region(region_id)->slices().surfaces,
                                         ApplySafetyOffset::Yes),
                                     offset), //-+
@@ -1954,13 +2086,13 @@ void PrintObject::detect_surfaces_type()
             double total_area = 0;
             if (this->print()->config().complete_objects.value) {
                 // sequential printing: only consider myself
-                for (const ExPolygon &slice : my_layer->lslices) { total_area += slice.area(); }
+                for (const ExPolygon &slice : my_layer->lslices()) { total_area += slice.area(); }
             } else {
                 // parallel printing: get all objects
                 for (const PrintObject *object : this->print()->objects()) {
                     for (auto *layer : object->m_layers) {
                         if (std::abs(layer->print_z - my_layer->print_z) < EPSILON) {
-                            for (const ExPolygon &slice : layer->lslices) { total_area += slice.area(); }
+                            for (const ExPolygon &slice : layer->lslices()) { total_area += slice.area(); }
                         }
                     }
                 }
@@ -2030,7 +2162,7 @@ void PrintObject::process_external_surfaces()
 //		                			// Shrink the holes, let the layer above expand slightly inside the unsupported areas.
 //		                			polygons_append(voids, offset(surface.expolygon, unsupported_width));
 //		                }
-                        surfaces_covered[layer_idx] = to_polygons(this->m_layers[layer_idx]->lslices);
+                        surfaces_covered[layer_idx] = to_polygons(this->m_layers[layer_idx]->lslices());
                     }
             }
         );
@@ -2142,11 +2274,11 @@ void PrintObject::discover_vertical_shells()
                 // For a multi-material print, simulate perimeter / infill split as if only a single extruder has been used for the whole print.
                 if (perimeter_offset > 0.) {
                     // The layer.lslices are forced to merge by expanding them first.
-                    expolygons_append(cache.holes, offset2_ex(layer.lslices, 0.3f * perimeter_min_spacing, -perimeter_offset - 0.3f * perimeter_min_spacing));
+                    expolygons_append(cache.holes, offset2_ex(layer.lslices(), 0.3f * perimeter_min_spacing, -perimeter_offset - 0.3f * perimeter_min_spacing));
 #ifdef SLIC3R_DEBUG_SLICE_PROCESSING
                     {
-                        Slic3r::SVG svg(debug_out_path("discover_vertical_shells-extra-holes-%d.svg", debug_idx), get_extents(layer.lslices));
-                        svg.draw(layer.lslices, "blue");
+                        Slic3r::SVG svg(debug_out_path("discover_vertical_shells-extra-holes-%d.svg", debug_idx), get_extents(layer.lslices()));
+                        svg.draw(layer.lslices(), "blue");
                         svg.draw(union_ex(cache.holes), "red");
                         svg.draw_outline(union_ex(cache.holes), "black", "blue", scale_(0.05));
                         svg.Close();
@@ -2317,7 +2449,7 @@ void PrintObject::discover_vertical_shells()
                             // perimeter width of area
                             ExPolygons anchor_area = intersection_ex(expand(cache_top_botom_regions[idx_layer].top_surfaces,
                                                                        layerm->flow(frExternalPerimeter).scaled_spacing()),
-                                                                to_polygons(m_layers[i]->lslices));
+                                                                to_polygons(m_layers[i]->lslices()));
                             combine_shells(anchor_area);
                         }
 
@@ -2354,7 +2486,7 @@ void PrintObject::discover_vertical_shells()
                         if (!at_least_one_bottom_projected && i >= 0) {
                             ExPolygons anchor_area = intersection_ex(expand(cache_top_botom_regions[idx_layer].bottom_surfaces,
                                                                        layerm->flow(frExternalPerimeter).scaled_spacing()),
-                                                                to_polygons(m_layers[i]->lslices));
+                                                                to_polygons(m_layers[i]->lslices()));
                             combine_shells(anchor_area);
                         }
 
@@ -2473,9 +2605,9 @@ void PrintObject::discover_vertical_shells()
                         Polygons object_volume;
                         Polygons internal_volume;
                         {
-                            Polygons shrinked_bottom_slice = idx_layer > 0 ? to_polygons(m_layers[idx_layer - 1]->lslices) : Polygons{};
+                            Polygons shrinked_bottom_slice = idx_layer > 0 ? to_polygons(m_layers[idx_layer - 1]->lslices()) : Polygons{};
                             Polygons shrinked_upper_slice  = (idx_layer + 1) < m_layers.size() ?
-                                                                 to_polygons(m_layers[idx_layer + 1]->lslices) :
+                                                                 to_polygons(m_layers[idx_layer + 1]->lslices()) :
                                                                  Polygons{};
                             object_volume = intersection(shrinked_bottom_slice, shrinked_upper_slice);
                             //internal_volume = closing(polygonsInternal, float(SCALED_EPSILON));
@@ -2716,7 +2848,7 @@ void PrintObject::bridge_over_infill()
 
 #ifdef DEBUG_BRIDGE_OVER_INFILL
                             debug_draw(std::to_string(lidx) + "_candidate_surface_" + std::to_string(area(s->expolygon)),
-                                       to_lines(region->layer()->lslices), to_lines(s->expolygon), to_lines(worth_bridging),
+                                       to_lines(region->layer()->lslices()), to_lines(s->expolygon), to_lines(worth_bridging),
                                        to_lines(unsupported_area));
 #endif
 #ifdef DEBUG_BRIDGE_OVER_INFILL
@@ -2859,7 +2991,7 @@ void PrintObject::bridge_over_infill()
         );
 #ifdef DEBUG_BRIDGE_OVER_INFILL
         for (const auto &il : infill_lines) {
-            debug_draw(std::to_string(il.first) + "_infill_lines", to_lines(get_layer(il.first)->lslices), to_lines(il.second), {}, {});
+            debug_draw(std::to_string(il.first) + "_infill_lines", to_lines(get_layer(il.first)->lslices()), to_lines(il.second), {}, {});
         }
 #endif
     }
@@ -3363,7 +3495,7 @@ void PrintObject::bridge_over_infill()
 
 #ifdef DEBUG_BRIDGE_OVER_INFILL
                     debug_draw(std::to_string(lidx) + "_" + std::to_string(cluster_idx) + "_" + std::to_string(job_idx) + "_" + "_expanded_bridging" +  std::to_string(r),
-                               to_lines(layer->lslices), to_lines(boundary_plines), to_lines(candidate.new_polys), to_lines(bridging_area));
+                               to_lines(layer->lslices()), to_lines(boundary_plines), to_lines(candidate.new_polys), to_lines(bridging_area));
 #endif
 
                     expanded_surfaces.push_back(CandidateSurface(candidate.original_surface, candidate.layer_index, bridging_area,
@@ -3704,7 +3836,7 @@ bool PrintObject::update_layer_height_profile(const ModelObject& model_object, c
 //         {
 //             // Get perimeters area as the difference between slices and fill_surfaces
 //             // Only consider the area that is not supported by lower perimeters
-//             Polygons perimeters = intersection(diff(layer->lslices, fill_surfaces), lower_layer_fill_surfaces);
+//             Polygons perimeters = intersection(diff(layer->lslices(), fill_surfaces), lower_layer_fill_surfaces);
 //             // Only consider perimeter areas that are at least one extrusion width thick.
 //             //FIXME Offset2 eats out from both sides, while the perimeters are create outside in.
 //             //Should the pw not be half of the current value?

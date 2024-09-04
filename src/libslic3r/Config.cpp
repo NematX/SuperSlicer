@@ -1358,6 +1358,7 @@ bool ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, con
         opt->set_phony(false);
     
     if (optdef->is_vector_extruder) {
+        assert(optdef->default_value->is_vector());
         assert(dynamic_cast<ConfigOptionVectorBase *>(opt));
         static_cast<ConfigOptionVectorBase *>(opt)->set_is_extruder_size(true);
     }
@@ -2018,6 +2019,25 @@ void ConfigBase::save(const std::string &file, bool to_prusa) const
             c << opt_key << " = " << this->opt_serialize(opt_key) << std::endl;
     c.close();
 }
+
+#ifdef _DEBUG
+std::string ConfigBase::to_debug_string() const
+{
+    std::stringstream c;
+    for (const std::string &opt_key : this->keys()) {
+        if (!(*print_config_def.get(opt_key)->default_value == *this->option(opt_key))) {
+            std::string serialized = this->opt_serialize(opt_key);
+            if (!serialized.empty() && serialized.front() == '"' && serialized.back() == '"') {
+                boost::replace_all(serialized, "\"", "\\\"");
+            } else {
+                c << "config.set_deserialize(\"" << opt_key << "\", \"" << this->opt_serialize(opt_key) << "\");"
+                  << std::endl;
+            }
+        }
+    }
+    return c.str();
+}
+#endif
 
 // Disable all the optional settings.
 void ConfigBase::disable_optionals()

@@ -150,8 +150,8 @@ void LayerRegion::make_perimeters(
         params.ext_perimeter_spacing2 -= params.infill_gap;
     }
 
-    const ExPolygons *lower_slices = this->layer()->lower_layer ? &this->layer()->lower_layer->lslices : nullptr;
-    const ExPolygons *upper_slices = this->layer()->upper_layer ? &this->layer()->upper_layer->lslices : nullptr;
+    const ExPolygons *lower_slices = this->layer()->lower_layer ? &this->layer()->lower_layer->lslices() : nullptr;
+    const ExPolygons *upper_slices = this->layer()->upper_layer ? &this->layer()->upper_layer->lslices() : nullptr;
     
     for (const Surface &surface : slices) {
         size_t perimeters_begin = m_perimeters.size();
@@ -184,7 +184,7 @@ void LayerRegion::make_perimeters(
 void LayerRegion::make_milling_post_process(const SurfaceCollection& slices) {
     MillingPostProcess mill(// input:
         &slices,
-        (this->layer()->lower_layer != nullptr) ? &this->layer()->lower_layer->lslices : nullptr,
+        (this->layer()->lower_layer != nullptr) ? &this->layer()->lower_layer->lslices() : nullptr,
         this->region().config(),
         this->layer()->object()->config(),
         this->layer()->object()->print()->config()
@@ -625,7 +625,7 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
             // Remove voids from fill_boundaries, that are not supported by the layer below.
             if (lower_layer_covered == nullptr) {
                 lower_layer_covered = &lower_layer_covered_tmp;
-            	lower_layer_covered_tmp = to_polygons(lower_layer->lslices);
+            	lower_layer_covered_tmp = to_polygons(lower_layer->lslices());
             }
             if (! lower_layer_covered->empty())
                 // Allow the top / bottom surfaces to expand into the voids of this layer if supported by the layer below.
@@ -796,7 +796,7 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
 
 
                 } else {
-                    auto [bridging_dir, unsupported_dist] = detect_bridging_direction(to_polygons(initial), to_polygons(lower_layer->lslices));
+                    auto [bridging_dir, unsupported_dist] = detect_bridging_direction(to_polygons(initial), to_polygons(lower_layer->lslices()));
                     bridges[idx_last].bridge_angle = PI + std::atan2(bridging_dir.y(), bridging_dir.x());
 
                     // #if 1
@@ -808,7 +808,7 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
                     //     bbox);
 
                     //     svg.draw(initial, "cyan");
-                    //     svg.draw(to_lines(lower_layer->lslices), "green", stroke_width);
+                    //     svg.draw(to_lines(lower_layer->lslices()), "green", stroke_width);
                     // #endif
                 }
 
@@ -816,7 +816,7 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
 #else
                 BridgeDetector bd(
                     initial,
-                    lower_layer->lslices,
+                    lower_layer->lslices(),
                     this->bridging_flow(frInfill).scaled_spacing(),
                     scale_t(this->layer()->object()->print()->config().bridge_precision.get_abs_value(this->bridging_flow(frInfill).spacing())),
                     this->layer()->id()
@@ -1095,7 +1095,7 @@ void LayerRegion::simplify_extrusion_entity()
     
 	//Ligne 652:     SimplifyVisitor(coordf_t scaled_resolution, ArcFittingType use_arc_fitting, const ConfigOptionFloatOrPercent *arc_fitting_tolearance)
     //call simplify for all paths
-    Slic3r::SimplifyVisitor visitor{ scaled_resolution , enable_arc_fitting, &print_config.arc_fitting_tolerance };
+    Slic3r::SimplifyVisitor visitor{ scaled_resolution , enable_arc_fitting, &print_config.arc_fitting_tolerance, enable_arc_fitting != ArcFittingType::Disabled ? SCALED_EPSILON * 2 : SCALED_EPSILON };
     this->m_perimeters.visit(visitor);
     this->m_fills.visit(visitor);
     this->m_ironings.visit(visitor);

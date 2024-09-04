@@ -504,7 +504,7 @@ std::string fix_slicing_errors(LayerPtrs &layers, const std::function<void()> &t
     BOOST_LOG_TRIVIAL(debug) << "Slicing objects - fixing slicing errors in parallel - end";
 
     // remove empty layers from bottom
-    while (! layers.empty() && (layers.front()->lslices.empty() || layers.front()->empty())) {
+    while (! layers.empty() && (layers.front()->lslices().empty() || layers.front()->empty())) {
         delete layers.front();
         layers.erase(layers.begin());
         if(!layers.empty())
@@ -566,8 +566,8 @@ void PrintObject::slice()
                 m_print->throw_if_canceled();
                 Layer &layer = *m_layers[layer_idx];
                 layer.lslices_ex.clear();
-                layer.lslices_ex.reserve(layer.lslices.size());
-                for (const ExPolygon &expoly : layer.lslices)
+                layer.lslices_ex.reserve(layer.lslices().size());
+                for (const ExPolygon &expoly : layer.lslices())
                 	layer.lslices_ex.push_back({ get_extents(expoly) });
                 layer.backup_untyped_slices();
             }
@@ -586,11 +586,11 @@ void PrintObject::slice()
     this->set_done(posSlice);
 }
 
-// modify the polygon so it doesn't have any angle spiker than 90°
+// modify the polygon so it doesn't have any concave angle spiker than 90°
 // used by _min_overhang_threshold
 void only_convex_90(Polygon &poly) {
     const bool ccw = poly.is_counter_clockwise();
-    std::vector<size_t> concave = ccw ? poly.concave_points_idx( 3 * PI/2 + EPSILON) : poly.convex_points_idx(PI/2 - EPSILON);
+    std::vector<size_t> concave = ccw ? poly.concave_points_idx( PI/2 - EPSILON) : poly.convex_points_idx(PI/2 - EPSILON);
     while (!concave.empty()) {
         assert(std::is_sorted(concave.begin(), concave.end()));
         Points new_pts;
@@ -613,15 +613,17 @@ void only_convex_90(Polygon &poly) {
                 // then get the distance to move in the big side
                 Point previous_point = ccw? (idx == 0 ? poly.back() : poly[idx - 1]) : (idx == poly.size() - 1 ? poly.front() : poly[idx + 1]);
                 Point next_point = ccw? (idx == poly.size() - 1 ? poly.front() : poly[idx + 1]) : (idx == 0 ? poly.back() : poly[idx - 1]);
-                assert(ccw_angle_old_test(poly[idx], previous_point, next_point) == abs_angle(angle_ccw(previous_point - poly[idx], next_point - poly[idx])));
+                assert(is_approx(ccw_angle_old_test(poly[idx], previous_point, next_point), abs_angle(angle_ccw(previous_point - poly[idx], next_point - poly[idx])), 0.00000001));
                 double angle = abs_angle(angle_ccw(previous_point - poly[idx], next_point - poly[idx]));
-                assert(angle < PI/2 && angle > 0);
+                assert(angle <= PI/2 && angle >= 0);
                 coordf_t dist_to_move = std::cos(angle) * poly[idx].distance_to(small_side_point) + SCALED_EPSILON / 2;
                 // if distance to move too big, just deleted point (don't add it)
                 if (dist_to_move < poly[idx].distance_to(big_side_point)) {
                     Line l(poly[idx], big_side_point);
                     l.extend_start(-dist_to_move);
                     new_pts.push_back(l.a);
+                    double angle_new = abs_angle(angle_ccw(previous_point - l.a, next_point - l.a));
+                    assert(angle_new != angle);
                 }
             }
         }
@@ -656,9 +658,11 @@ void PrintObject::_min_overhang_threshold() {
         Layer* my_layer = this->get_layer(layer_idx);
         Layer* lower_layer = this->get_layer(layer_idx - 1);
         assert(lower_layer == my_layer->lower_layer);
-        ExPolygons supported_area = intersection_ex(my_layer->lslices, lower_layer->lslices);
+        ExPolygons supported_area = intersection_ex(my_layer->lslices(), lower_layer->lslices());
         ExPolygons bridged_area;
         ExPolygons bridged_other_layers_area;
+
+        for (ExPolygon &poly : supported_area) poly.assert_point_distance();
 
         // get bridgeable area
         for (size_t region_idx = 0; region_idx < my_layer->m_regions.size(); ++region_idx) {
@@ -667,7 +671,7 @@ void PrintObject::_min_overhang_threshold() {
                     !lregion->region().config().overhangs_bridge_threshold.is_enabled()) {
                 Surfaces & my_surfaces = lregion->m_slices.surfaces;
                 ExPolygons unsupported = to_expolygons(my_surfaces);
-                unsupported            = diff_ex(unsupported, lower_layer->lslices, ApplySafetyOffset::Yes);
+                unsupported            = diff_ex(unsupported, lower_layer->lslices(), ApplySafetyOffset::Yes);
                 Flow bridgeFlow = lregion->bridging_flow(FlowRole::frSolidInfill);
 
                 if (!unsupported.empty()) {
@@ -676,7 +680,7 @@ void PrintObject::_min_overhang_threshold() {
                     unsupported_filtered = offset2_ex(unsupported, double(-max_nz_diam), double(max_nz_diam));
                     for (const ExPolygon &to_bridge : unsupported_filtered) {
                         BridgeDetector detector(to_bridge,
-                                                lower_layer->lslices,
+                                                lower_layer->lslices(),
                                                 bridgeFlow.scaled_spacing(),
                                                 scale_t(this->print()->config().bridge_precision.get_abs_value(bridgeFlow.spacing())),
                                                 layer_idx);
@@ -704,7 +708,7 @@ void PrintObject::_min_overhang_threshold() {
                         previous_supported = union_safety_offset_ex(previous_supported);
                         for (size_t other_layer_bridge_idx = layer_idx + 1; other_layer_bridge_idx < max_layer_idx; other_layer_bridge_idx++) {
                             // remove new voids
-                            still_unsupported = intersection_ex(still_unsupported, this->get_layer(other_layer_bridge_idx)->lslices);
+                            still_unsupported = intersection_ex(still_unsupported, this->get_layer(other_layer_bridge_idx)->lslices());
                             //compute bridges
                             ExPolygons new_bridged_area;
                             for (size_t other_region_idx = 0; other_region_idx < my_layer->m_regions.size(); ++other_region_idx) {
@@ -745,7 +749,7 @@ void PrintObject::_min_overhang_threshold() {
                             }
                             // update support area from this layer
                             if (other_layer_bridge_idx + 1 < max_layer_idx) {
-                                previous_supported = diff_ex(this->get_layer(other_layer_bridge_idx)->lslices, still_unsupported);
+                                previous_supported = diff_ex(this->get_layer(other_layer_bridge_idx)->lslices(), still_unsupported);
                             }
                         }
                     }
@@ -795,7 +799,9 @@ void PrintObject::_min_overhang_threshold() {
                 }
             }
             //also lslices
-            my_layer->lslices = intersection_ex(my_layer->lslices, union_ex(modified), ApplySafetyOffset::Yes);
+            ExPolygons new_lslices = intersection_ex(my_layer->lslices(), union_ex(modified), ApplySafetyOffset::Yes);
+            for (ExPolygon &expoly : new_lslices) expoly.assert_point_distance();
+            my_layer->set_lslices() = std::move(new_lslices);
         }
     }
 }
@@ -925,10 +931,11 @@ void PrintObject::_transform_hole_to_polyholes()
         for (auto& poly_to_replace : entry.second) {
             Polygon polyhole = polyholes[poly_to_replace.second % polyholes.size()];
             //search the clone in layers->slices
-            for (ExPolygon& explo_slice : m_layers[poly_to_replace.second]->lslices) {
+            for (ExPolygon& explo_slice : m_layers[poly_to_replace.second]->set_lslices()) {
                 for (Polygon& poly_slice : explo_slice.holes) {
                     if (poly_slice.points == poly_to_replace.first->points) {
                         poly_slice.points = polyhole.points;
+                        poly_slice.assert_point_distance();
                     }
                 }
             }
@@ -1539,12 +1546,12 @@ void PrintObject::slice_volumes()
                     //FIXME: can't make it work in multi-region object, it seems useful to avoid bridge on top of first layer compensation
                     //so it's disable, if you want an offset, use the offset field.
                     //if (layer->regions().size() == 1 && ! m_layers.empty() && layer_id == 0 && first_layer_compensation < 0 && m_config.raft_layers == 0) {
-                    //    // The Elephant foot has been compensated, therefore the 1st layer's lslices are shrank with the Elephant foot compensation value.
+                    //    // The Elephant foot has been compensated, therefore the 1st layer's lslices() are shrank with the Elephant foot compensation value.
                     //    // Store the uncompensated value there.
                     //    assert(! m_layers.empty());
                     //    assert(m_layers.front()->id() == 0);
-                    //    m_layers.front()->lslices = offset_ex(std::move(m_layers.front()->lslices), -first_layer_compensation);
-                    //    m_layers.front()->lslice_indices_sorted_by_print_order = chain_expolygons(layer.lslices);
+                    //    m_layers.front()->set_lslices() = offset_ex(std::move(m_layers.front()->lslices()), -first_layer_compensation);
+                    //    m_layers.front()->lslice_indices_sorted_by_print_order = chain_expolygons(layer.lslices());
                     //}
                 }
             );

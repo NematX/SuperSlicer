@@ -62,11 +62,12 @@ void Layer::make_slices()
                 polygons_append(slices_p, to_polygons(layerm->slices().surfaces));
             slices = union_safety_offset_ex(slices_p);
         }
+        for (ExPolygon &poly : slices) poly.assert_point_distance();
         // lslices are sorted by topological order from outside to inside from the clipper union used above
-        this->lslices = slices;
+        this->set_lslices() = slices;
     }
 
-    this->lslice_indices_sorted_by_print_order = chain_expolygons(this->lslices);
+    this->lslice_indices_sorted_by_print_order = chain_expolygons(this->lslices());
 }
 
 // used by Layer::build_up_down_graph()
@@ -435,7 +436,7 @@ static void connect_layer_slices(
                 // The contour below is likely completely inside another contour above. Look-it up in the island above.
                 Point pt(polynode.Contour.front().x(), polynode.Contour.front().y());
                 for (int i = int(other_layer.lslices_ex.size()) - 1; i >= 0; -- i)
-                    if (other_layer.lslices_ex[i].bbox.contains(pt) && other_layer.lslices[i].contains(pt))
+                    if (other_layer.lslices_ex[i].bbox.contains(pt) && other_layer.lslices()[i].contains(pt))
                         return i;
                 // The following shall not happen now as the source expolygons are being shrunk a bit before intersecting,
                 // thus each point of each intersection polygon should fit completely inside one of the original (unshrunk) expolygons.
@@ -458,7 +459,7 @@ static void connect_layer_slices(
             for (int i = int(other_layer.lslices_ex.size()) - 1; i >= 0; -- i)
                 if (contour_aabb.overlap(other_layer.lslices_ex[i].bbox))
                     // it is potentially slow, but should be executed rarely
-                    if (Polygons overlap = intersection(contour_poly, other_layer.lslices[i]); ! overlap.empty()) {
+                    if (Polygons overlap = intersection(contour_poly, other_layer.lslices()[i]); ! overlap.empty()) {
                         if (other_has_duplicates) {
                             // Find the contour with the largest overlap. It is expected that the other overlap will be very small.
                             double a = area(overlap);
@@ -528,11 +529,11 @@ static void connect_layer_slices(
 void Layer::build_up_down_graph(Layer& below, Layer& above)
 {
     coord_t             paths_below_offset = 0;
-    ClipperLib_Z::Paths paths_below = expolygons_to_zpaths_shrunk(below.lslices, paths_below_offset);
-    coord_t             paths_above_offset = paths_below_offset + coord_t(below.lslices.size());
-    ClipperLib_Z::Paths paths_above = expolygons_to_zpaths_shrunk(above.lslices, paths_above_offset);
+    ClipperLib_Z::Paths paths_below = expolygons_to_zpaths_shrunk(below.lslices(), paths_below_offset);
+    coord_t             paths_above_offset = paths_below_offset + coord_t(below.lslices().size());
+    ClipperLib_Z::Paths paths_above = expolygons_to_zpaths_shrunk(above.lslices(), paths_above_offset);
 #ifndef NDEBUG
-    coord_t             paths_end = paths_above_offset + coord_t(above.lslices.size());
+    coord_t             paths_end = paths_above_offset + coord_t(above.lslices().size());
 #endif // NDEBUG
 
     ClipperLib_Z::Clipper  clipper;
@@ -570,11 +571,14 @@ void Layer::backup_untyped_slices()
 void Layer::restore_untyped_slices()
 {
     if (layer_needs_raw_backup(this)) {
-        for (LayerRegion *layerm : m_regions)
+        for (LayerRegion *layerm : m_regions) {
             layerm->m_slices.set(layerm->m_raw_slices, stPosInternal | stDensSparse);
+            for(auto &srf : layerm->m_slices) srf.expolygon.assert_point_distance();
+        }
     } else {
         assert(m_regions.size() == 1);
-        m_regions.front()->m_slices.set(this->lslices, stPosInternal | stDensSparse);
+        m_regions.front()->m_slices.set(this->lslices(), stPosInternal | stDensSparse);
+        for(auto &srf :  m_regions.front()->m_slices) srf.expolygon.assert_point_distance();
     }
 }
 
@@ -595,7 +599,7 @@ void Layer::restore_untyped_slices_no_extra_perimeters()
 //    	LayerRegion *layerm = m_regions.front();
 //    	// This optimization is correct, as extra_perimeters are only reused by prepare_infill() with multi-regions.
 //        //if (! layerm->region().config().extra_perimeters.value)
-//        	layerm->m_slices.set(this->lslices, stPosInternal | stDensSparse);
+//        	layerm->m_slices.set(this->lslices(), stPosInternal | stDensSparse);
 //    }
 }
 
@@ -1141,7 +1145,7 @@ void Layer::sort_perimeters_into_islands(
     // First sort into islands using exact fit.
     // Traverse the slices in an increasing order of bounding box size, so that the islands inside another islands are tested first,
     // so we can just test a point inside ExPolygon::contour and we may skip testing the holes.
-    auto point_inside_surface = [&lslices = this->lslices, &lslices_ex = this->lslices_ex](size_t lslice_idx, const Point &point) {
+    auto point_inside_surface = [&lslices = this->lslices(), &lslices_ex = this->lslices_ex](size_t lslice_idx, const Point &point) {
         const BoundingBox &bbox = lslices_ex[lslice_idx].bbox;
         return point.x() >= bbox.min.x() && point.x() < bbox.max.x() &&
                point.y() >= bbox.min.y() && point.y() < bbox.max.y() &&
@@ -1174,7 +1178,7 @@ void Layer::sort_perimeters_into_islands(
                 //FIXME it looks as if Arachne could extend open lines by fuzzy_skin_point_dist, which does not seem right.
                 + region_config.fuzzy_skin_point_dist.value));
         auto point_inside_surface_dist2 =
-            [&lslices = this->lslices, &lslices_ex = this->lslices_ex, bbox_eps]
+            [&lslices = this->lslices(), &lslices_ex = this->lslices_ex, bbox_eps]
             (const size_t lslice_idx, const Point &point) {
             const BoundingBox &bbox = lslices_ex[lslice_idx].bbox;
             return 
@@ -1195,7 +1199,7 @@ void Layer::sort_perimeters_into_islands(
                 // This should not happen, but Arachne seems to produce a perimeter point far outside its source contour.
                 // As a last resort, find the closest source contours to the sample point.
                 for (int lslice_idx = int(lslices_ex.size()) - 1; lslice_idx >= 0; -- lslice_idx)
-                    if (double d2 = (lslices[lslice_idx].point_projection(it_source_slice->second) - it_source_slice->second).cast<double>().squaredNorm(); d2 < d2min) {
+                    if (double d2 = (lslices()[lslice_idx].point_projection(it_source_slice->second) - it_source_slice->second).cast<double>().squaredNorm(); d2 < d2min) {
                         d2min = d2;
                         lslice_idx_min = lslice_idx;
                     }
@@ -1265,7 +1269,7 @@ void SupportLayer::simplify_support_extrusion_path() {
     coordf_t scaled_resolution = scale_d(print_config.resolution.value);
     if (scaled_resolution == 0) scaled_resolution = enable_arc_fitting ? SCALED_EPSILON * 2 : SCALED_EPSILON;
 
-    SimplifyVisitor visitor{ scaled_resolution , enable_arc_fitting ? print_config.arc_fitting : ArcFittingType::Disabled, &print_config.arc_fitting_tolerance };
+    SimplifyVisitor visitor{ scaled_resolution , enable_arc_fitting ? print_config.arc_fitting : ArcFittingType::Disabled, &print_config.arc_fitting_tolerance, enable_arc_fitting ? SCALED_EPSILON * 2 : SCALED_EPSILON};
     this->support_fills.visit(visitor);
 }
 
