@@ -2109,6 +2109,24 @@ void GCodeGenerator::_do_export(Print& print_mod, GCodeOutputStream &file, Thumb
         file.write_format("; total layers count = %i\n", layer_count());
         file.write_format(";%s\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Estimated_Printing_Time_Placeholder).c_str());
 
+        //nematx web fields
+        // has support
+        bool has_support = false;
+        for (const PrintObject *object : print.objects()) {
+            for (const Layer *supp_layer : object->support_layers()) {
+                for (const LayerRegion *region : supp_layer->regions()) {
+                    if (region->has_extrusions()) {
+                        has_support = true;
+                    }
+                }
+            }
+            //if (object->support_layer_count() > 0) {
+            //    has_support = true;
+            //    break;
+            //}
+        }
+        file.write_format("; has_support = %s\n", has_support ? "1" : "0");
+
         // if exporting gcode in ascii format, config export is done here
         // Append full config, delimited by two 'phony' configuration keys slic3r_config = begin and slic3r_config = end.
         // The delimiters are structured as configuration key / value pairs to be parsable by older versions of PrusaSlicer G-code viewer.
