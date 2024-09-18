@@ -1,3 +1,4 @@
+1.0.1 min_layer_size, external_perimeter_first, thumbnail, extruder_temperature_offset, extruder name
 1.0.0 New NEX01 settings tested on the real printer.
 0.0.3 percentage speed.
 0.0.2 Updated start g-code.
