@@ -4561,10 +4561,18 @@ void GCodeProcessor::post_process()
         unsigned int extra_lines_count = 0;
 
         // remove trailing '\n'
-        auto line = std::string_view(gcode_line).substr(0, gcode_line.length() - 1);
+        std::string_view line = std::string_view(gcode_line).substr(0, gcode_line.length() - 1);
+
+        //remove line numbers
+        if (!line.empty() && line[0] == 'N') {
+            size_t end_line_number = line.find(' ');
+            if (end_line_number != std::string::npos) {
+                line  = line.substr(end_line_number + 1);
+            }
+        }
 
         if (line.length() > 1) {
-            line = line.substr(1);
+            line = line.substr(1); // remove ';' if present
             if (m_time_processor.export_remaining_time_enabled &&
                 (line == reserved_tag(ETags::First_Line_M73_Placeholder) || line == reserved_tag(ETags::Last_Line_M73_Placeholder))) {
                 for (size_t i = 0; i < static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Count); ++i) {
