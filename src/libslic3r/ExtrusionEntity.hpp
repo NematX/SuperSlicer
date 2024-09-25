@@ -712,6 +712,8 @@ struct LoopAssertVisitor : public ExtrusionVisitorRecursiveConst {
     LoopAssertVisitor(bool check_length) : m_check_length(check_length) {}
     virtual void default_use(const ExtrusionEntity& entity) override {};
     virtual void use(const ExtrusionPath &path) override {
+        if (!m_check_length)
+            return;
         release_assert(path.length() > SCALED_EPSILON);
         for (size_t idx = 1; idx < path.size(); ++idx)
             release_assert(!path.polyline.get_point(idx - 1).coincides_with_epsilon(path.polyline.get_point(idx)));
@@ -725,8 +727,9 @@ struct LoopAssertVisitor : public ExtrusionVisitorRecursiveConst {
             release_assert(path.polyline.size() >= 2);
             release_assert(!m_check_length || path.length() > SCALED_EPSILON);
             release_assert(path.first_point() == last_pt);
-            for (size_t idx = 1; idx < path.size(); ++idx)
-                release_assert(!path.polyline.get_point(idx - 1).coincides_with_epsilon(path.polyline.get_point(idx)));
+            if(m_check_length)
+                for (size_t idx = 1; idx < path.size(); ++idx)
+                    release_assert(!path.polyline.get_point(idx - 1).coincides_with_epsilon(path.polyline.get_point(idx)));
             last_pt = path.last_point();
         }
         release_assert(loop.paths.front().first_point() == loop.paths.back().last_point());

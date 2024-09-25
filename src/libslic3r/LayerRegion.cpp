@@ -1044,7 +1044,8 @@ void LayerRegion::trim_surfaces(const Polygons &trimming_polygons)
         surface.expolygon.assert_valid();
     }
 #endif /* NDEBUG */
-    this->m_slices.set(intersection_ex(this->slices().surfaces, trimming_polygons), stPosInternal | stDensSparse);
+    coordf_t scaled_resolution = std::max(SCALED_EPSILON, scale_t(this->layer()->object()->print()->config().resolution.value));
+    this->m_slices.set(ensure_valid(intersection_ex(this->slices().surfaces, trimming_polygons), scaled_resolution), stPosInternal | stDensSparse);
     for(auto &srf : this->m_slices) srf.expolygon.assert_valid();
 }
 
