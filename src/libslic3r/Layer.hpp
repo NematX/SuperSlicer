@@ -149,7 +149,11 @@ public:
     // (this collection contains only ExtrusionEntityCollection objects)
     [[nodiscard]] const ExtrusionEntityCollection&  fills() const { return m_fills; }
     [[nodiscard]] const ExtrusionEntityCollection&  ironings() const { return m_ironings; }
-    
+    // only for Layer & PrintObject
+    [[nodiscard]] ExtrusionEntityCollection& set_fills() { return m_fills; }
+    [[nodiscard]] ExtrusionEntityCollection& set_ironings() { return m_ironings; }
+    void                                     clear();
+
     Flow     flow(FlowRole role) const;
     Flow     flow(FlowRole role, double layer_height) const;
     coordf_t bridging_height_avg() const;
@@ -193,7 +197,12 @@ protected:
     friend class Layer;
     friend class PrintObject;
 
-    LayerRegion(Layer *layer, const PrintRegion *region) : m_layer(layer), m_region(region) {}
+    LayerRegion(Layer *layer, const PrintRegion *region) : m_layer(layer), m_region(region) {
+        //these are sorted in the island by idx, so they shoul never change.
+        m_perimeters.set_can_sort_reverse(false, false);
+        m_fills.set_can_sort_reverse(false, false);
+        m_ironings.set_can_sort_reverse(false, false);
+    }
     ~LayerRegion() = default;
 
 private:

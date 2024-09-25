@@ -65,7 +65,9 @@ const std::vector<std::string> GCodeProcessor::Reserved_Tags = {
     "CUSTOM_GCODE",
     "_GP_FIRST_LINE_M73_PLACEHOLDER",
     "_GP_LAST_LINE_M73_PLACEHOLDER",
-    "_GP_ESTIMATED_PRINTING_TIME_PLACEHOLDER"
+    "_GP_ESTIMATED_PRINTING_TIME_PLACEHOLDER",
+    " printing object",
+    " stop printing object",
 };
 
 const float GCodeProcessor::Wipe_Width = 0.05f;
@@ -383,6 +385,9 @@ void GCodeProcessor::UsedFilaments::reset()
 
     this->tool_change_cache = 0.0;
     this->volumes_per_extruder.clear();
+    
+    this->object_change_cache = 0.0;
+    this->volumes_per_role_per_extruder_per_object.clear();
 
     this->role_cache = 0.0;
     this->filaments_per_role.clear();
@@ -409,6 +414,7 @@ void GCodeProcessor::UsedFilaments::increase_caches(double extruded_volume, uint
         this->color_change_cache += extruded_volume;
         this->tool_change_cache += extruded_volume;
         this->role_cache += extruded_volume;
+        this->object_change_cache += extruded_volume;
     }
 }
 
@@ -420,13 +426,20 @@ void GCodeProcessor::UsedFilaments::process_color_change_cache()
     }
 }
 
-void GCodeProcessor::UsedFilaments::process_extruder_cache(uint16_t extruder_id)
+void GCodeProcessor::UsedFilaments::process_extruder_cache(uint16_t extruder_id, size_t object_id, GCodeExtrusionRole role)
  {
     if (this->tool_change_cache != 0.0) {
         this->volumes_per_extruder[extruder_id] += this->tool_change_cache;
         this->tool_change_cache = 0.0;
+        this->volumes_per_role_per_extruder_per_object[object_id][extruder_id][role] += this->object_change_cache;
+        this->object_change_cache = 0;
      }
     this->recent_toolchange = true;
+}
+
+void GCodeProcessor::UsedFilaments::process_object_cache(uint16_t extruder_id, size_t object_id, GCodeExtrusionRole role) {
+    this->volumes_per_role_per_extruder_per_object[object_id][extruder_id][role] += this->object_change_cache;
+    this->object_change_cache = 0;
 }
 
 void GCodeProcessor::UsedFilaments::process_role_cache(const GCodeProcessor* processor)
@@ -447,12 +460,16 @@ void GCodeProcessor::UsedFilaments::process_role_cache(const GCodeProcessor* pro
             this->filaments_per_role[active_role] = filament;
         this->role_cache = 0.0;
     }
+    if (this->object_change_cache > 0) {
+        this->volumes_per_role_per_extruder_per_object[processor->m_current_object_id][processor->m_extruder_id][processor->m_extrusion_role] += this->object_change_cache;
+        this->object_change_cache = 0;
+    }
 }
 
 void GCodeProcessor::UsedFilaments::process_caches(const GCodeProcessor* processor)
 {
     process_color_change_cache();
-    process_extruder_cache(processor->m_extruder_id);
+    process_extruder_cache(processor->m_extruder_id, processor->m_current_object_id, processor->m_extrusion_role);
     process_role_cache(processor);
 }
 
@@ -1089,6 +1106,9 @@ void GCodeProcessor::reset()
 
     m_extrusion_role = GCodeExtrusionRole::None;
     m_extruder_id = 0;
+    m_current_object_id = 0;
+    m_all_objects.clear();
+    m_all_objects[_u8L("Outside of any object")] = 0;
     m_extruder_colors.resize(MIN_EXTRUDERS_COUNT);
     for (size_t i = 0; i < MIN_EXTRUDERS_COUNT; ++i) {
         m_extruder_colors[i] = static_cast<unsigned char>(i);
@@ -1700,7 +1720,7 @@ void GCodeProcessor::process_klipper_ACTIVATE_EXTRUDER(const GCodeReader::GCodeL
     std::string raw_value = get_klipper_param(" EXTRUDER", line.raw());
     auto it = std::find(m_extruder_names.begin(), m_extruder_names.end(), raw_value);
     if ( it != m_extruder_names.end()) {
-        process_T(uint16_t(it - m_extruder_names.begin()));
+        process_toolchange(uint16_t(it - m_extruder_names.begin()));
         return;
     }
     std::string trsf;
@@ -1710,7 +1730,7 @@ void GCodeProcessor::process_klipper_ACTIVATE_EXTRUDER(const GCodeReader::GCodeL
     }
     if (trsf.empty())
         trsf = "0";
-    process_T(uint16_t(std::stoi(trsf)));
+    process_toolchange(uint16_t(std::stoi(trsf)));
 }
 
 void GCodeProcessor::apply_config_simplify3d(const std::string& filename)
@@ -2029,6 +2049,12 @@ void GCodeProcessor::process_gcode_line(const GCodeReader::GCodeLine& line, bool
                         default: break;
                         }
                         break;
+                    case '8':
+                        switch (cmd[3]) {
+                        case '6': { process_M486(line); break; } // Marlin/reprap: object change
+                        default: break;
+                        }
+                        break;
                     default:
                         break;
                     }
@@ -2260,6 +2286,26 @@ void GCodeProcessor::process_tags(const std::string_view comment, bool producers
                 m_result.spiral_vase_layers.push_back({ FLT_MAX, { move_id, move_id } });
             }
         }
+        return;
+    }
+    
+    // object change (octoprint)
+    if (boost::starts_with(comment, reserved_tag(ETags::Object_Start_Octoprint))) {
+        std::string object_id = std::string(comment.substr(reserved_tag(ETags::Object_Start_Octoprint).size() + 1));
+        //check if this is the first tag used to open an 'object session'.
+        if (m_current_object_id == 0) {
+            //use this name
+            if (m_all_objects.find(object_id) == m_all_objects.end()) {
+                m_all_objects[object_id] = m_all_objects.size();
+            }
+            m_used_filaments.process_object_cache(this->m_extruder_id, this->m_current_object_id, this->m_extrusion_role);
+            m_current_object_id = m_all_objects[object_id];
+        }
+        return;
+    }
+    if (boost::starts_with(comment, reserved_tag(ETags::Object_End_Octoprint))) {
+        m_used_filaments.process_object_cache(this->m_extruder_id, this->m_current_object_id, this->m_extrusion_role);
+        this->m_current_object_id = 0;
         return;
     }
 
@@ -3920,6 +3966,35 @@ void GCodeProcessor::process_M402(const GCodeReader::GCodeLine& line)
         m_feedrate = p;
 }
 
+void GCodeProcessor::process_M486(const GCodeReader::GCodeLine& line)
+{
+    if ( m_flavor != gcfMarlinLegacy && m_flavor != gcfMarlinFirmware && m_flavor != gcfRepRap)
+        return;
+
+    //get object idx
+    float f_idx;
+    if (line.has_value('S', f_idx)) {
+        size_t idx = size_t(f_idx + 1.001);
+        if (idx < 32000) {
+            if (idx > 0 && this->m_current_object_id == 0) {
+                std::string object_id = format(_u8L("Object %1%"), std::to_string(idx - 1));
+                if (m_all_objects.find(object_id) == m_all_objects.end()) {
+                    m_all_objects[object_id] = m_all_objects.size();
+                }
+                m_used_filaments.process_object_cache(this->m_extruder_id, this->m_current_object_id, this->m_extrusion_role);
+                m_current_object_id = m_all_objects[object_id];
+            } else if (idx == 0 && this->m_current_object_id > 0) {
+                m_used_filaments.process_object_cache(this->m_extruder_id, this->m_current_object_id, this->m_extrusion_role);
+                this->m_current_object_id = 0;
+            }
+            return;
+        }
+    } else {
+     // ??? error
+    }
+
+}
+
 void GCodeProcessor::process_M566(const GCodeReader::GCodeLine& line)
 {
     // RepRapFirmware gcode
@@ -3974,13 +4049,13 @@ void GCodeProcessor::process_T(const std::string_view command)
                     ((m_producer != EProducer::PrusaSlicer && m_producer != EProducer::Slic3rPE && m_producer != EProducer::Slic3r) && id >= m_result.extruder_colors.size()))
                     BOOST_LOG_TRIVIAL(error) << "GCodeProcessor encountered an invalid toolchange, maybe from a custom gcode (" << command << ").";
                 else
-                   process_T(id);
+                   process_toolchange(id);
             }
         }
     }
 }
 
-void GCodeProcessor::process_T(uint16_t new_id)
+void GCodeProcessor::process_toolchange(uint16_t new_id)
 {
     if (m_extruder_id != new_id) {
         unsigned char old_extruder_id = m_extruder_id;
@@ -4144,7 +4219,7 @@ void GCodeProcessor::post_process()
     std::map<RemainingTimeType, std::array<int32_t, static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Count)>> machine_TO_last_next_interaction{ {rtM73,{ -1 }},{rtM117,{ -1 }} };
 
     auto print_M73 = [&](const TimeMachine& machine, const float time_elapsed_seconds, const float next_interaction_seconds, unsigned int& extra_lines_count) {
-        std::string ret;
+        std::vector<std::string> ret;
         const float total_time_seconds = machine.time;
         const float time_left_seconds = total_time_seconds - time_elapsed_seconds;
         // P Percent in normal mode ; R Time remaining in normal mode(minutes) ; C Time to change / pause / user interaction
@@ -4158,15 +4233,15 @@ void GCodeProcessor::post_process()
             int32_t time_left = time_in_minutes(time_left_seconds);
             int32_t next_interaction = time_in_minutes(next_interaction_seconds);
             if (last_time_elapsed != time_elapsed || last_time_left != time_left) {
-                ret += (boost::format(m73_pr)
+                ret.push_back((boost::format(m73_pr)
                     % std::to_string(time_elapsed)
-                    % std::to_string(time_left)).str();
+                    % std::to_string(time_left)).str());
                 last_time_elapsed = time_elapsed;
                 last_time_left = time_left;
                 ++extra_lines_count;
             }
             if (next_interaction_seconds > 0 && last_next_interaction != next_interaction) {
-                ret += (boost::format(m73_c) % next_interaction).str();
+                ret.push_back((boost::format(m73_c) % next_interaction).str());
                 last_next_interaction = next_interaction;
                 ++extra_lines_count;
             }
@@ -4176,25 +4251,25 @@ void GCodeProcessor::post_process()
             int32_t& last_time_left = machine_TO_last_time_left[rtM117][(size_t)machine.time_mode];
             int32_t& last_next_interaction = machine_TO_last_next_interaction[rtM117][(size_t)machine.time_mode];
             if (time_left_seconds <= 0 || total_time_seconds == 0) {
-                ret += "M117 Time Left 0s\n";
+                ret.push_back("M117 Time Left 0s\n");
             } else {
                 int32_t time_elapsed = int32_t(time_elapsed_seconds);
                 int32_t time_left = int32_t(time_left_seconds);
                 int32_t next_interaction = int32_t(next_interaction_seconds);
                 if (next_interaction_seconds > 0) {
                     if (last_time_left != time_left || last_next_interaction != next_interaction) {
-                        ret += (boost::format("M117 Pause in %1%h%2%m%3%s / %4%h%5%m%6%s\n")
+                        ret.push_back((boost::format("M117 Pause in %1%h%2%m%3%s / %4%h%5%m%6%s\n")
                             % std::to_string(next_interaction / 3600) % std::to_string((next_interaction / 60) % 60) % std::to_string(next_interaction % 60)
                             % std::to_string(time_left / 3600) % std::to_string((time_left / 60) % 60) % std::to_string(time_left % 60)
-                            ).str();
+                            ).str());
                         ++extra_lines_count;
                         last_time_left = time_left;
                         last_next_interaction = next_interaction;
                     }
                 } else if (last_time_elapsed != time_elapsed) {
-                    ret += (boost::format("M117 Time Left %1%h%2%m%3%s\n")
+                    ret.push_back((boost::format("M117 Time Left %1%h%2%m%3%s\n")
                         % std::to_string(time_left / 3600) % std::to_string((time_left / 60) % 60) % std::to_string(time_left % 60)
-                        ).str();
+                        ).str());
                     last_time_elapsed = time_elapsed;
                 }
             }
@@ -4324,6 +4399,7 @@ void GCodeProcessor::post_process()
 
         // add the given gcode line to the cache
         void append_line(const std::string& line) {
+            assert(line.back() == '\n');
             m_lines.push_back({ line, m_time });
 #ifndef NDEBUG
             m_statistics.add_line(line.length());
@@ -4495,13 +4571,16 @@ void GCodeProcessor::post_process()
                     const TimeMachine& machine = m_time_processor.machines[i];
                     if (machine.enabled) {
                         // export pair <percent, remaining time>
-                        export_lines.append_line(
-                            print_M73(machine,
-                                (line == reserved_tag(ETags::First_Line_M73_Placeholder)) ? 0.f : machine.time,
-                                (line == reserved_tag(ETags::First_Line_M73_Placeholder) && !machine.stop_times.empty()) 
-                                    ? machine.stop_times.front().elapsed_time 
-                                    : 0.f,
-                                extra_lines_count));
+                        for (const std::string &line :
+                             print_M73(machine,
+                                       (line == reserved_tag(ETags::First_Line_M73_Placeholder)) ? 0.f : machine.time,
+                                       (line == reserved_tag(ETags::First_Line_M73_Placeholder) &&
+                                        !machine.stop_times.empty()) ?
+                                           machine.stop_times.front().elapsed_time :
+                                           0.f,
+                                       extra_lines_count)) {
+                            export_lines.append_line(line);
+                        }
                         processed = true;
                     }
                 }
@@ -4635,10 +4714,10 @@ void GCodeProcessor::post_process()
                             }
                         }
                         unsigned int discarded_exported_lines_count;
-                        export_lines.append_line(print_M73(machine,
-                            it->elapsed_time,
-                            time_to_next_stop,
-                            discarded_exported_lines_count));
+                        for (const std::string &line : print_M73(machine, it->elapsed_time, time_to_next_stop,
+                                                                 discarded_exported_lines_count)) {
+                            export_lines.append_line(line);
+                        }
                     }
                 }
             }
@@ -4818,8 +4897,9 @@ void GCodeProcessor::store_move_vertex(EMoveType type, bool internal_only)
         m_last_line_id,
         type,
         m_extrusion_role,
-        m_extruder_id,
-        m_cp_color.current,
+        uint8_t(m_extruder_id),
+        uint8_t(m_cp_color.current),
+        uint16_t(m_current_object_id),
         Vec3f(m_end_position[X], m_end_position[Y], m_end_position[Z] - m_z_offset) + m_extruder_offsets[m_extruder_id],
         float(m_end_position[E] - m_start_position[E]), // delta_extruder
         m_feedrate,
@@ -4996,7 +5076,7 @@ void GCodeProcessor::process_filaments(CustomGCode::Type code)
         m_used_filaments.process_color_change_cache();
 
     if (code == CustomGCode::ToolChange)
-        m_used_filaments.process_extruder_cache(m_extruder_id);
+        m_used_filaments.process_extruder_cache(this->m_extruder_id, this->m_current_object_id, this->m_extrusion_role);
 }
 
 void GCodeProcessor::simulate_st_synchronize(float additional_time)
@@ -5026,7 +5106,15 @@ void GCodeProcessor::update_estimated_statistics()
 
     m_result.print_statistics.volumes_per_color_change  = m_used_filaments.volumes_per_color_change;
     m_result.print_statistics.volumes_per_extruder      = m_used_filaments.volumes_per_extruder;
+    m_result.print_statistics.volumes_per_role_per_extruder_per_object = m_used_filaments.volumes_per_role_per_extruder_per_object;
     m_result.print_statistics.used_filaments_per_role   = m_used_filaments.filaments_per_role;
+
+    m_result.object_names.clear();
+    m_result.object_names.resize(m_all_objects.size());
+    for (auto [name, idx] : m_all_objects) {
+        assert(idx < m_result.object_names.size());
+        m_result.object_names[idx] = name;
+    }
 }
 
 double GCodeProcessor::extract_absolute_position_on_axis(Axis axis, const GCodeReader::GCodeLine& line, double area_filament_cross_section)

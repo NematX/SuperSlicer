@@ -1446,9 +1446,10 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
     }
 
     // update phony fields
-    assert(m_config);
+    assert(m_config_base);
     std::set<const DynamicPrintConfig*> changed;
-    assert( m_config == &wxGetApp().preset_bundle->prints(wxGetApp().plater()->printer_technology()).get_edited_preset().config
+    assert( dynamic_cast<TabFrequent*>(this)
+        || m_config == &wxGetApp().preset_bundle->prints(wxGetApp().plater()->printer_technology()).get_edited_preset().config
         || m_config == &wxGetApp().preset_bundle->materials(wxGetApp().plater()->printer_technology()).get_edited_preset().config
         || m_config == &wxGetApp().preset_bundle->printers.get_edited_preset().config);
     std::vector<const DynamicPrintConfig*> all_const_configs = {&wxGetApp().preset_bundle->prints(wxGetApp().plater()->printer_technology()).get_edited_preset().config,
@@ -1464,7 +1465,7 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
             changed.insert(config_updated);
         }
     }
-    if (changed.find(m_config) != changed.end()) {
+    if (m_config && changed.find(m_config) != changed.end()) {
         update_dirty();
         //# Initialize UI components with the config values.
         reload_config();
@@ -1497,7 +1498,7 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
         return;
     }
     
-    if ("fill_density" == opt_key && m_config->get_float("fill_density") >= 100 && m_config->get_int("solid_infill_every_layers") != 1)
+    if ("fill_density" == opt_key && m_config_base->get_float("fill_density") >= 100 && m_config_base->get_int("solid_infill_every_layers") != 1)
     {
         const wxString msg_text = _(L("You set the sparse infill to have 100% fill density. If you want to have only solid infill, you should set 'solid_infill_every_layers' to 1."
             "\n\nIf not, then the sparse infill will still be considered as 'sparse' even at 100% density."
@@ -1507,7 +1508,7 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
         int res = dialog.ShowModal();
         if (res == wxID_YES) {
             boost::any val = int32_t(1);
-            m_config->opt_int("solid_infill_every_layers") = 1;
+            m_config_base->opt_int("solid_infill_every_layers") = 1;
             //m_config->set_key_value("solid_infill_every_layers", new ConfigOptionInt(1));
             this->on_value_change("solid_infill_every_layers", val);
         }
@@ -2532,10 +2533,10 @@ std::vector<Slic3r::GUI::PageShp> Tab::create_pages(std::string setting_type_nam
                     wxWindow *win = collpane->GetPane();
                     collpane->Bind(wxEVT_COLLAPSIBLEPANE_CHANGED, [tab](wxEvent &) { tab->Layout(); });
 
-                    const wxBitmapBundle *bmp_width     = get_bmp_bundle("explanation_width", 80);
-                    wxStaticBitmap *image_width   = new wxStaticBitmap(win, wxID_ANY, bmp_width->GetBitmap(wxDefaultSize));
-                    const wxBitmapBundle *bmp_spacing   = get_bmp_bundle("explanation_spacing", 80);
-                    wxStaticBitmap *image_spacing = new wxStaticBitmap(win, wxID_ANY, bmp_spacing->GetBitmap(wxDefaultSize));
+                    const wxBitmapBundle *bmp_width     = get_bmp_bundle("explanation_width", 170, 90);
+                    wxStaticBitmap *image_width   = new wxStaticBitmap(win, wxID_ANY, bmp_width->GetBitmap(bmp_width->GetDefaultSize()));
+                    const wxBitmapBundle *bmp_spacing   = get_bmp_bundle("explanation_spacing", 650, 100);
+                    wxStaticBitmap *image_spacing = new wxStaticBitmap(win, wxID_ANY, bmp_spacing->GetBitmap(bmp_spacing->GetDefaultSize()));
                     auto            sizerV        = new wxBoxSizer(wxVERTICAL);
                     auto            sizerH2       = new wxBoxSizer(wxHORIZONTAL);
                     auto            sizerH3       = new wxBoxSizer(wxHORIZONTAL);
@@ -3475,7 +3476,7 @@ bool TabFilament::save_current_preset(const std::string &new_name, bool detach)
     const bool is_saved = Tab::save_current_preset(new_name, detach);
     if (is_saved) {
         m_preset_bundle->reset_extruder_filaments();
-        m_preset_bundle->extruders_filaments[m_active_extruder].select_filament(m_presets->get_idx_selected());
+        m_preset_bundle->extruders_filaments[m_active_extruder].select_filament(m_presets->get_selected_idx());
     }
     return is_saved;
 }
@@ -4154,7 +4155,7 @@ void Tab::load_current_preset()
 
     // apply duplicate_distance for print preset
     if (type() == Preset::TYPE_FFF_PRINT || type() == Preset::TYPE_SLA_PRINT) {
-        wxGetApp().mainframe->plater()->canvas3D()->set_arrange_settings(m_presets->get_edited_preset().config, m_presets->get_edited_preset().printer_technology());
+        //wxGetApp().mainframe->plater()->canvas3D()->set_arrange_settings(m_presets->get_edited_preset().config, m_presets->get_edited_preset().printer_technology());
     }
 
 //	m_undo_to_sys_btn->Enable(!preset.is_default);
@@ -4345,7 +4346,7 @@ bool Tab::select_preset(std::string preset_name, bool delete_current /*=false*/,
         if (delete_current) {
             // Find an alternate preset to be selected after the current preset is deleted.
             const std::deque<Preset> &presets 		= m_presets->get_presets();
-            size_t    				  idx_current   = m_presets->get_idx_selected();
+            size_t    				  idx_current   = m_presets->get_selected_idx();
             // Find the next visible preset.
             size_t 				      idx_new       = idx_current + 1;
             if (idx_new < presets.size())

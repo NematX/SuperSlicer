@@ -91,10 +91,10 @@ Polylines Fill::fill_surface(const Surface *surface, const FillParams &params) c
     surface->expolygon.assert_valid();
     // Perform offset.
     Slic3r::ExPolygons expp = offset_ex(surface->expolygon, scale_d(0 - 0.5 * this->get_spacing()));
+    ensure_valid(expp, params.fill_resolution);
     // Create the infills for each of the regions.
     Polylines polylines_out;
     for (ExPolygon &expoly : expp) {
-        expoly.assert_valid();
         _fill_surface_single(params, surface->thickness_layers, _infill_direction(surface), std::move(expoly), polylines_out);
         assert_valid(polylines_out);
     }
@@ -193,6 +193,17 @@ double Fill::compute_unscaled_volume_to_fill(const Surface* surface, const FillP
             }
         }
     return polyline_volume;
+}
+
+ExtrusionRole Fill::getRoleFromSurfaceType(const FillParams &params, const Surface *surface) const {
+    if (params.role == ExtrusionRole::None) {
+        return params.flow.bridge() ?
+                    (surface->has_pos_bottom() ? ExtrusionRole::BridgeInfill : ExtrusionRole::InternalBridgeInfill) :
+                                        (surface->has_fill_solid() ?
+                                            ((surface->has_pos_top()) ? ExtrusionRole::TopSolidInfill : ExtrusionRole::SolidInfill) :
+                                            ExtrusionRole::InternalInfill);
+    }
+    return params.role;
 }
 
 void Fill::fill_surface_extrusion(const Surface *surface, const FillParams &params, ExtrusionEntitiesPtr &out) const

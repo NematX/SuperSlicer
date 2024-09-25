@@ -117,7 +117,7 @@ struct PrintObjectInstance
     int                instance_idx = -1;
 
     bool operator==(const PrintObjectInstance &other) const {return print_object == other.print_object && instance_idx == other.instance_idx; }
-    bool operator!=(const PrintObjectInstance &other) const { return *this == other; }
+    bool operator!=(const PrintObjectInstance &other) const { return !(*this == other); }
 };
 
 } // namespace GCode
@@ -474,6 +474,10 @@ private:
     // How many times will change_layer() be called?
     // change_layer() will update the progress bar.
     uint32_t                            m_layer_count;
+#ifdef _DEBUGINFO
+    std::vector<coord_t>                 m_layers_z;
+    std::vector<coord_t>                 m_layers_with_supp_z;
+#endif
     uint32_t                            m_layer_with_support_count;
     // Progress bar indicator. Increments from -1 up to layer_count.
     int                                 m_layer_index;

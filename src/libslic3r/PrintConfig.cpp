@@ -425,6 +425,7 @@ void PrintConfigDef::init_common_params()
     def = this->add("print_version", coString);
     // defautl to none : only set if loaded. only write our version
     def->set_default_value(new ConfigOptionStringVersion());
+    def->cli = ConfigOptionDef::nocli;
 
     def = this->add("printer_technology", coEnum);
     def->label = L("Printer technology");
@@ -2362,6 +2363,11 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionStrings { "" });
     def->cli = ConfigOptionDef::nocli;
 
+    def = this->add("filament_settings_modified", coBools);
+    def->mode = comNone | comPrusa; // note: hidden setting
+    def->set_default_value(new ConfigOptionBools({false}));
+    def->cli = ConfigOptionDef::nocli;
+
     def = this->add("filament_vendor", coString);
     def->mode = comNone | comPrusa; // note: hidden setting
     def->set_default_value(new ConfigOptionString(L("(Unknown)")));
@@ -3527,14 +3533,16 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comPrusa;
     def->set_default_value(new ConfigOptionPercent(15));
 
-    def = this->add("ironing_spacing", coFloat);
+    def = this->add("ironing_spacing", coFloatOrPercent);
     def->label = L("Spacing between ironing lines");
     def->category = OptionCategory::ironing;
-    def->tooltip = L("Distance between ironing lines");
-    def->sidetext = L("mm");
+    def->tooltip = L("Distance between ironing lines."
+                    "\nCan be a % of the nozzle diameter used for ironing.");
+    def->sidetext = L("mm or %");
+    def->ratio_over = "nozzle_diameter";
     def->min = 0;
     def->mode = comExpert | comPrusa;
-    def->set_default_value(new ConfigOptionFloat(0.1));
+    def->set_default_value(new ConfigOptionFloatOrPercent(25, true));
 
     def = this->add("ironing_speed", coFloatOrPercent);
     def->label = L("Ironing");
@@ -3813,7 +3821,7 @@ void PrintConfigDef::init_fff_params()
         "\nSet zero to disable.");
     def->min = 0;
     def->mode = comExpert | comSuSi;
-    def->set_default_value(new ConfigOptionFloat(1500));
+    def->set_default_value(new ConfigOptionFloat(0/*1500*/));
 
     def = this->add("max_fan_speed", coInts);
     def->label = L("Max");
@@ -3835,13 +3843,14 @@ void PrintConfigDef::init_fff_params()
                    "the variable layer height and support layer height. Maximum recommended layer height "
                    "is 75% of the extrusion width to achieve reasonable inter-layer adhesion. "
                    "\nCan be a % of the nozzle diameter."
-                   "\nIf set to 0, layer height is limited to 75% of the nozzle diameter.");
+                   "\nIf disabled, layer height is limited to 75% of the nozzle diameter.");
     def->sidetext = L("mm or %");
     def->ratio_over = "nozzle_diameter";
     def->min = 0;
     def->max_literal = { 1, true };
     def->mode = comSimpleAE | comPrusa;
     def->is_vector_extruder = true;
+    def->can_be_disabled = true;
     def->set_default_value(new ConfigOptionFloatsOrPercents{ FloatOrPercent{ 75, true} });
 
     def = this->add("max_print_speed", coFloatOrPercent);
@@ -4679,9 +4688,19 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionString(""));
     def->cli = ConfigOptionDef::nocli;
 
+    def = this->add("print_settings_modified", coBool);
+    def->mode = comNone | comPrusa; // note: hidden setting
+    def->set_default_value(new ConfigOptionBool(false));
+    def->cli = ConfigOptionDef::nocli;
+
     def = this->add("printer_settings_id", coString);
     def->mode = comNone | comPrusa; // note: hidden setting
     def->set_default_value(new ConfigOptionString(""));
+    def->cli = ConfigOptionDef::nocli;
+
+    def = this->add("printer_settings_modified", coBool);
+    def->mode = comNone | comPrusa; // note: hidden setting
+    def->set_default_value(new ConfigOptionBool(false));
     def->cli = ConfigOptionDef::nocli;
 
     def = this->add("physical_printer_settings_id", coString);
@@ -4821,7 +4840,7 @@ void PrintConfigDef::init_fff_params()
     def->min = 0;
     def->precision = 6;
     def->mode = comExpert | comSuSi;
-    def->set_default_value(new ConfigOptionFloatOrPercent(0.02, false));
+    def->set_default_value(new ConfigOptionFloatOrPercent(0/*0.02*/, false));
     def->aliases = {"min_length"};
 
     def = this->add("gcode_min_resolution", coFloatOrPercent);
@@ -7979,6 +7998,10 @@ void PrintConfigDef::init_sla_params()
     def->set_default_value(new ConfigOptionString(""));
     def->cli = ConfigOptionDef::nocli;
 
+    def = this->add("sla_material_settings_modified", coBool);
+    def->set_default_value(new ConfigOptionBool(false));
+    def->cli = ConfigOptionDef::nocli;
+
     def = this->add("default_sla_print_profile", coString);
     def->label = L("Default SLA material profile");
     def->tooltip = L("Default print profile associated with the current printer profile. "
@@ -7986,7 +8009,11 @@ void PrintConfigDef::init_sla_params()
     def->set_default_value(new ConfigOptionString());
     def->cli = ConfigOptionDef::nocli;
 
-    def = this->add("sla_print_settings_id", coString);
+    def = this->add("sla_print_settings_id", coBool);
+    def->set_default_value(new ConfigOptionBool(false));
+    def->cli = ConfigOptionDef::nocli;
+
+    def = this->add("sla_print_settings_modified", coString);
     def->set_default_value(new ConfigOptionString(""));
     def->cli = ConfigOptionDef::nocli;
 
@@ -8588,7 +8615,9 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
             value = opt_decoder.serialize();
         }
     }
-
+    if ("max_layer_height" == opt_key && "0" == value) {
+        value = "!75%";
+    }
     if (value == "-1") {
         if ("overhangs_bridge_threshold" == opt_key) {value = "!0";}
         if ("overhangs_bridge_upper_layers" == opt_key) {value = "!2";}
@@ -9479,6 +9508,8 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "xy_size_compensation",
 "xy_inner_size_compensation",
 "z_step",
+
+"print_version",
 };
 
 std::unordered_set<std::string> prusa_export_to_change_keys =
@@ -9688,16 +9719,20 @@ std::map<std::string, std::string> PrintConfigDef::to_prusa(t_config_option_key&
 
     // compute max & min height from % to flat value
     if ("min_layer_height" == opt_key || "max_layer_height" == opt_key) {
-        ConfigOptionFloats computed_opt;
-        const ConfigOptionFloatsOrPercents *current_opt = all_conf.option<ConfigOptionFloatsOrPercents>(opt_key);
-        const ConfigOptionFloats *nozzle_diameters = all_conf.option<ConfigOptionFloats>("nozzle_diameter");
-        assert(current_opt && nozzle_diameters);
-        assert(current_opt->size() == nozzle_diameters->size());
-        for (int i = 0; i < current_opt->size(); i++) {
-            computed_opt.set_at(current_opt->get_abs_value(i, nozzle_diameters->get_at(i)), i);
+        if ("max_layer_height" == opt_key && !value.empty() && value.front() == '!') {
+            value = "0";
+        } else {
+            ConfigOptionFloats computed_opt;
+            const ConfigOptionFloatsOrPercents *current_opt = all_conf.option<ConfigOptionFloatsOrPercents>(opt_key);
+            const ConfigOptionFloats *nozzle_diameters = all_conf.option<ConfigOptionFloats>("nozzle_diameter");
+            assert(current_opt && nozzle_diameters);
+            assert(current_opt->size() == nozzle_diameters->size());
+            for (int i = 0; i < current_opt->size(); i++) {
+                computed_opt.set_at(current_opt->get_abs_value(i, nozzle_diameters->get_at(i)), i);
+            }
+            assert(computed_opt.size() == nozzle_diameters->size());
+            value = computed_opt.serialize();
         }
-        assert(computed_opt.size() == nozzle_diameters->size());
-        value = computed_opt.serialize();
     }
     if ("arc_fitting" == opt_key && "bambu" == value) {
         value = "emit_center";
@@ -9727,14 +9762,14 @@ std::map<std::string, std::string> PrintConfigDef::to_prusa(t_config_option_key&
         static const std::set<t_config_option_key> minus_1_is_disabled = {"overhangs_bridge_threshold",
               "overhangs_bridge_upper_layers", "perimeters_hole", "support_material_bottom_interface_layers"};
         // ---- filament override ------
-        if (boost::starts_with(opt_key, "filament_") != std::string::npos) {
+        if (boost::starts_with(opt_key, "filament_")) {
             std::string extruder_key = opt_key.substr(strlen("filament_"));
             if (print_config_def.filament_override_option_keys().find(extruder_key) !=
                 print_config_def.filament_override_option_keys().end()) {
                 value = "nil";
             }
         }
-        if (boost::starts_with(opt_key, "material_ow_") != std::string::npos) {
+        if (boost::starts_with(opt_key, "material_ow_")) {
             std::string normal_key = opt_key.substr(strlen("material_ow_"));
             if (print_config_def.material_overrides_option_keys().find(opt_key) !=
                 print_config_def.material_overrides_option_keys().end()) {
@@ -9746,6 +9781,10 @@ std::map<std::string, std::string> PrintConfigDef::to_prusa(t_config_option_key&
         } else if (minus_1_is_disabled.find(opt_key) != minus_1_is_disabled.end()) {
             value = "-1";
         }
+    }
+    
+    if ("bridge_angle" == opt_key && !value.empty() && value.front() == '!') {
+        value = "0";
     }
 
     // ---- custom gcode: ----
@@ -11258,6 +11297,10 @@ OtherPresetsConfigDef::OtherPresetsConfigDef()
     def = this->add("num_extruders", coInt);
     def->label = L("Number of extruders");
     def->tooltip = L("Total number of extruders, regardless of whether they are used in the current print.");
+
+    def = this->add("num_milling", coInt);
+    def->label = L("Number of mills");
+    def->tooltip = L("Total number of mills, regardless of whether they are used in the current print.");
 
     def = this->add("print_preset", coString);
     def->label = L("Print preset name");

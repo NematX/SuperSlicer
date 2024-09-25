@@ -25,6 +25,21 @@
 
 namespace Slic3r {
 
+void LayerRegion::clear() {
+    this->m_perimeters.clear();
+    this->m_millings.clear();
+    this->m_unsupported_bridge_edges.clear();
+    this->m_fill_surfaces.clear();
+    this->m_fills.clear();
+    this->m_ironings.clear();
+    this->m_thin_fills.clear();
+    this->m_fill_expolygons.clear();
+    this->m_fill_expolygons_bboxes.clear();
+    this->m_fill_expolygons_composite.clear();
+    this->m_fill_expolygons_composite_bboxes.clear();
+    this->m_fill_no_overlap_expolygons.clear();
+}
+
 Flow LayerRegion::flow(FlowRole role) const
 {
     return this->flow(role, m_layer->height);
@@ -92,6 +107,7 @@ void LayerRegion::slices_to_fill_surfaces_clipped(coord_t opening_offset)
             for (ExPolygon& expoly_to_test : intersection_ex(expoly, this->fill_expolygons())) {
                 expoly_to_test.douglas_peucker(std::max(SCALED_EPSILON, scale_t(this->layer()->object()->print()->config().resolution.value)));
                 if (!opening_ex({ expoly_to_test }, opening_offset).empty()) {
+                    expoly_to_test.assert_valid();
                     this->m_fill_surfaces.append({ expoly_to_test }, srf_type);
                 }
             }
@@ -223,7 +239,8 @@ Surfaces expand_bridges_detect_orientations(
     const Algorithm::RegionExpansionParameters  &expansion_params_into_solid_infill,
     ExPolygons                                  &sparse,
     const Algorithm::RegionExpansionParameters  &expansion_params_into_sparse_infill,
-    const float                                 closing_radius)
+    const float                                 closing_radius,
+    const coord_t                               scaled_resolution)
 {
     using namespace Slic3r::Algorithm;
 
@@ -389,6 +406,7 @@ Surfaces expand_bridges_detect_orientations(
                     out.emplace_back(templ, std::move(ex));
             }
     }
+    ensure_valid(out, scaled_resolution);
 
     // Clip by the expanded bridges.
     if (expanded_into_shells)
@@ -407,7 +425,8 @@ static Surfaces expand_merge_surfaces(
     const Algorithm::RegionExpansionParameters  &expansion_params_into_solid_infill,
     ExPolygons                                  &sparse,
     const Algorithm::RegionExpansionParameters  &expansion_params_into_sparse_infill,
-    const float                                 closing_radius,
+    const coordf_t                              closing_radius,
+    const coord_t                               scaled_resolution,
     const double                                bridge_angle = -1.)
 {
     using namespace Slic3r::Algorithm;
@@ -435,6 +454,7 @@ static Surfaces expand_merge_surfaces(
     // without the following closing operation, those regions will stay unfilled and cause small holes in the expanded surface.
     // look for narrow_ensure_vertical_wall_thickness_region_radius filter.
     expanded = closing_ex(expanded, closing_radius);
+    ensure_valid(expanded, scaled_resolution);
     // Trim the shells by the expanded expolygons.
     if (expanded_into_shells)
         shells = diff_ex(shells, expanded);
@@ -482,7 +502,8 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
     // Don't take more than max_nr_steps for small expansion_step.
     static constexpr const size_t   max_nr_expansion_steps  = 5;
     // Radius (with added epsilon) to absorb empty regions emering from regularization of ensuring, viz  const float narrow_ensure_vertical_wall_thickness_region_radius = 0.5f * 0.65f * min_perimeter_infill_spacing;
-    const float closing_radius = 0.55f * 0.65f * 1.05f * this->flow(frSolidInfill).scaled_spacing();
+    const coordf_t closing_radius = 0.55f * 0.65f * 1.05f * this->flow(frSolidInfill).scaled_spacing();
+    const coord_t scaled_resolution = std::max(SCALED_EPSILON, scale_t(this->layer()->object()->print()->config().resolution.value));
 
     // Expand the top / bottom / bridge surfaces into the shell thickness solid infills.
     double     layer_thickness;
@@ -496,9 +517,11 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
         const double custom_angle = this->region().config().bridge_angle.value;
         const auto   expansion_params_into_solid_infill  = RegionExpansionParameters::build(expansion_bottom_bridge, expansion_step, max_nr_expansion_steps);
         if (this->region().config().bridge_angle.is_enabled()) {
-            bridges.surfaces = expand_merge_surfaces(m_fill_surfaces.surfaces, stPosBottom | stDensSolid | stModBridge, shells, expansion_params_into_solid_infill, sparse, expansion_params_into_sparse_infill, closing_radius, Geometry::deg2rad(custom_angle));
+            bridges.surfaces = expand_merge_surfaces(m_fill_surfaces.surfaces, stPosBottom | stDensSolid | stModBridge, shells, expansion_params_into_solid_infill, sparse, expansion_params_into_sparse_infill, closing_radius, scaled_resolution, Geometry::deg2rad(custom_angle));
+            for(auto&srf : bridges.surfaces) srf.expolygon.assert_valid();
         } else {
-            bridges.surfaces = expand_bridges_detect_orientations(m_fill_surfaces.surfaces, shells, expansion_params_into_solid_infill, sparse, expansion_params_into_sparse_infill, closing_radius);
+            bridges.surfaces = expand_bridges_detect_orientations(m_fill_surfaces.surfaces, shells, expansion_params_into_solid_infill, sparse, expansion_params_into_sparse_infill, closing_radius, scaled_resolution);
+            for(auto&srf : bridges.surfaces) srf.expolygon.assert_valid();
         }
         BOOST_LOG_TRIVIAL(trace) << "Processing external surface, detecting bridges - done";
 #if 0
@@ -511,10 +534,10 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
 
     Surfaces    bottoms = expand_merge_surfaces(m_fill_surfaces.surfaces, stPosBottom | stDensSolid, shells,
         RegionExpansionParameters::build(expansion_bottom, expansion_step, max_nr_expansion_steps), 
-        sparse, expansion_params_into_sparse_infill, closing_radius);
+        sparse, expansion_params_into_sparse_infill, closing_radius, scaled_resolution);
     Surfaces    tops    = expand_merge_surfaces(m_fill_surfaces.surfaces, stPosTop | stDensSolid, shells,
         RegionExpansionParameters::build(expansion_top, expansion_step, max_nr_expansion_steps), 
-        sparse, expansion_params_into_sparse_infill, closing_radius);
+        sparse, expansion_params_into_sparse_infill, closing_radius, scaled_resolution);
 
 //    m_fill_surfaces.remove_types({ stBottomBridge, stBottom, stTop, stInternal, stInternalSolid });
     m_fill_surfaces.clear();
@@ -522,13 +545,18 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
     {
         Surface solid_templ(stPosInternal | stDensSolid, {});
         solid_templ.thickness = layer_thickness;
+        ensure_valid(shells, scaled_resolution);
         m_fill_surfaces.append(std::move(shells), solid_templ);
     }
     {
         Surface sparse_templ(stPosInternal | stDensSparse, {});
         sparse_templ.thickness = layer_thickness;
+        ensure_valid(sparse, scaled_resolution);
         m_fill_surfaces.append(std::move(sparse), sparse_templ);
     }
+    for(auto&srf : bridges.surfaces) srf.expolygon.assert_valid();
+    for(auto&srf : bottoms) srf.expolygon.assert_valid();
+    for(auto&srf : tops) srf.expolygon.assert_valid();
     m_fill_surfaces.append(std::move(bridges.surfaces));
     m_fill_surfaces.append(std::move(bottoms));
     m_fill_surfaces.append(std::move(tops));
@@ -835,7 +863,7 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
                     bridges[idx_last].bridge_angle = bd.angle;
                     if (this->layer()->object()->has_support()) {
 //                        polygons_append(this->bridged, intersection(bd.coverage(), to_polygons(initial)));
-                        append(m_unsupported_bridge_edges, bd.unsupported_edges());
+                        append(this->m_unsupported_bridge_edges, bd.unsupported_edges());
                     }
                 } else {
                     bridges[idx_last].bridge_angle = 0;
@@ -932,7 +960,7 @@ void LayerRegion::prepare_fill_surfaces()
     // if no solid layers are requested, turn top/bottom surfaces to internal
     // For Lightning infill, infill_only_where_needed is ignored because both
     // do a similar thing, and their combination doesn't make much sense.
-    if (! spiral_vase && this->region().config().top_solid_layers == 0) {
+    if (! spiral_vase && (this->region().config().top_solid_layers == 0 && this->region().config().solid_infill_every_layers.value != 1)) {
         for (Surface &surface : m_fill_surfaces)
             if (surface.has_pos_top())
                 surface.surface_type = (
@@ -976,7 +1004,9 @@ void LayerRegion::prepare_fill_surfaces()
                         continue;
                     if (!intersect.empty()) {
                         //not possible ot have multiple intersect no cut from a single expoly.
+                        assert(intersect.size() == 1);
                         assert(!cut.empty());
+                        intersect[0].assert_valid();
                         surface->expolygon = std::move(intersect[0]);
                         for (int i = 1; i < intersect.size(); i++) {
                             srfs_to_add.emplace_back(*surface, std::move(intersect[i]));
@@ -992,6 +1022,7 @@ void LayerRegion::prepare_fill_surfaces()
                     }
                 }
             }
+            for(auto &srf : srfs_to_add) srf.expolygon.assert_valid();
             append(this->m_fill_surfaces.surfaces, std::move(srfs_to_add));
         }
     }
@@ -1017,7 +1048,8 @@ void LayerRegion::trim_surfaces(const Polygons &trimming_polygons)
         surface.expolygon.assert_valid();
     }
 #endif /* NDEBUG */
-    this->m_slices.set(intersection_ex(this->slices().surfaces, trimming_polygons), stPosInternal | stDensSparse);
+    coordf_t scaled_resolution = std::max(SCALED_EPSILON, scale_t(this->layer()->object()->print()->config().resolution.value));
+    this->m_slices.set(ensure_valid(intersection_ex(this->slices().surfaces, trimming_polygons), scaled_resolution), stPosInternal | stDensSparse);
     for(auto &srf : this->m_slices) srf.expolygon.assert_valid();
 }
 
