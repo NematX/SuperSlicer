@@ -719,8 +719,8 @@ struct LoopAssertVisitor : public ExtrusionVisitorRecursiveConst {
             release_assert(!path.polyline.get_point(idx - 1).coincides_with_epsilon(path.polyline.get_point(idx)));
     }
     virtual void use(const ExtrusionLoop& loop) override {
-        for (auto it = std::next(loop.paths.begin()); it != loop.paths.end(); ++it) {
-            release_assert(std::prev(it)->polyline.back() == it->polyline.front());
+        for (size_t idx_path = 1; idx_path < loop.paths.size(); ++idx_path) {
+            release_assert(loop.paths[idx_path-1].polyline.back() == loop.paths[idx_path].polyline.front());
         }
         Point last_pt = loop.last_point();
         for (const ExtrusionPath &path : loop.paths) {

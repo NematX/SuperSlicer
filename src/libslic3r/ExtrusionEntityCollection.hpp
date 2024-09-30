@@ -103,6 +103,7 @@ public:
         static_assert(std::is_base_of<ExtrusionEntity, ENTITY>::value, "ENTITY not derived from ExtrusionEntity in ExtrusionCollection::append(unique_ptr<ENTITY>)");
         this->m_entities.push_back(entity.release());
     }
+    void append_at(ExtrusionEntity &&entity, size_t position) { assert(position <= m_entities.size()); this->m_entities.insert(this->m_entities.begin() + position, entity.clone_move()); }
     void append(const ExtrusionEntitiesPtr &entities) { 
         this->m_entities.reserve(this->m_entities.size() + entities.size());
         for (const ExtrusionEntity *ptr : entities)
