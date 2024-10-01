@@ -1,3 +1,4 @@
+1.0.5 nozzle defaults
 1.0.4 support height & support_material_contact_distance_type to plane
 1.0.3 remove ':' in profile names
 1.0.2 disable z_step
