@@ -3675,6 +3675,8 @@ void GCodeProcessor::process_M104(const GCodeReader::GCodeLine& line)
         }
 
         set_extruder_temp(new_temp, id);
+    } else if (line.has_value('=', new_temp)) {
+        set_extruder_temp(new_temp, m_extruder_id);
     }
 }
 
@@ -3683,10 +3685,13 @@ void GCodeProcessor::process_M106(const GCodeReader::GCodeLine& line)
     if (!line.has('P')) {
         // The absence of P means the print cooling fan, so ignore anything else.
         float new_fan_speed;
-        if (line.has_value('S', new_fan_speed))
+        if (line.has_value('S', new_fan_speed)) {
             m_fan_speed = (100.0f / 255.0f) * new_fan_speed;
-        else
+        } else if (line.has_value('=', new_fan_speed)) {
+            m_fan_speed = (100.0f / 255.0f) * new_fan_speed;
+        } else {
             m_fan_speed = 100.0f;
+        }
     }
 }
 
@@ -3720,12 +3725,14 @@ void GCodeProcessor::process_M109(const GCodeReader::GCodeLine& line)
             const size_t eid = static_cast<size_t>(val);
             if (eid < m_extruder_temps.size())
                 id = eid;
-        }
-        else
+        } else {
             id = m_extruder_id;
-    }
-    else if (line.has_value('S', new_temp))
+        }
+    } else if (line.has_value('S', new_temp)) {
         id = m_extruder_id;
+    } else if (line.has_value('=', new_temp)) {
+        id = m_extruder_id;
+    }
 
     if (id != (size_t)-1)
         set_extruder_temp(new_temp, id);

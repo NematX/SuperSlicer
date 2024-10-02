@@ -59,7 +59,7 @@ const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, G
             c = command.first = skip_whitespaces(number_end);
         }
         // Skip the command.
-        c = command.second = skip_word(command.first);
+        c = command.second = skip_cmd(command.first);
         // Up to the end of line or comment.
 		while (! is_end_of_gcode_line(*c)) {
             // Skip whitespaces.
@@ -81,7 +81,7 @@ const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, G
                     // kind of a multiple extruder with a letter per extruder.
                     axis = E;
                     gline.m_e_char = *c;
-                } else if (*c >= 'A' && *c <= 'Z')
+                } else if (*c == '=' || (*c >= 'A' && *c <= 'Z'))
                 	// Unknown axis, but we still want to remember that such a axis was seen.
                 	axis = UNKNOWN_AXIS;
                 break;
@@ -236,7 +236,7 @@ const std::string_view GCodeReader::GCodeLine::cmd() const
         cmd = skip_word(cmd);
         cmd = skip_whitespaces(cmd);
     }
-    return std::string_view(cmd, GCodeReader::skip_word(cmd) - cmd);
+    return std::string_view(cmd, GCodeReader::skip_cmd(cmd) - cmd);
 }
 
 const char* GCodeReader::axis_pos(const char *raw_str, char axis)
@@ -250,7 +250,7 @@ const char* GCodeReader::axis_pos(const char *raw_str, char axis)
         c = skip_whitespaces(c);
     }
     // Skip the command.
-    c = skip_word(c);
+    c = skip_cmd(c);
     // Up to the end of line or comment.
     while (! is_end_of_gcode_line(*c)) {
         // Skip whitespaces.

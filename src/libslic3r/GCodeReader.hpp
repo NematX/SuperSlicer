@@ -193,6 +193,11 @@ private:
             ; // silence -Wempty-body
         return c;
     }
+    static const char*  skip_cmd(const char *c) { 
+        for (; !is_end_of_word(*c) && *c != '='; ++c)
+            ; // silence -Wempty-body
+        return c;
+    }
     static const char*  skip_word(const char *c) { 
         for (; ! is_end_of_word(*c); ++ c)
             ; // silence -Wempty-body
