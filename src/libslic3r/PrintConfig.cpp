@@ -5765,6 +5765,44 @@ void PrintConfigDef::init_fff_params()
     def->min = 0;
     def->mode = comAdvancedE | comSuSi;
     def->set_default_value(new ConfigOptionInt(2));
+    
+    def = this->add("stretch_corners", coBool);
+    def->label = L("Stretch corners");
+    def->category = OptionCategory::width;
+    def->tooltip = L("Activate corner stretching");
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionBool(false));
+    
+    def = this->add("stretch_corners_max_angle", coFloat);
+    def->label = L("Stretch max angle");
+    def->category = OptionCategory::width;
+    def->tooltip = L("New angle considered to be strait (instead of 180°), so every angle higher than that won't have any stretch.");
+    def->sidetext = L("mm/s² or %");
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionFloat(120));
+    
+    def = this->add("stretch_corners_distance", coFloatOrPercent);
+    def->label = L("Stretch distance");
+    def->category = OptionCategory::width;
+    def->tooltip = L("Distance for stretching when the angle is 90°."
+        " Between 180° (strait line / max angle) and 90°, it's interpolated, following the sine function."
+        " Between 0° (U-turn) and 90°, this 90° value is used."
+        "\nCan be a % of the current perimeter width.");
+    def->sidetext = L("mm/s² or %");
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionFloatOrPercent(100, true));
+    
+    def = this->add("stretch_corners_deviation", coPercent);
+    def->label = L("Stretch deviation");
+    def->category = OptionCategory::width;
+    def->tooltip = L("Distance from the corner point to start & end the stretching, in % of the current stretched distance."
+                    " If it doesn't had the time to finish the previous stretch, then both deviation are reduced.");
+    def->sidetext = L("%");
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionPercent(50));
 
     def = this->add("support_material", coBool);
     def->label = L("Generate support material");
@@ -9536,6 +9574,10 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "start_gcode_manual",
 "solid_infill_below_layer_area",
 "solid_infill_below_width",
+"stretch_corners",
+"stretch_corners_max_angle",
+"stretch_corners_distance",
+"stretch_corners_deviation",
 "support_material_angle_height",
 "support_material_acceleration",
 "support_material_contact_distance_type",

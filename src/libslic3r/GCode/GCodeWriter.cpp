@@ -717,6 +717,8 @@ std::string GCodeWriter::extrude_to_xy(const Vec2d &point, double dE, const std:
 {
     assert(dE == dE);
     assert(m_pos.x() != point.x() || m_pos.y() != point.y());
+    assert(std::abs(point.x()) < 99999);
+    assert(std::abs(point.y()) < 99999);
 
     m_pos.head<2>() = point.head<2>();
      auto [/*double*/ delta_e, /*double*/ e_to_write]  = this->m_tool->extrude(dE + this->m_de_left);

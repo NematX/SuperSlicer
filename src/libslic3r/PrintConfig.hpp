@@ -789,6 +789,10 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat,                slice_closing_radius))
     ((ConfigOptionEnum<SlicingMode>,    slicing_mode))
     ((ConfigOptionBool,                 staggered_inner_seams))
+    ((ConfigOptionBool,                 stretch_corners))
+    ((ConfigOptionFloat,                stretch_corners_max_angle))
+    ((ConfigOptionFloatOrPercent,       stretch_corners_distance))
+    ((ConfigOptionPercent,              stretch_corners_deviation))
     ((ConfigOptionBool,                 support_material))
     // Automatic supports (generated based fdm support point generator).
     ((ConfigOptionBool,                 support_material_auto))

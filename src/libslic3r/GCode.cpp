@@ -5916,6 +5916,140 @@ void GCodeGenerator::_extrude_line_cut_corner(std::string& gcode_str, const Line
     }
 }
 
+//this will extrude between last_point and corner_point, and will possibly push a little bit between corner_point and next_point. The last printed point will be returned, and must be used instead of corner_point for the next call as last_point.
+Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const Point& last_point, const Point& corner_point, const Point& next_point, const Point& after_point, const double path_width, const double e_per_mm, const std::string_view comment)
+{
+    if (last_point == corner_point) {
+        assert(false);
+        return corner_point; // todo: investigate if it happens
+    }
+    if (corner_point == next_point) {
+        assert(false);
+        gcode_str += this->m_writer.extrude_to_xy(
+            this->point_to_gcode(corner_point),
+            e_per_mm * unscaled(last_point.distance_to(corner_point)),
+            comment);
+        return corner_point; // todo: investigate if it happens
+    }
+
+    double degree_min_angle = config().stretch_corners_max_angle.value;
+    if (degree_min_angle < EPSILON || degree_min_angle > 180) {
+        degree_min_angle = 180;
+    }
+
+    // get the 'little' angle
+    double angle = corner_point == last_point ? PI : abs_angle(angle_ccw(last_point - corner_point, next_point - corner_point));
+    if (angle > M_PI) {
+        angle = 2 * M_PI - angle;
+    }
+
+    double degree_angle = (180 * angle / PI);
+    // start at the degree_min_angle
+    if (degree_angle < degree_min_angle) {
+        // if smaller than 90, then keep it as with 90
+        if (degree_angle < 90) degree_angle = 90;
+
+        // compute distance
+        const double ratio_from_angle = (degree_angle - degree_min_angle) / (90 - degree_min_angle);
+        assert(ratio_from_angle > 0 && ratio_from_angle <= 1);
+        const double unscaled_dist = ratio_from_angle * config().stretch_corners_distance.get_abs_value(path_width);
+        const coord_t dist = scale_t(unscaled_dist);
+
+        // compute deviation
+        const double unscaled_deviation_max = config().stretch_corners_deviation.get_abs_value(unscaled_dist);
+        const coord_t deviation_max = scale_t(unscaled_deviation_max);
+
+        // compute stretch start point (max half dist)
+        double dist_ratio = deviation_max / last_point.distance_to(corner_point);
+        if (dist_ratio > 0.5) dist_ratio = 0.5;
+        Point start_point = corner_point.interpolate(dist_ratio, last_point);
+        assert(start_point.distance_to(corner_point) <= deviation_max + SCALED_EPSILON);
+        
+        // compute stretch corner point
+        Point moved_corner;
+        {
+            Vec2d vec_start = corner_point.cast<double>() - last_point.cast<double>();
+            vec_start.normalize();
+            Vec2d vec_end = corner_point.cast<double>() - next_point.cast<double>();
+            vec_end.normalize();
+            vec_start = (vec_start + vec_end) / 2;
+            moved_corner = (corner_point.cast<double>() + vec_start * dist).cast<coord_t>();
+        }
+
+        // compute stretch end point
+        Point end_point;
+        //   for that, we need its angle (if any)
+        if (after_point == next_point) {
+            // we are at the end.
+            dist_ratio = deviation_max / next_point.distance_to(corner_point);
+            if (dist_ratio > 0.5) dist_ratio = 0.5;
+            assert(dist_ratio <= 1);
+            end_point = corner_point.interpolate(dist_ratio, next_point);
+            assert(end_point.distance_to(corner_point) <= deviation_max + SCALED_EPSILON);
+        } else {
+            const double next_available_dist = next_point.distance_to(corner_point);
+            // compute its angle, deviation
+            const double next_ratio_from_angle = (degree_angle - degree_min_angle) / (90 - degree_min_angle);
+            assert(next_ratio_from_angle > 0 && next_ratio_from_angle <= 1);
+            const double next_unscaled_dist = ratio_from_angle * config().stretch_corners_distance.get_abs_value(path_width);
+            const coord_t next_deviation_max = scale_t(config().stretch_corners_distance.get_abs_value(unscaled_dist));
+            // if there are enough space
+            if ((next_deviation_max + deviation_max) * 1.5 <= next_available_dist) {
+                //do it simply
+                dist_ratio = deviation_max / next_available_dist;
+            } else {
+                // share it
+                dist_ratio = next_available_dist / ((next_deviation_max + deviation_max) * 1.5);
+                dist_ratio *=  deviation_max / next_available_dist;
+            }
+            assert(dist_ratio <= 1);
+            end_point = corner_point.interpolate(dist_ratio, next_point);
+            assert(end_point.distance_to(corner_point) <= deviation_max + SCALED_EPSILON);
+        }
+
+        // compute reduced flow & improved speed
+        coordf_t old_distance = start_point.distance_to(corner_point) + corner_point.distance_to(end_point);
+        coordf_t new_distance = start_point.distance_to(moved_corner) + moved_corner.distance_to(end_point);
+        double ratio_flow = old_distance / new_distance;
+        double ratio_speed = ratio_flow < 0.01 ? 100 : 1. / ratio_flow;
+
+
+        // extrude from last_point to start_point
+        gcode_str += this->m_writer.extrude_to_xy(
+            this->point_to_gcode(start_point),
+            e_per_mm * unscaled(last_point.distance_to(start_point)),
+            comment);
+
+        // extrude from start_point to moved_corner (decrease flow, increased speed)
+        const double current_speed = this->m_writer.get_speed_mm_s();
+        gcode_str += this->m_writer.set_speed_mm_s(current_speed * ratio_speed);
+        gcode_str += this->m_writer.extrude_to_xy(
+            this->point_to_gcode(moved_corner),
+            e_per_mm * ratio_flow * unscaled(start_point.distance_to(moved_corner)),
+            "stretch corner start");
+
+        // extrude from moved_corner to end_point (decrease flow, increased speed)
+        gcode_str += this->m_writer.extrude_to_xy(
+            this->point_to_gcode(end_point),
+            e_per_mm * ratio_flow * unscaled(moved_corner.distance_to(end_point)),
+            "stretch corner end");
+
+        //restore speed
+        gcode_str += this->m_writer.set_speed_mm_s(current_speed);
+
+        // relance
+        return end_point;
+    } else {
+        // nothing special, angle is too shallow to have any impact.
+        gcode_str += this->m_writer.extrude_to_xy(
+            this->point_to_gcode(corner_point),
+            e_per_mm * unscaled(last_point.distance_to(corner_point)),
+            comment);
+        // relance
+        return corner_point;
+    }
+}
+
 double GCodeGenerator::_compute_e_per_mm(const ExtrusionPath &path) {
     const double path_mm3_per_mm = path.mm3_per_mm(); 
     // no e if no extrusion axis
@@ -5978,14 +6112,31 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
             Point last_pos    = polyline.front();
             Point current_pos = polyline.front();
             for (size_t idx = 1; idx < polyline.size(); ++idx) {
-                if (!path.role().is_external_perimeter() || config().external_perimeter_cut_corners.value == 0) {
-                    // normal & legacy pathcode
-                    _extrude_line(gcode, Line(current_pos, polyline.get_point(idx)), e_per_mm, comment, path.role());
+                if (path.role().is_external_perimeter() && config().stretch_corners.value) {
+                    if (idx + 1 < polyline.size()) {
+                        // it return a position between polyline.get_point(idx) (included) and polyline.get_point(idx + 1) (excluded)
+                        current_pos = _extrude_line_stretch_corner(gcode, current_pos, polyline.get_point(idx),
+                                                     polyline.get_point(idx + 1),
+                                                     (idx + 2 < polyline.size()) ? polyline.get_point(idx + 2) :
+                                                                                   polyline.get_point(idx + 1),
+                                                     path.width(), e_per_mm, comment);
+                    } else {
+                        // print last bit
+                        _extrude_line(gcode, Line(current_pos, polyline.get_point(idx)), e_per_mm, comment,
+                                      path.role());
+                    }
                 } else {
-                    _extrude_line_cut_corner(gcode, Line(current_pos, polyline.get_point(idx)), e_per_mm, comment, last_pos, path.width());
+                    if (!path.role().is_external_perimeter() || config().external_perimeter_cut_corners.value == 0) {
+                        // normal & legacy pathcode
+                        _extrude_line(gcode, Line(current_pos, polyline.get_point(idx)), e_per_mm, comment,
+                                      path.role());
+                    } else {
+                        _extrude_line_cut_corner(gcode, Line(current_pos, polyline.get_point(idx)), e_per_mm, comment,
+                                                 last_pos, path.width());
+                    }
+                    last_pos = current_pos;
+                    current_pos = polyline.get_point(idx);
                 }
-                last_pos = current_pos;
-                current_pos = polyline.get_point(idx);
             }
         } else if (m_config.arc_fitting == ArcFittingType::Bambu /*bambu arc*/) {
             // BBS: start to generate gcode from arc fitting data which includes line and arc
@@ -6003,12 +6154,35 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
                         radius = 0;
                 }
                 if(radius == 0){
-                    // strait
-                    if (!path.role().is_external_perimeter() || config().external_perimeter_cut_corners.value == 0) {
-                        // normal & legacy pathcode
-                        _extrude_line(gcode, Line(current_pos, segment.point), e_per_mm, comment, path.role());
-                    } else {
-                        _extrude_line_cut_corner(gcode, Line(current_pos, segment.point), e_per_mm, comment, last_pos, path.width());
+                    if (path.role().is_external_perimeter() && config().stretch_corners.value) {
+                        last_pos    = current_pos;
+                        // TODO: check what angle arcs make with each other, and modify them if a stretch is needed
+                        // For now, it's only possible between two strait segment.
+                        if (idx + 1 < polyline.size() && polyline.get_arc(idx + 1).radius == 0) {
+                            // it return a position between polyline.get_point(idx) (included) and
+                            // polyline.get_point(idx + 1) (excluded)
+                            current_pos = _extrude_line_stretch_corner(gcode, current_pos, polyline.get_point(idx),
+                                                                       polyline.get_point(idx + 1),
+                                                                       (idx + 2 < polyline.size()) ?
+                                                                           polyline.get_point(idx + 2) :
+                                                                           polyline.get_point(idx + 1),
+                                                                       path.width(), e_per_mm, comment);
+                        } else {
+                            // print last bit
+                            _extrude_line(gcode, Line(current_pos, polyline.get_point(idx)), e_per_mm, comment,
+                                          path.role());
+                            current_pos = segment.point;
+                        }
+                    }else{
+                        // strait
+                        if (!path.role().is_external_perimeter() || config().external_perimeter_cut_corners.value == 0) {
+                            // normal & legacy pathcode
+                            _extrude_line(gcode, Line(current_pos, segment.point), e_per_mm, comment, path.role());
+                        } else {
+                            _extrude_line_cut_corner(gcode, Line(current_pos, segment.point), e_per_mm, comment, last_pos, path.width());
+                        }
+                        last_pos    = current_pos;
+                        current_pos = segment.point;
                     }
                 } else {
                     const Vec2d  center_offset = this->point_to_gcode(center) - this->point_to_gcode(current_pos);
@@ -6017,14 +6191,12 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
                     const coordf_t line_length = angle * std::abs(radius);
                     gcode += m_writer.extrude_arc_to_xy(this->point_to_gcode(segment.point), center_offset, e_per_mm * unscaled(line_length),
                                                         segment.ccw(), comment);
+                    last_pos    = current_pos;
+                    current_pos = segment.point;
                 }
-                last_pos    = current_pos;
-                current_pos = segment.point;
             }
         } else /*arcwelder*/{
             Geometry::ArcWelder::Path smooth_path = polyline.get_arc();
-            if (visitor_flipped)
-                Geometry::ArcWelder::reverse(smooth_path);
             Vec2d prev_exact = this->point_to_gcode(smooth_path.front().point);
             Vec2d prev = m_writer.get_default_gcode_formatter().quantize(prev_exact);
             auto  it   = smooth_path.begin();

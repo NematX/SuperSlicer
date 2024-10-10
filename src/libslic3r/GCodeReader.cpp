@@ -135,8 +135,9 @@ void GCodeReader::update_coordinates(GCodeLine &gline, std::pair<const char*, co
         if ((cmd_len == 2 && (command.first[1] == '0' || command.first[1] == '1' || command.first[1] == '2' || command.first[1] == '3')) ||
             (cmd_len == 3 &&  command.first[1] == '9' && command.first[2] == '2')) {
             for (size_t i = 0; i < NUM_AXES; ++ i)
-                if (gline.has(Axis(i)))
+                if (gline.has(Axis(i))) {
                     m_position[i] = gline.value(Axis(i));
+                }
         }
     }
 }

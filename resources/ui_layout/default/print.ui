@@ -508,7 +508,12 @@ group:sidetext_width$2:Flow
 		setting:bridge_type
 		setting:script:bool:advanced:depends$bridge_type$bridge_overlap$layer_height$nozzle_diameter:label$ Simulate Prusa 'no thick bridge':label_width$0:tooltip$Change the bridge type and the bridge overlap to compute the same extrusions as when the PrusaSlicer 'thick bridge' isn't selected.\nAs long as it's selected, it will modify them.\nUnselect it to deactivate this enforcement.:s_not_thick_bridge
 	end_line
+group:Corners
 	setting:external_perimeter_cut_corners
+	setting:stretch_corners
+	setting:stretch_corners_max_angle
+	setting:stretch_corners_distance
+	setting:stretch_corners_deviation
 
 page:Multiple extruders:funnel
 group:Extruders
