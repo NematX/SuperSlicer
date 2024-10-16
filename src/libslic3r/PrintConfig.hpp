@@ -1069,6 +1069,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloats,              deretract_speed))
     ((ConfigOptionString,              end_gcode))
     ((ConfigOptionStrings,             end_filament_gcode))
+    ((ConfigOptionFloats,              filament_pressure_advance))
     ((ConfigOptionFloat,               extra_loading_move))
     ((ConfigOptionGraphs,              extruder_extrusion_multiplier_speed))
     ((ConfigOptionPercents,            extruder_fan_offset))

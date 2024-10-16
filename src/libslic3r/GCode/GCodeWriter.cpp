@@ -210,6 +210,36 @@ std::string GCodeWriter::postamble() const
     return gcode.str();
 }
 
+std::string GCodeWriter::set_pressure_advance(double pa) const {
+    if (pa < 0)
+        return "";
+    std::string_view comment =  " ; Pressure advance value "sv;
+    int16_t tool_id = -1;
+    if (m_tool)
+        tool_id = m_tool->id();
+    std::string gcode;
+    if (FLAVOR_IS(gcfKlipper)) {
+        gcode = std::string("SET_PRESSURE_ADVANCE ADVANCE=") + to_string_nozero(pa, 4);
+        if (tool_id >= 0) {
+            gcode += std::string(" EXTRUDER=") + std::to_string(tool_id);
+        }
+    } else if (FLAVOR_IS(gcfRepRap) || FLAVOR_IS(gcfSprinter)) {
+        if (tool_id >= 0) {
+            gcode = std::string("M572 D") + std::to_string(tool_id) + " S" + to_string_nozero(pa, 4);
+        } else {
+            //is it possible to have no tool id? or a -1 is possible?
+            gcode = std::string("M572 S") + to_string_nozero(pa, 4);
+        }
+    } else {
+        gcode = std::string("M900 K") + to_string_nozero(pa, 4);
+    }
+    if (this->config.gcode_comments) {
+        gcode += comment;
+    }
+    return gcode + "\n";
+}
+
+
 std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, int tool)
 {
     //use m_tool if tool isn't set

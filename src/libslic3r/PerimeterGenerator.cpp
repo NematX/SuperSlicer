@@ -402,7 +402,7 @@ static void fuzzy_extrusion_line(Arachne::ExtrusionLine &ext_lines, double fuzzy
 }
 
 ExtrusionEntityCollection PerimeterGenerator::_traverse_loops_classic(const Parameters &params,
-    const PerimeterGeneratorLoops &loops, ThickPolylines &thin_walls, int count_since_overhang /*= 0*/) const
+    const PerimeterGeneratorLoops &loops, ThickPolylines &thin_walls, int count_since_overhang /*= -1*/) const
 {
     // loops is an arrayref of ::Loop objects
     // turn each one into an ExtrusionLoop object
@@ -439,7 +439,7 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_loops_classic(const Para
         // detect overhanging/bridging perimeters
         ExtrusionPaths paths;
 
-        bool can_overhang = params.config.overhangs_width_speed.is_enabled()
+        bool can_overhang = (params.config.overhangs_width_speed.is_enabled() || params.config.overhangs_width.is_enabled())
             && params.layer->id() > params.object_config.raft_layers;
         if (params.object_config.support_material &&
             params.object_config.support_material_contact_distance_type.value == zdNone) {
@@ -583,7 +583,7 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_loops_classic(const Para
                         break;
                     }
                 }
-                if (has_overhang || params.config.overhangs_speed_enforce.value > count_since_overhang) {
+                if (has_overhang || ( count_since_overhang >= 0 && params.config.overhangs_speed_enforce.value > count_since_overhang)) {
                     //enforce
                     for (ExtrusionPath& path : eloop->paths) {
                         if (path.role() == ExtrusionRole::Perimeter) {
@@ -599,7 +599,7 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_loops_classic(const Para
             for(auto ee : coll) if(ee) ee->visit(LoopAssertVisitor());
 #endif
             assert(thin_walls.empty());
-            ExtrusionEntityCollection children = this->_traverse_loops_classic(params, loop.children, thin_walls, has_overhang ? 1 : (count_since_overhang+1));
+            ExtrusionEntityCollection children = this->_traverse_loops_classic(params, loop.children, thin_walls, has_overhang ? 1 : (count_since_overhang < 0 ? -1 : (count_since_overhang+1)));
             coll[idx.first] = nullptr;
             bool has_steep_overhangs_this_loop = false;
             if (loop.is_steep_overhang && params.layer->id() % 2 == 1 && !params.config.perimeter_reverse) {
@@ -1426,7 +1426,8 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_extrusions(const Paramet
 
         ExtrusionPaths paths;
         // detect overhanging/bridging perimeters
-        if (params.config.overhangs_width_speed.is_enabled() && params.layer->id() > params.object_config.raft_layers
+        if ( (params.config.overhangs_width_speed.is_enabled() || params.config.overhangs_width.is_enabled())
+            && params.layer->id() > params.object_config.raft_layers
             && !((params.object_config.support_material || params.object_config.support_material_enforce_layers > 0) &&
                 params.object_config.support_material_contact_distance.value == 0)) {
 
@@ -1519,6 +1520,24 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_extrusions(const Paramet
             double fuzzy_skin_thickness = params.config.fuzzy_skin_thickness.get_abs_value(nozle_diameter);
             double fuzzy_skin_point_dist = params.config.fuzzy_skin_point_dist.get_abs_value(nozle_diameter);
            fuzzy_paths(paths, scale_d(fuzzy_skin_thickness), scale_d(fuzzy_skin_point_dist));
+        }
+
+        //set to overhang speed if any chunk is overhang
+        bool has_overhang = false;
+        if (params.config.overhangs_speed_enforce.value > 0) {
+            for (const ExtrusionPath& path : paths) {
+                if (path.role().is_overhang()) {
+                    has_overhang = true;
+                    break;
+                }
+            }
+            if (has_overhang) {
+                //enforce
+                for (ExtrusionPath& path : paths) {
+                    assert(path.role().is_perimeter());
+                    path.set_role(path.role() | ExtrusionRole::Bridge);
+                }
+            }
         }
 
         // Append paths to collection.
@@ -5511,7 +5530,7 @@ ExtrusionLoop PerimeterGenerator::_extrude_and_cut_loop(const Parameters &params
         }
 
         // detect overhanging/bridging perimeters
-        if ( params.config.overhangs_width_speed.is_enabled() && params.layer->id() > 0
+        if ( (params.config.overhangs_width_speed.is_enabled() || params.config.overhangs_width.is_enabled()) && params.layer->id() > 0
             && !(params.object_config.support_material && params.object_config.support_material_contact_distance_type.value == zdNone)) {
             ExtrusionPaths paths = this->create_overhangs_classic(params, initial_polyline, role, is_external);
             
