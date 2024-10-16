@@ -5787,6 +5787,15 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionBool(false));
     
+    def = this->add("stretch_corners_arc", coBool);
+    def->label = L("Stretch with arc");
+    def->category = OptionCategory::width;
+    def->tooltip = L("Use a gentle arc instead of a strait segment."
+        " If true, it's better to have the same distance for the deviation and the stretch, if you want the arc to cover the full path.");
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionBool(true));
+    
     def = this->add("stretch_corners_max_angle", coFloat);
     def->label = L("Stretch max angle");
     def->category = OptionCategory::width;
@@ -9590,9 +9599,10 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "solid_infill_below_layer_area",
 "solid_infill_below_width",
 "stretch_corners",
-"stretch_corners_max_angle",
-"stretch_corners_distance",
+"stretch_corners_arc",
 "stretch_corners_deviation",
+"stretch_corners_distance",
+"stretch_corners_max_angle",
 "support_material_angle_height",
 "support_material_acceleration",
 "support_material_contact_distance_type",

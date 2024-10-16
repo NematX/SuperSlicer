@@ -45,6 +45,11 @@ std::pair<double, double> Tool::extrude(double dE)
     assert(! std::isnan(dE));
     assert(dE < std::numeric_limits<int32_t>::max());
     assert(dE > -std::numeric_limits<int32_t>::max());
+    // nematx firmware doesn't support negative extrusion axis. But this shouldn't happen.
+    if (gcfNematX == m_config->gcode_flavor.value && m_absolute_E + dE < 0) {
+        assert(false);
+        dE = (-m_absolute_E);
+    }
     // in case of relative E distances we always reset to 0 before any output
     if (m_config->use_relative_e_distances)
         m_E = 0.;
@@ -54,6 +59,7 @@ std::pair<double, double> Tool::extrude(double dE)
     m_absolute_E += dE;
     if (dE < 0.)
         m_retracted -= dE;
+    assert(m_absolute_E >= 0 || gcfNematX != m_config->gcode_flavor.value);
     return std::make_pair(dE, m_E);
 }
 
@@ -86,6 +92,12 @@ std::pair<double, double> Tool::retract(double length, std::optional<double> res
         m_retracted     += to_retract;
         if(restart_extra)
             m_restart_extra = *restart_extra;
+    }
+    // nematx firmware doesn't support negative extrusion axis.
+    if (gcfNematX == m_config->gcode_flavor.value && m_absolute_E < 0) {
+        m_E -= m_absolute_E;
+        m_retracted -= m_absolute_E;
+        m_absolute_E = 0;
     }
     if (restart_extra_toolchange)
         m_restart_extra_toolchange = *restart_extra_toolchange;

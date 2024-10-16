@@ -575,7 +575,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig* config)
         toggle_field(el, has_ironing);
     
     bool has_corner_stretch = config->opt_bool("stretch_corners");
-    for (auto el : {"stretch_corners_max_angle", "stretch_corners_distance", "stretch_corners_deviation"})
+    for (auto el : {"stretch_corners_arc", "stretch_corners_max_angle", "stretch_corners_distance", "stretch_corners_deviation"})
         toggle_field(el, has_corner_stretch);
     toggle_field("external_perimeter_cut_corners", !has_corner_stretch);
     

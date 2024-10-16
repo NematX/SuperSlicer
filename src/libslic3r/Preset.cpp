@@ -781,9 +781,10 @@ static std::vector<std::string> s_Preset_print_options {
         "perimeter_overlap",
         // stretch_corners
         "stretch_corners",
-        "stretch_corners_max_angle",
-        "stretch_corners_distance",
+        "stretch_corners_arc",
         "stretch_corners_deviation",
+        "stretch_corners_distance",
+        "stretch_corners_max_angle",
         //milling
         "milling_after_z",
         "milling_post_process",

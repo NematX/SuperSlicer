@@ -1375,6 +1375,7 @@ bool PrintObject::invalidate_state_by_config_options(
                 || opt_key == "solid_infill_acceleration"
                 || opt_key == "solid_infill_speed"
                 || opt_key == "stretch_corners"
+                || opt_key == "stretch_corners_arc"
                 || opt_key == "stretch_corners_max_angle"
                 || opt_key == "stretch_corners_distance"
                 || opt_key == "stretch_corners_deviation"
