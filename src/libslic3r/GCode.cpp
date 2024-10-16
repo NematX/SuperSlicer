@@ -5930,23 +5930,23 @@ double GCodeGenerator::_compute_e_per_mm(const ExtrusionPath &path) {
         GraphData eems_graph = this->config().extruder_extrusion_multiplier_speed.get_at(this->m_writer.tool()->id());
         if (eems_graph.data_size() > 0 && this->config().extruder_extrusion_multiplier_speed.is_enabled(this->m_writer.tool()->id())) {
             assert(e_per_mm > 0);
-            double                   current_speed = this->writer().get_speed();
+            double current_speed_mm_s = this->writer().get_speed_mm_s();
             if (eems_graph.data_size() > 0) {
-                e_per_mm *= eems_graph.interpolate(current_speed);
+                e_per_mm *= eems_graph.interpolate(current_speed_mm_s);
             }
             assert(e_per_mm > 0);
         }
     }
     // filament_fill_top_flow_ratio
     if (path.role() == ExtrusionRole::TopSolidInfill) {
-        e_per_mm *= EXTRUDER_CONFIG_WITH_DEFAULT(filament_fill_top_flow_ratio, 1);
+        e_per_mm *= EXTRUDER_CONFIG_WITH_DEFAULT(filament_fill_top_flow_ratio, 100) * 0.01;
     }
     // first layer mult
     if (this->m_layer->bottom_z() < EPSILON) {
         e_per_mm *= this->config().first_layer_flow_ratio.get_abs_value(1);
-        e_per_mm *= EXTRUDER_CONFIG_WITH_DEFAULT(filament_first_layer_flow_ratio, 1);
+        e_per_mm *= EXTRUDER_CONFIG_WITH_DEFAULT(filament_first_layer_flow_ratio, 100) * 0.01;
     } else if (this->m_layer->lower_layer && this->m_layer->lower_layer->bottom_z() < EPSILON) {
-        e_per_mm *= this->config().second_layer_flow_ratio.get_abs_value(1);
+        e_per_mm *= this->config().second_layer_flow_ratio.get_abs_value(100) * 0.01;
     }
     return e_per_mm;
 }
@@ -6273,10 +6273,12 @@ double_t GCodeGenerator::_compute_speed_mm_per_sec(const ExtrusionPath& path, co
         if(comment) *comment = "max_print_speed";
     }
     // Apply small perimeter 'modifier
-    //  don't modify bridge speed
-    if (factor < 1 && !path.role().is_bridge()) {
+    // Don't modify bridge speed
+    // modify overhang if it means slow down.
+    if (factor < 1 && (!path.role().is_bridge() || path.role().is_overhang())) {
         float small_speed = (float)m_config.small_perimeter_speed.get_abs_value(m_config.get_computed_value("perimeter_speed"));
-        if (small_speed > 0) {
+        // modify overhang if it means slow down.
+        if (small_speed > 0 && (!path.role().is_overhang() || small_speed < speed)) {
             // apply factor between feature speed and small speed
             speed = (speed * factor) + double((1.f - factor) * small_speed);
             if(comment) *comment += ", reduced by small_perimeter_speed";
@@ -6535,7 +6537,7 @@ void GCodeGenerator::cooldown_marker_init() {
     }
 }
 
-std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std::string_view description_in, double speed) {
+std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std::string_view description_in, double speed_mm_s) {
     std::string gcode;
     gcode.reserve(512);
     std::string description{ description_in };
@@ -6543,7 +6545,7 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
     auto [/*double*/acceleration, /*double*/travel_acceleration] = _compute_acceleration(path);
     // compute speed here to be able to know it for travel_deceleration_use_target
     std::string speed_comment = "";
-    speed = _compute_speed_mm_per_sec(path, speed, m_overhang_fan_override, m_config.gcode_comments ? &speed_comment : nullptr);
+    speed_mm_s = _compute_speed_mm_per_sec(path, speed_mm_s, m_overhang_fan_override, m_config.gcode_comments ? &speed_comment : nullptr);
 
     bool moved_to_point = last_pos_defined() && last_pos().coincides_with_epsilon(path.first_point());
     if (m_config.travel_deceleration_use_target) {
@@ -6565,7 +6567,7 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
                 if (length > SCALED_EPSILON) {
                     // compute some numbers
                     double previous_accel = m_writer.get_acceleration(); // in mm/s²
-                    double previous_speed = m_writer.get_speed();        // in mm/s
+                    double previous_speed = m_writer.get_speed_mm_s(); // in mm/s
                     double travel_speed = m_config.get_computed_value("travel_speed");
                     // first, the acceleration distance
                     const double extrude2travel_speed_diff = previous_speed >= travel_speed ?
@@ -6578,7 +6580,7 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
                     assert(!std::isinf(dist_to_go_travel_speed));
                     assert(!std::isnan(dist_to_go_travel_speed));
                     // then the deceleration distance
-                    const double travel2extrude_speed_diff = speed >= travel_speed ? 0 : (travel_speed - speed);
+                    const double travel2extrude_speed_diff = speed_mm_s >= travel_speed ? 0 : (travel_speed - speed_mm_s);
                     const double seconds_to_go_extrude_speed = (travel2extrude_speed_diff / acceleration);
                     const coordf_t dist_to_go_extrude_speed = scaled(seconds_to_go_extrude_speed *
                                                                      (travel_speed - travel2extrude_speed_diff / 2));
@@ -6586,8 +6588,8 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
                     assert(!std::isinf(dist_to_go_extrude_speed));
                     assert(!std::isnan(dist_to_go_extrude_speed));
                     // acceleration to go from previous speed to the new one without going by the travel speed
-                    const double extrude2extrude_speed_diff = std::abs(previous_speed - speed);
-                    const double accel_extrude2extrude = extrude2extrude_speed_diff * (previous_speed + speed) /
+                    const double extrude2extrude_speed_diff = std::abs(previous_speed - speed_mm_s);
+                    const double accel_extrude2extrude = extrude2extrude_speed_diff * (previous_speed + speed_mm_s) /
                         (2 * length);
                     assert(dist_to_go_extrude_speed >= 0);
                     assert(!std::isinf(accel_extrude2extrude));
@@ -6798,7 +6800,7 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
     }
     // F     is mm per minute.
     // speed is mm per second
-    gcode += m_writer.set_speed(speed, speed_comment, cooling_marker_setspeed_comments);
+    gcode += m_writer.set_speed_mm_s(speed_mm_s, speed_comment, cooling_marker_setspeed_comments);
 
     
     return gcode;

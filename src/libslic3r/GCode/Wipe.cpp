@@ -110,7 +110,7 @@ std::string Wipe::wipe(GCodeGenerator &gcodegen, bool toolchange)
             if (! wiped) {
                 wiped = true;
                 gcode += ";" + GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Wipe_Start) + "\n";
-                gcode += gcodegen.writer().set_speed(wipe_speed.first * 60, gcodegen.config().gcode_comments ? wipe_speed.second? "wipe_speed"sv : "travel_speed * 0.8"sv : ""sv , gcodegen.enable_cooling_markers() ? ";_WIPE"sv : ""sv);
+                gcode += gcodegen.writer().set_speed_mm_s(wipe_speed.first, gcodegen.config().gcode_comments ? wipe_speed.second? "wipe_speed"sv : "travel_speed * 0.8"sv : ""sv , gcodegen.enable_cooling_markers() ? ";_WIPE"sv : ""sv);
             }
         };
         const double xy_to_e    = this->calc_xy_to_e_ratio(gcodegen.writer(), extruder.id());
@@ -200,6 +200,9 @@ std::string Wipe::wipe(GCodeGenerator &gcodegen, bool toolchange)
         // Start with the current position, which may be different from the wipe path start in case of loop clipping.
         Vec2d prev = gcodegen.point_to_gcode_quantized(gcodegen.last_pos());
         auto  it   = this->path().begin();
+        if (gcodegen.last_pos().coincides_with_epsilon(it->point)) {
+            ++it;
+        }
         Vec2d p    = gcodegen.point_to_gcode(it->point + m_offset);
         ++ it;
         bool done = false;
