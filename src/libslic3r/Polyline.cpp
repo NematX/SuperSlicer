@@ -602,20 +602,29 @@ bool ArcPolyline::has_arc() const {
 
 void ArcPolyline::append(const Points &src)
 {
-    for (const Point &point : src)
+    assert(this->empty() || src.empty() || src.front().coincides_with_epsilon(this->back()));
+    for (size_t i = 1; i < src.size(); ++i) {
+        const Point &point = src[i];
         m_path.emplace_back(point, 0.f, Geometry::ArcWelder::Orientation::Unknown);
-        //m_path.push_back(Geometry::ArcWelder::Segment(point, 0.f, Geometry::ArcWelder::Orientation::Unknown));
+    }
     assert(is_valid());
 }
 void ArcPolyline::append(Points &&src)
 {
-    for (Point &point : src)
+    assert(this->empty() || src.empty() || src.front().coincides_with_epsilon(this->back()));
+    for (size_t i = 1; i < src.size(); ++i) {
+        const Point &point = src[i];
         m_path.emplace_back(std::move(point), 0, Geometry::ArcWelder::Orientation::Unknown);
+    }
     assert(is_valid());
 }
 void ArcPolyline::append(const Points::const_iterator &begin, const Points::const_iterator &end)
 {
+    assert(this->empty() || begin == end || begin->coincides_with_epsilon(this->back()));
     Points::const_iterator it = begin;
+    if (it != end && begin->coincides_with_epsilon(this->back())) {
+        ++it;
+    }
     while (it != end) {
         m_path.emplace_back(*it, 0, Geometry::ArcWelder::Orientation::Unknown);
         ++it;
@@ -686,6 +695,16 @@ void ArcPolyline::append(ArcPolyline &&src)
         m_path.reserve(next_size);
         m_path.insert(m_path.end(), std::make_move_iterator(src.m_path.begin()), std::make_move_iterator(src.m_path.end()));
         assert(next_size == m_path.size());
+    }
+    assert(is_valid());
+}
+void ArcPolyline::append(const Geometry::ArcWelder::Segment &arc)
+{
+    assert(arc.radius == 0 || !this->empty());
+    assert(arc.radius != 0 || arc.orientation == Geometry::ArcWelder::Orientation::Unknown);
+    this->m_path.push_back(arc);
+    if (arc.radius != 0) {
+        this->m_only_strait = false;
     }
     assert(is_valid());
 }
