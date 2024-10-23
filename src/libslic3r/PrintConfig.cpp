@@ -6788,6 +6788,17 @@ void PrintConfigDef::init_fff_params()
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionBools{ false });
 
+    def = this->add("wipe_extra_perimeter", coFloats);
+    def->category = OptionCategory::extruders;
+    def->label = L("Extra Wipe for external perimeters");
+    def->tooltip = L("When the external perimeter loop extrusion ends, a wipe is done, going slightly inside the print."
+        " The number in this settting increases the wipe by moving the nozzle along the loop again before the final wipe.");
+    def->min = 0;
+    def->sidetext = L("mm");
+    def->mode = comAdvancedE | comSuSi;
+    def->is_vector_extruder = true;
+    def->set_default_value(new ConfigOptionFloats{ 0.f });
+
     def = this->add("wipe_inside_start", coBools);
     def->label = L("Wipe inside at start");
     def->category = OptionCategory::extruders;
@@ -6818,6 +6829,14 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvancedE | comSuSi;
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionPercents{ 50 });
+
+    def = this->add("wipe_lift", coFloatsOrPercents);
+    def->label = L("Wipe lift");
+    def->category = OptionCategory::extruders;
+    def->tooltip = L("when wiping, it will lift gradually to this height, so the filament can be 'cut' more easily."
+        "\nCan be a percentage of the current extruder diameter.");
+    def->mode = comAdvancedE | comSuSi;
+    def->set_default_value(new ConfigOptionFloatsOrPercents{FloatOrPercent{0, false}});
 
     def = this->add("wipe_only_crossing", coBools);
     def->label = L("Wipe only when crossing perimeters");
@@ -7016,17 +7035,6 @@ void PrintConfigDef::init_fff_params()
         "Colours of the objects will be mixed as a result.");
     def->mode = comSimpleAE | comPrusa;
     def->set_default_value(new ConfigOptionBool(false));
-
-    def = this->add("wipe_extra_perimeter", coFloats);
-    def->category = OptionCategory::extruders;
-    def->label = L("Extra Wipe for external perimeters");
-    def->tooltip = L("When the external perimeter loop extrusion ends, a wipe is done, going slightly inside the print."
-        " The number in this settting increases the wipe by moving the nozzle along the loop again before the final wipe.");
-    def->min = 0;
-    def->sidetext = L("mm");
-    def->mode = comAdvancedE | comSuSi;
-    def->is_vector_extruder = true;
-    def->set_default_value(new ConfigOptionFloats{ 0.f });
 
     def = this->add("wipe_tower_bridging", coFloat);
     def->label = L("Maximal bridging distance");
@@ -7388,6 +7396,7 @@ void PrintConfigDef::init_extruder_option_keys()
         "wipe_inside_depth",
         "wipe_inside_end",
         "wipe_inside_start",
+        "wipe_lift",
         "wipe_only_crossing",
         "wipe_speed",
     };
@@ -7420,6 +7429,7 @@ void PrintConfigDef::init_extruder_option_keys()
         "wipe_inside_depth",
         "wipe_inside_end",
         "wipe_inside_start",
+        "wipe_lift",
         "wipe_only_crossing",
         "wipe_speed",
     };
@@ -7448,6 +7458,7 @@ void PrintConfigDef::init_extruder_option_keys()
         "wipe_inside_depth",
         "wipe_inside_end",
         "wipe_inside_start",
+        "wipe_lift",
         "wipe_only_crossing",
         "wipe_speed",
     };
@@ -9645,12 +9656,14 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "wipe_inside_depth",
 "wipe_inside_end",
 "wipe_inside_start",
+"wipe_lift",
 "wipe_only_crossing",
 "wipe_speed",
 "filament_wipe_extra_perimeter", // filament override
 "filament_wipe_inside_depth", // filament override
 "filament_wipe_inside_end", // filament override
 "filament_wipe_inside_start", // filament override
+"filament_wipe_lift", // filament override
 "filament_wipe_only_crossing", // filament override
 "filament_wipe_speed", // filament override
 "wipe_tower_speed",
