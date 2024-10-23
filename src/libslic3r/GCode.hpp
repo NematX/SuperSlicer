@@ -524,6 +524,8 @@ private:
     double                              m_next_lift_min{0};
 
     double                              m_current_perimeter_extrusion_width = 0.4;
+    // for stretch corners (to see where is inside and outside)
+    std::optional<const ExtrusionLoop*> m_current_loop;
     std::optional<unsigned>             m_layer_change_extruder_id;
     // bool                                m_already_unretracted{false};
     // a previous extrusion path that is too small to be extruded, have to fusion it into the next call.

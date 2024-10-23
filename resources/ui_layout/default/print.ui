@@ -511,8 +511,16 @@ group:Corners
 	setting:external_perimeter_cut_corners
 	setting:stretch_corners
 	setting:stretch_corners_max_angle
-	setting:stretch_corners_distance
-	setting:stretch_corners_deviation
+	line:Stretch distance
+		setting:label$Convex:stretch_corners_distance_convex
+		setting:label$Concave:stretch_corners_distance_concave
+		setting:label$First layer:stretch_corners_distance_first_layer
+	end_line
+	line:Stretch deviation
+		setting:label$Convex:stretch_corners_deviation_convex
+		setting:label$Concave:stretch_corners_deviation_concave
+		setting:label$First layer:stretch_corners_deviation_first_layer
+	end_line
 	setting:stretch_corners_arc
 
 page:Multiple extruders:funnel

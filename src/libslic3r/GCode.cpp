@@ -4619,7 +4619,10 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
         && this->m_layer->id() > 0
         //exclude if min_layer_height * 2 > layer_height (increase from 2 to 3 because it's working but uses in-between)
         && this->m_layer->height >= m_config.min_layer_height.get_abs_value(m_writer.tool()->id(), nozzle_diam) * 2 - EPSILON) {
-        return extrude_loop_vase(original_loop, description, speed);
+        this->m_current_loop = &original_loop; //FIXME: reverse
+        std::string returned_gcode = extrude_loop_vase(original_loop, description, speed);
+        this->m_current_loop.reset();
+        return returned_gcode;
     }
 
     ExtrusionLoop loop_to_seam = original_loop;
@@ -4635,6 +4638,7 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
         loop_to_seam.reverse();
     }
     this->visitor_flipped = false;
+    this->m_current_loop = &loop_to_seam; //FIXME: reverse
 
     // extrude all loops ccw
     //no! this was decided in perimeter_generator
@@ -4711,7 +4715,10 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
             }
         }
     }
-    if (building_paths.empty()) return "";
+    if (building_paths.empty()) {
+        this->m_current_loop.reset();
+        return "";
+    }
 
     const ExtrusionPaths& wipe_paths = building_paths;
     for (const ExtrusionPath &path : wipe_paths)
@@ -5181,6 +5188,7 @@ stop_print_loop:
 
     assert(!this->visitor_flipped);
     this->visitor_flipped = save_flipped;
+    this->m_current_loop.reset();
     return gcode;
 }
 
@@ -5923,7 +5931,7 @@ void GCodeGenerator::_extrude_line_cut_corner(std::string& gcode_str, const Line
 //this will extrude between last_point and corner_point, and will possibly push a little bit between corner_point and next_point. The last printed point will be returned, and must be used instead of corner_point for the next call as last_point.
 Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const Point& last_point, const Point& corner_point, const Point& next_point, const Point& after_point, const double path_width, const double e_per_mm, const std::string_view comment)
 {
-    if (last_point == corner_point) {
+    if (last_point == corner_point || !m_current_loop) {
         assert(false);
         return corner_point; // todo: investigate if it happens
     }
@@ -5944,6 +5952,7 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
     // get the 'little' angle
     const double full_angle = angle_ccw(last_point - corner_point, next_point - corner_point);
     double angle = corner_point == last_point ? PI : abs_angle(full_angle);
+    bool is_inside = (*m_current_loop)->is_counter_clockwise() != (angle < PI);
     if (angle > PI) {
         angle = 2 * M_PI - angle;
     }
@@ -5957,7 +5966,12 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
         // compute distance
         const double ratio_from_angle = (degree_angle - degree_min_angle) / (90 - degree_min_angle);
         assert(ratio_from_angle > 0 && ratio_from_angle <= 1);
-        const double unscaled_dist = ratio_from_angle * config().stretch_corners_distance.get_abs_value(path_width);
+        double unscaled_dist = is_inside ? config().stretch_corners_distance_convex.get_abs_value(path_width) :
+                                           config().stretch_corners_distance_concave.get_abs_value(path_width);
+        if (m_layer != nullptr && m_layer->bottom_z() < EPSILON) {
+            unscaled_dist = std::min(unscaled_dist, config().stretch_corners_distance_first_layer.get_abs_value(path_width));
+        }
+        unscaled_dist *= ratio_from_angle;
         const coord_t dist = scale_t(unscaled_dist);
         if (dist < SCALED_EPSILON * 10) {
             // too small to bother.
@@ -5969,7 +5983,12 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
         }
 
         // compute deviation
-        const double unscaled_deviation_max = config().stretch_corners_deviation.get_abs_value(unscaled_dist);
+        double unscaled_deviation_max = is_inside ?
+            config().stretch_corners_deviation_convex.get_abs_value(unscaled_dist) :
+            config().stretch_corners_deviation_concave.get_abs_value(unscaled_dist);
+        if (m_layer != nullptr && m_layer->bottom_z() < EPSILON) {
+            unscaled_deviation_max = std::min(unscaled_deviation_max, config().stretch_corners_deviation_first_layer.get_abs_value(unscaled_dist));
+        }
         const coord_t deviation_max = scale_t(unscaled_deviation_max);
 
         // compute stretch start point (max half dist)
@@ -6005,8 +6024,18 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
             // compute its angle, deviation
             const double next_ratio_from_angle = (degree_angle - degree_min_angle) / (90 - degree_min_angle);
             assert(next_ratio_from_angle > 0 && next_ratio_from_angle <= 1);
-            const double next_unscaled_dist = ratio_from_angle * config().stretch_corners_distance.get_abs_value(path_width);
-            const coord_t next_deviation_max = scale_t(config().stretch_corners_distance.get_abs_value(unscaled_dist));
+            double next_unscaled_dist = is_inside ? config().stretch_corners_distance_convex.get_abs_value(path_width) :
+                                               config().stretch_corners_distance_concave.get_abs_value(path_width);
+            if (m_layer != nullptr && m_layer->bottom_z() < EPSILON) {
+                next_unscaled_dist = std::min(next_unscaled_dist, config().stretch_corners_distance_first_layer.get_abs_value(path_width));
+            }
+            next_unscaled_dist *= ratio_from_angle;
+            double next_deviation_max = is_inside ?
+                config().stretch_corners_deviation_convex.get_abs_value(unscaled_dist) :
+                config().stretch_corners_deviation_concave.get_abs_value(unscaled_dist);
+            if (m_layer != nullptr && m_layer->bottom_z() < EPSILON) {
+                next_deviation_max = std::min(next_deviation_max, config().stretch_corners_deviation_first_layer.get_abs_value(unscaled_dist));
+            }
             // if there are enough space
             if ((next_deviation_max + deviation_max) * 1.5 <= next_available_dist) {
                 //do it simply
