@@ -710,6 +710,11 @@ void ArcPolyline::append(const Geometry::ArcWelder::Segment &arc)
     if (arc.radius != 0) {
         this->m_only_strait = false;
     }
+#ifdef _DEBUG
+    if (this->m_path.size() > 1) {
+        this->m_path.back().length = Geometry::ArcWelder::segment_length<coordf_t>(this->m_path[this->m_path.size() - 2], this->m_path.back());
+    }
+#endif
     assert(is_valid());
 }
 
