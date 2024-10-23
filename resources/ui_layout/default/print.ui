@@ -513,6 +513,7 @@ group:Corners
 	setting:stretch_corners_max_angle
 	setting:stretch_corners_distance
 	setting:stretch_corners_deviation
+	setting:stretch_corners_arc
 
 page:Multiple extruders:funnel
 group:Extruders

@@ -6040,7 +6040,7 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
                 }
                 // 2. get perpendicualire
                 // CW or CCW?
-                bool is_CW = full_angle >= 0;
+                bool is_CW = full_angle <= 0;
                 Vec2crd vstart = pt_corner - pt_start;
                 Vec2crd vend = pt_corner - pt_end;
                 Vec2crd vstartp(is_CW ? vstart.y() : -vstart.y(), is_CW ? -vstart.x() : vstart.x());
