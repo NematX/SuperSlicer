@@ -1506,6 +1506,8 @@ void GCodeGenerator::_do_export(Print& print_mod, GCodeOutputStream &file, Thumb
             print_object_instances_ordering = sort_object_instances_by_max_z(print);
         else if (print.config().complete_objects_sort.value == cosY)
             print_object_instances_ordering = sort_object_instances_by_max_y(print);
+        else if(print.config().complete_objects_sort.value == cosNearest)
+            print_object_instances_ordering = chain_print_object_instances(print);
         // Find the 1st printing object, find its tool ordering and the initial extruder ID.
         print_object_instance_sequential_active = print_object_instances_ordering.begin();
         for (; print_object_instance_sequential_active != print_object_instances_ordering.end(); ++ print_object_instance_sequential_active) {
@@ -1870,7 +1872,9 @@ void GCodeGenerator::_do_export(Print& print_mod, GCodeOutputStream &file, Thumb
             /////////////////////////////////////////////// begin parallel_objects_step
             if (print.config().parallel_objects_step > 0 && !has_wipe_tower) {
                 double range = std::min(print.config().parallel_objects_step, print.config().extruder_clearance_height) + EPSILON;
-                print_object_instances_ordering = chain_print_object_instances(print);
+                if (print.config().complete_objects_sort.value == cosNearest) {
+                    print_object_instances_ordering = chain_print_object_instances(print);
+                }
                 bool first_layers = true;
 
                 for (coordf_t Rstart = 0, Rend = range;; Rstart += range, Rend += range) {

@@ -81,6 +81,7 @@ CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(PrinterTechnology)
 
 
 static const t_config_enum_values s_keys_map_CompleteObjectSort {
+    {"nearest", cosNearest},
     {"object", cosObject},
     {"lowy", cosY},
     {"lowz", cosZ},
@@ -1153,12 +1154,14 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("When printing multiple objects or copies on after another, this will help you to choose how it's ordered."
         "\nObject will sort them by the order of the right panel."
         "\nLowest Y will sort them by their lowest Y point. Useful for printers with a X-bar."
-        "\nLowest Z will sort them by their height, useful for delta printers.");
+        "\nLowest Z will sort them by their height, useful for delta printers."
+        "\nNearest will try to jump to the nearest.");
     def->mode = comAdvancedE | comSuSi;
     def->set_enum<CompleteObjectSort>({
         { "object", L("Right panel") },
         { "lowy", L("lowest Y") },
         { "lowz", L("lowest Z") },
+        { "nearest", L("Nearest") },
     });
     def->set_default_value(new ConfigOptionEnum<CompleteObjectSort>(cosObject));
 
