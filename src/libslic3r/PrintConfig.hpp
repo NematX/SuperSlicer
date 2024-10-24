@@ -60,8 +60,9 @@
 namespace Slic3r {
 
 enum CompleteObjectSort {
-    cosObject, 
-    cosZ, 
+    cosNearest,
+    cosObject,
+    cosZ,
     cosY,
 };
 
