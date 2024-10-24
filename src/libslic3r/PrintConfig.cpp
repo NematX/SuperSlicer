@@ -5789,6 +5789,7 @@ void PrintConfigDef::init_fff_params()
     
     def = this->add("stretch_corners_arc", coBool);
     def->label = L("Stretch with arc");
+    def->full_label = L("Stretch corners with arc");
     def->category = OptionCategory::width;
     def->tooltip = L("Use a gentle arc instead of a strait segment."
         " If true, it's better to have the same distance for the deviation and the stretch, if you want the arc to cover the full path.");
@@ -5798,6 +5799,7 @@ void PrintConfigDef::init_fff_params()
     
     def = this->add("stretch_corners_max_angle", coFloat);
     def->label = L("Stretch max angle");
+    def->full_label = L("Stretch corners max angle");
     def->category = OptionCategory::width;
     def->tooltip = L("New angle considered to be strait (instead of 180°), so every angle higher than that won't have any stretch.");
     def->sidetext = L("mm/s² or %");
@@ -5807,6 +5809,7 @@ void PrintConfigDef::init_fff_params()
     
     def = this->add("stretch_corners_deviation_concave", coFloatOrPercent);
     def->label = L("Concave Stretch deviation");
+    def->full_label = L("Stretch corners Concave deviation");
     def->category = OptionCategory::width;
     def->tooltip = L("Distance from the corner point to start & end the stretching."
                     " If it doesn't had the time to finish the previous stretch, then both deviation are reduced."
@@ -5818,6 +5821,7 @@ void PrintConfigDef::init_fff_params()
     
     def = this->add("stretch_corners_deviation_convex", coFloatOrPercent);
     def->label = L("Convex Stretch deviation");
+    def->full_label = L("Stretch corners Convex deviation");
     def->category = OptionCategory::width;
     def->tooltip = L("Distance from the corner point to start & end the stretching."
                     " If it doesn't had the time to finish the previous stretch, then both deviation are reduced."
@@ -5830,6 +5834,7 @@ void PrintConfigDef::init_fff_params()
     
     def = this->add("stretch_corners_deviation_first_layer", coFloatOrPercent);
     def->label = L("First layer Stretch deviation");
+    def->full_label = L("Stretch corners First layer deviation");
     def->category = OptionCategory::width;
     def->tooltip = L("Distance from the corner point to start & end the stretching."
                     " If it doesn't had the time to finish the previous stretch, then both deviation are reduced."
@@ -5842,6 +5847,7 @@ void PrintConfigDef::init_fff_params()
     
     def = this->add("stretch_corners_distance_concave", coFloatOrPercent);
     def->label = L("Concave Stretch distance");
+    def->full_label = L("Stretch corners Concave distance");
     def->category = OptionCategory::width;
     def->tooltip = L("Distance for stretching when the angle is 90°."
         " Between 180° (strait line / max angle) and 90°, it's interpolated, following the sine function."
@@ -5854,6 +5860,7 @@ void PrintConfigDef::init_fff_params()
     
     def = this->add("stretch_corners_distance_convex", coFloatOrPercent);
     def->label = L("Convex Stretch distance");
+    def->full_label = L("Stretch corners Convex distance");
     def->category = OptionCategory::width;
     def->tooltip = L("Distance for stretching when the angle is 90°."
         " Between 180° (strait line / max angle) and 90°, it's interpolated, following the sine function."
@@ -5867,6 +5874,7 @@ void PrintConfigDef::init_fff_params()
     
     def = this->add("stretch_corners_distance_first_layer", coFloatOrPercent);
     def->label = L("First layer Stretch distance");
+    def->full_label = L("Stretch corners First layer distance");
     def->category = OptionCategory::width;
     def->tooltip = L("Distance for stretching when the angle is 90°."
         " Between 180° (strait line / max angle) and 90°, it's interpolated, following the sine function."

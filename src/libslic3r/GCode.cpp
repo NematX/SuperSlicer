@@ -6237,7 +6237,7 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
         // extrude from last_point to start_point
         gcode_str += this->m_writer.extrude_to_xy(
             this->point_to_gcode(start_point),
-            e_per_mm * unscaled(last_point.distance_to(start_point)),
+            e_per_mm * unscaled(start_point.distance_to(last_point)),
             comment);
         
         // extrude first strait bit if any
@@ -6245,7 +6245,7 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
             assert(paths.front().polyline.size() == 2);
             gcode_str += this->m_writer.extrude_to_xy(
                 this->point_to_gcode(paths.front().polyline.back()),
-                e_per_mm * unscaled(last_point.distance_to(start_point)),
+                e_per_mm * unscaled(paths.front().polyline.back().distance_to(start_point)),
                 comment);
         }
         const double current_speed = this->m_writer.get_speed_mm_s();
@@ -6287,20 +6287,20 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
                                                         segment.ccw(), "stretch corner");
                 }
             }
-        } 
+        }
 
         //restore speed
         gcode_str += this->m_writer.set_speed_mm_s(current_speed);
         
         // extrude last strait bit if any
         if (paths.back().height() == 5) {
-            assert(paths.front().polyline.size() == 2);
+            assert(paths.back().polyline.size() == 2);
+            assert(paths.back().polyline.get_arc(paths.back().polyline.size() - 1).radius == 0);
             gcode_str += this->m_writer.extrude_to_xy(
-                this->point_to_gcode(paths.front().polyline.back()),
-                e_per_mm * unscaled(last_point.distance_to(start_point)),
+                this->point_to_gcode(paths.back().polyline.back()),
+                e_per_mm * unscaled(paths.back().polyline.back().distance_to(paths.back().polyline.get_point(paths.back().polyline.size() - 2))),
                 comment);
         }
-
         // relance
         return end_point;
     } else {
