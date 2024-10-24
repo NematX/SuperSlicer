@@ -1566,17 +1566,8 @@ void PrintObject::slice_volumes()
                         }
                         // Apply all three main negative XY compensation.
                         if (hole_delta < 0 || inner_delta < 0 || outter_delta < 0 || negative_hole_compensation_by_diameter.data_size() > 0) {
-                                static int isaqsdsdfsdfqzfn = 0;
-                                std::stringstream stri;
-                                stri << layer_id << "_slice_grow_" << isaqsdsdfsdfqzfn++ << ".svg";
-                                SVG svg(stri.str());
                             ExPolygons    expolygons_before = expolygons;
                             expolygons = _shrink_contour_holes(std::min(coord_t(0), outter_delta), std::min(coord_t(0), inner_delta), std::min(coord_t(0), hole_delta), negative_hole_compensation_by_diameter, expolygons);
-                            
-                                //svg.draw(to_polylines(to_expolygons(std::move(layerm->m_slices.surfaces))), "gray");
-                                svg.draw(to_polylines(expolygons_before), "cyan");
-                                svg.draw(to_polylines(expolygons), "green");
-                                svg.Close();
                         }
                         if (layer->regions().front()->region().config().curve_smoothing_precision > 0.) {
                             //smoothing
