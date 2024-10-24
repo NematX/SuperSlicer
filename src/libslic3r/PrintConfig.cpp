@@ -7132,8 +7132,8 @@ void PrintConfigDef::init_fff_params()
     def->full_label = L("Inner XY size compensation");
     def->category = OptionCategory::slicing;
     def->tooltip = L("The object will be grown/shrunk in the XY plane by the configured value "
-        "(negative = inwards = remove area, positive = outwards = add area). This might be useful for fine-tuning sizes."
-        "\nThis one only applies to the 'inner' shell of the object (!!! horizontal holes break the shell !!!)");
+        "(negative = inwards = remove area = bigger holes, positive = outwards = add area = smaller holes). This might be useful for fine-tuning sizes."
+        "\nThis one only applies to the 'inner' shell (vertical holes) of the object (!!! horizontal holes break the shell !!!)");
     def->sidetext = L("mm");
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionFloat(0));
@@ -7143,7 +7143,7 @@ void PrintConfigDef::init_fff_params()
     def->full_label = L("XY holes compensation");
     def->category = OptionCategory::slicing;
     def->tooltip = L("The convex holes will be grown / shrunk in the XY plane by the configured value"
-        " (negative = inwards = remove area, positive = outwards = add area, should be negative as the holes are always a bit smaller irl)."
+        " (negative = inwards = remove area = bigger holes, positive = outwards = add area = smaller holes, should be negative as the holes are always a bit smaller than they should be)."
         " This might be useful for fine-tuning hole sizes."
         "\nThis setting behaves the same as 'Inner XY size compensation' but only for convex shapes. It's added to 'Inner XY size compensation', it does not replace it. ");
     def->sidetext = L("mm");
