@@ -5826,6 +5826,7 @@ void PrintConfigDef::init_fff_params()
     def->min = 0;
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionFloatOrPercent(50, true));
+    def->aliases = { "stretch_corners_deviation" };
     
     def = this->add("stretch_corners_deviation_first_layer", coFloatOrPercent);
     def->label = L("First layer Stretch deviation");
@@ -5862,6 +5863,7 @@ void PrintConfigDef::init_fff_params()
     def->min = 0;
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionFloatOrPercent(100, true));
+    def->aliases = { "stretch_corners_distance" };
     
     def = this->add("stretch_corners_distance_first_layer", coFloatOrPercent);
     def->label = L("First layer Stretch distance");

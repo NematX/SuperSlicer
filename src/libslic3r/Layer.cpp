@@ -734,6 +734,17 @@ void Layer::make_perimeters()
                             && config.fuzzy_skin_thickness      == other_config.fuzzy_skin_thickness
                             && config.fuzzy_skin_point_dist     == other_config.fuzzy_skin_point_dist)
                         {
+                            
+                            if (config.stretch_corners || (
+                                   config.stretch_corners_arc                   == other_config.stretch_corners_arc
+                                && config.stretch_corners_deviation_concave     == other_config.stretch_corners_deviation_concave
+                                && config.stretch_corners_deviation_convex      == other_config.stretch_corners_deviation_convex
+                                && config.stretch_corners_deviation_first_layer == other_config.stretch_corners_deviation_first_layer
+                                && config.stretch_corners_distance_concave      == other_config.stretch_corners_distance_concave
+                                && config.stretch_corners_distance_convex       == other_config.stretch_corners_distance_convex
+                                && config.stretch_corners_distance_first_layer  == other_config.stretch_corners_distance_first_layer
+                                && config.stretch_corners_max_angle             == other_config.stretch_corners_max_angle
+                                ))
                             if (config.perimeter_generator != PerimeterGeneratorType::Arachne || (
                                    config.min_bead_width                    == other_config.min_bead_width
                                 && config.min_feature_size                  == other_config.min_feature_size
