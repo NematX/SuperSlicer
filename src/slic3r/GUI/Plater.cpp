@@ -4225,8 +4225,12 @@ void Plater::priv::set_current_panel(wxTitledPanel* panel)
     bool force_render = (current_panel != nullptr);
 #endif // __WXMAC__
 
-    if (current_panel == panel)
+    if (current_panel == panel) {
+        if (current_panel == preview && wxGetApp().is_editor() && !preview->can_display_gcode()) {
+            preview->load_gcode_shells();
+        }
         return;
+    }
 
     wxTitledPanel* old_panel = current_panel;
     current_panel = panel;
@@ -4281,6 +4285,7 @@ void Plater::priv::set_current_panel(wxTitledPanel* panel)
                     || this->background_process.state() == BackgroundSlicingProcess::State::STATE_STARTED;
                 if(!already_running) {
                     preview->get_canvas3d()->init_gcode_viewer();
+                    preview->load_gcode_shells();
                     this->q->reslice();
                 } else if (! this->background_process.finished()) {
                     //TODO test
