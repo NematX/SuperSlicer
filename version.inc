@@ -10,7 +10,7 @@ set(SLIC3R_APP_CMD "nematxslicer")
 # id for windows registry
 set(SLIC3R_APP_PROG_ID "Slic3r.1")
 # versions
-set(SLIC3R_VERSION "2.7-rc")
+set(SLIC3R_VERSION "2.7+UNKNOWN")
 set(SLIC3R_VERSION_FULL "2.7.61.0")
 set(SLIC3R_BUILD_ID "${SLIC3R_APP_KEY}_${SLIC3R_VERSION_FULL}+UNKNOWN")
 set(SLIC3R_RC_VERSION "2,7,61,0")
