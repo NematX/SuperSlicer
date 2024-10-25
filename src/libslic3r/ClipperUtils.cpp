@@ -33,7 +33,7 @@
 #ifdef CLIPPER_UTILS_DEBUG
 #include "SVG.hpp"
 #endif /* CLIPPER_UTILS_DEBUG */
-#pragma UNOPTIMIZE
+
 namespace Slic3r {
 
 #ifdef CLIPPER_UTILS_DEBUG
