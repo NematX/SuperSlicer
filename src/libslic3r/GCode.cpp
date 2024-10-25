@@ -6123,111 +6123,34 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
             }
         };
         create_path(start_point, corner_point, moved_corner, paths, 0);
-        {
-            static int aodfjiaqsdz = 0;
-            std::stringstream stri;
-            stri << this->m_layer->id() << "_stratch_first_section_" <<"_"<<(aodfjiaqsdz++) << ".svg";
-            SVG svg(stri.str());
-            svg.draw(Polyline({last_point, corner_point, moved_corner}), "grey", scale_t(0.12));
-            svg.draw(last_point, "pink", scale_t(0.12));
-            svg.draw(corner_point, "purple", scale_t(0.12));
-            for (ExtrusionPath &path : paths) {
-                if (path.height() == 0) {
-                    svg.draw(path.polyline.to_polyline(), "red", scale_t(0.06));
-                    svg.draw(path.polyline.front(), "red", scale_t(0.1));
-                }
-                if(path.height() == 1){
-                    svg.draw(path.polyline.to_polyline(), "orange", scale_t(0.05));
-                    svg.draw(path.polyline.front(), "orange", scale_t(0.09));
-                }
-                if(path.height() == 2){
-                    svg.draw(path.polyline.to_polyline(), "yellow", scale_t(0.04));
-                    svg.draw(path.polyline.front(), "yellow", scale_t(0.08));
-                }
-                if(path.height() == 3){
-                    svg.draw(path.polyline.to_polyline(), "green", scale_t(0.03));
-                    svg.draw(path.polyline.front(), "green", scale_t(0.07));
-                }
-                if(path.height() == 4){
-                    svg.draw(path.polyline.to_polyline(), "cyan", scale_t(0.025));
-                    svg.draw(path.polyline.front(), "cyan", scale_t(0.06));
-                }
-            }
-            svg.Close();
-        }
-        size_t first_idx = paths.size();
         create_path(moved_corner, corner_point, end_point, paths, 3);
-        {
-            static int aodfjiaqsdz = 0;
-            std::stringstream stri;
-            stri << this->m_layer->id() << "_stratch_second_section_" <<"_"<<(aodfjiaqsdz++) << ".svg";
-            SVG svg(stri.str());
-            svg.draw(Polyline({moved_corner, corner_point, end_point}), "grey", scale_t(0.12));
-            svg.draw(moved_corner, "pink", scale_t(0.12));
-            svg.draw(end_point, "purple", scale_t(0.12));
-            for (size_t idx = first_idx; idx < paths.size(); ++idx) {
-                ExtrusionPath &path = paths[idx];
-                if (path.height() == 0) {
-                    svg.draw(path.polyline.to_polyline(), "red", scale_t(0.06));
-                    svg.draw(path.polyline.front(), "red", scale_t(0.1));
-                }
-                if(path.height() == 1){
-                    svg.draw(path.polyline.to_polyline(), "orange", scale_t(0.05));
-                    svg.draw(path.polyline.front(), "orange", scale_t(0.09));
-                }
-                if(path.height() == 2){
-                    svg.draw(path.polyline.to_polyline(), "yellow", scale_t(0.04));
-                    svg.draw(path.polyline.front(), "yellow", scale_t(0.08));
-                }
-                if(path.height() == 3){
-                    svg.draw(path.polyline.to_polyline(), "green", scale_t(0.03));
-                    svg.draw(path.polyline.front(), "green", scale_t(0.07));
-                }
-                if(path.height() == 4){
-                    svg.draw(path.polyline.to_polyline(), "cyan", scale_t(0.025));
-                    svg.draw(path.polyline.front(), "cyan", scale_t(0.06));
-                }
-            }
-            svg.Close();
-        }
         // in paths, path with layer height of 0 and 5 are normal flow
         // in paths, path with layer height of 1,2,3,4 need to be reduced
-        {
-            static int aodfjiaqsdz = 0;
-            std::stringstream stri;
-            stri << this->m_layer->id() << "_stratch_" <<"_"<<(aodfjiaqsdz++) << ".svg";
-            SVG svg(stri.str());
-            svg.draw(Polyline({last_point, corner_point, next_point, after_point}), "grey", scale_t(0.12));
-            svg.draw(last_point, "pink", scale_t(0.12));
-            svg.draw(after_point, "purple", scale_t(0.12));
-            for (ExtrusionPath &path : paths) {
-                if (path.height() == 0) {
-                    svg.draw(path.polyline.to_polyline(), "red", scale_t(0.06));
-                    svg.draw(path.polyline.front(), "red", scale_t(0.1));
-                }
-                if(path.height() == 1){
-                    svg.draw(path.polyline.to_polyline(), "orange", scale_t(0.06));
-                    svg.draw(path.polyline.front(), "orange", scale_t(0.1));
-                }
-                if(path.height() == 2){
-                    svg.draw(path.polyline.to_polyline(), "yellow", scale_t(0.06));
-                    svg.draw(path.polyline.front(), "yellow", scale_t(0.1));
-                }
-                if(path.height() == 3){
-                    svg.draw(path.polyline.to_polyline(), "green", scale_t(0.06));
-                    svg.draw(path.polyline.front(), "green", scale_t(0.1));
-                }
-                if(path.height() == 4){
-                    svg.draw(path.polyline.to_polyline(), "cyan", scale_t(0.06));
-                    svg.draw(path.polyline.front(), "cyan", scale_t(0.1));
-                }
-            }
-            svg.Close();
+
+        // extrude from last_point to start_point
+        gcode_str += this->m_writer.extrude_to_xy(
+            this->point_to_gcode(start_point),
+            e_per_mm * unscaled(start_point.distance_to(last_point)),
+            comment);
+        
+        Point moved_start_point = start_point;
+        Point moved_end_point = end_point;
+
+        // extrude first strait bit if any
+        if (paths.front().height() == 0) {
+            assert(paths.front().polyline.size() == 2);
+            moved_start_point = paths.front().polyline.back();
+            gcode_str += this->m_writer.extrude_to_xy(
+                this->point_to_gcode(paths.front().polyline.back()),
+                e_per_mm * unscaled(paths.front().polyline.back().distance_to(start_point)),
+                comment);
         }
-
-
+        if (paths.back().height() == 5) {
+            moved_end_point = paths.back().polyline.front();
+        }
+        
         // compute reduced flow & improved speed
-        coordf_t old_distance = start_point.distance_to(corner_point) + corner_point.distance_to(end_point);
+        coordf_t old_distance = moved_start_point.distance_to(corner_point) + corner_point.distance_to(moved_end_point);
         coordf_t new_distance = 0;
         for (ExtrusionPath &path : paths) {
             if (path.height() > 0 && path.height() < 5) {
@@ -6236,37 +6159,26 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
         } 
         double ratio_flow = old_distance / new_distance;
         double ratio_speed = ratio_flow < 0.1 ? 10 : 1. / ratio_flow;
-
-
-        // extrude from last_point to start_point
-        gcode_str += this->m_writer.extrude_to_xy(
-            this->point_to_gcode(start_point),
-            e_per_mm * unscaled(start_point.distance_to(last_point)),
-            comment);
-        
-        // extrude first strait bit if any
-        if (paths.front().height() == 0) {
-            assert(paths.front().polyline.size() == 2);
-            gcode_str += this->m_writer.extrude_to_xy(
-                this->point_to_gcode(paths.front().polyline.back()),
-                e_per_mm * unscaled(paths.front().polyline.back().distance_to(start_point)),
-                comment);
-        }
+        // Change to new speed & width (from ratio_flow)
         const double current_speed = this->m_writer.get_speed_mm_s();
         gcode_str += this->m_writer.set_speed_mm_s(current_speed * ratio_speed);
-        
+        gcode_str += std::string(";") + GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Width)
+               + float_to_string_decimal_point(m_last_width * ratio_flow) + "\n";
+
+        coordf_t dist_comp = 0;
         for (ExtrusionPath &path : paths) {
             if (path.height() > 0 && path.height() < 5) {
-                assert(paths.front().polyline.size() == 2);
+                assert(path.polyline.size() == 2);
                 const Geometry::ArcWelder::Segment &segment = path.polyline.get_arc(1);
                 coordf_t radius = segment.radius;
                 Point center;
                 if(radius > 0 && m_config.arc_fitting == ArcFittingType::Disabled) {
-                    Polyline poly = path.polyline.to_polyline(path_width);
+                    Polyline poly = path.polyline.to_polyline(scale_t(path_width / 10));
                     for (size_t pt_idx = 1; pt_idx < poly.size(); ++pt_idx) {
                         gcode_str += this->m_writer.extrude_to_xy(this->point_to_gcode(poly[pt_idx]),
-                                                                  e_per_mm * ratio_flow * unscaled(path.polyline.length()),
+                                                                  e_per_mm * ratio_flow * unscaled(poly[pt_idx - 1].distance_to(poly[pt_idx])),
                                                                   "stretch corner");
+                        dist_comp+= poly[pt_idx - 1].distance_to(poly[pt_idx]);
                     }
                     continue;
                 }
@@ -6277,15 +6189,17 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
                         radius = 0;
                 }
                 // extrude from start_point to moved_corner (decrease flow, increased speed)
-                if (radius == 0) {
+                if (radius == 0 && path.polyline.front().distance_to_square(segment.point) > SCALED_EPSILON) {
                     gcode_str += this->m_writer.extrude_to_xy(this->point_to_gcode(segment.point),
-                                                              e_per_mm * ratio_flow * unscaled(path.polyline.length()),
+                                                              e_per_mm * ratio_flow * unscaled(path.polyline.front().distance_to(segment.point)),
                                                               "stretch corner");
+                    dist_comp+= path.polyline.front().distance_to(segment.point);
                 } else {
                     const Vec2d  center_offset = this->point_to_gcode(center) - this->point_to_gcode(path.polyline.front());
                     double      angle         = Geometry::ArcWelder::arc_angle(path.polyline.front(), segment.point, radius);
                     assert(angle > 0);
                     const coordf_t line_length = angle * std::abs(radius);
+                    dist_comp += line_length;
                     gcode_str += m_writer.extrude_arc_to_xy(this->point_to_gcode(segment.point), center_offset,
                                                         e_per_mm * ratio_flow * unscaled(line_length),
                                                         segment.ccw(), "stretch corner");
@@ -6293,8 +6207,10 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
             }
         }
 
-        //restore speed
+        //restore speed & width
         gcode_str += this->m_writer.set_speed_mm_s(current_speed);
+        gcode_str += std::string(";") + GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Width)
+               + float_to_string_decimal_point(m_last_width) + "\n";
         
         // extrude last strait bit if any
         if (paths.back().height() == 5) {
