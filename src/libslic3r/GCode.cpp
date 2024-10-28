@@ -2077,8 +2077,10 @@ void GCodeGenerator::_do_export(Print& print_mod, GCodeOutputStream &file, Thumb
         export_to_binary_gcode,
         m_processor.get_binary_data()
     );
-    if (!export_to_binary_gcode)
+    if (!export_to_binary_gcode) {
+        file.write("; " SLIC3R_VERSION_FULL "\n");
         file.write(filament_stats_string_out);
+    }
     
     if (export_to_binary_gcode) {
         bgcode::binarize::BinaryData& binary_data = m_processor.get_binary_data();
