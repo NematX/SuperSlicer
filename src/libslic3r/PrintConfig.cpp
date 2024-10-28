@@ -3087,6 +3087,13 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionBool(false));
 
+    def = this->add("gcode_allow_negative_e", coBool);
+    def->label = L("Allow negative extrudeer position");
+    def->category = OptionCategory::output;
+    def->tooltip = L("Deactivate it if the firmware doesn't support it. It will start at 0 and won't retract below 0");
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionBool(true));
+
     def = this->add("gcode_comments", coBool);
     def->label = L("Verbose G-code");
     def->category = OptionCategory::output;
@@ -9565,6 +9572,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "gap_fill_min_length",
 "gap_fill_min_width",
 "gap_fill_overlap",
+"gcode_allow_negative_e",
 "gcode_filename_illegal_char",
 "gcode_line_number",
 "gcode_no_comment",

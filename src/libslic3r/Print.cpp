@@ -146,6 +146,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
         "full_fan_speed_layer",
         "gap_fill_fan_speed",
         "gcode_ascii",
+        "gcode_allow_negative_e",
         "gcode_command_buffer",
         "gcode_comments",
         "gcode_filename_illegal_char",

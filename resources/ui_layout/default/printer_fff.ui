@@ -51,6 +51,7 @@ group:silent_mode_event:filename_format_event:Firmware
         setting:gcode_filename_illegal_char
         setting:gcode_ascii
 	end_line
+	setting:gcode_allow_negative_e
 group:Cooling fan
 	setting:tags$Advanced$Expert:fan_printer_min_speed
 	line:Speedup time

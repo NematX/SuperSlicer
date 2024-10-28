@@ -1130,6 +1130,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloats,              filament_unload_time))
     ((ConfigOptionFloats,              filament_wipe_advanced_pigment))
     ((ConfigOptionBool,                gcode_ascii))
+    ((ConfigOptionBool,                gcode_allow_negative_e))
     ((ConfigOptionInt,                 gcode_command_buffer))
     ((ConfigOptionBool,                gcode_comments))
     ((ConfigOptionString,              gcode_filename_illegal_char))

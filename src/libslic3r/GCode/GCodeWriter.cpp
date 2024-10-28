@@ -173,7 +173,7 @@ std::string GCodeWriter::preamble()
         gcode << "G90 ; use absolute coordinates\n";
         gcode << "G71 ; use metric units\n;";
         if (this->config.use_relative_e_distances)
-            throw Slic3r::InvalidArgument("Error: NematX firmware does only allow absolute e distance.");
+            throw Slic3r::InvalidArgument("Error: NematX firmware does only allow relative e distance.");
         return gcode.str();
     }
     
@@ -458,14 +458,15 @@ std::string GCodeWriter::reset_e(bool force)
 {
 
     if (FLAVOR_IS(gcfNematX)) {
-        // currently, reset the E can lead to overextrusion. So it's disabled for now.
-        return "";
-        //double retract_length = m_tool->retract_length();
-        //m_tool->reset_E(retract_length);
-        //std::string gcode = m_extrusion_axis + std::string("[SET_POSITION POS=") + std::to_string(retract_length) + std::string("]");
-        //if (this->config.gcode_comments) gcode += " ; reset extrusion distance";
-        //gcode +="\n";
-        //return gcode;
+        // currently, reset the E can lead to overextrusion. So it's disabled for now (unless it's in a toolchange or at startup).
+        if(!force)
+            return "";
+        double retract_length = this->config.gcode_allow_negative_e.value ? 0 : m_tool->retract_length();
+        m_tool->reset_E(retract_length);
+        std::string gcode = m_extrusion_axis + std::string("[SET_POSITION POS=") + std::to_string(retract_length) + std::string("]");
+        if (this->config.gcode_comments) gcode += " ; reset extrusion distance";
+        gcode +="\n";
+        return gcode;
     }
 
     this->m_de_left = 0;
@@ -929,7 +930,7 @@ std::string GCodeWriter::_retract(double length, std::optional<double> restart_e
                 throw Slic3r::InvalidArgument("Error: NematX firmware doesn't have firmware retraction.");
             else
                 gcode += "G10 ; retract\n";
-        } else if (!m_extrusion_axis.empty()) {
+        } else if (!m_extrusion_axis.empty() && dE != 0) {
             GCodeG1Formatter w(this->get_default_gcode_formatter());
             w.emit_e(m_extrusion_axis, emit_E);
             w.emit_f(m_tool->retract_speed() * 60.);
