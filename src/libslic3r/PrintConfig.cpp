@@ -3088,9 +3088,9 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionBool(false));
 
     def = this->add("gcode_allow_negative_e", coBool);
-    def->label = L("Allow negative extrudeer position");
+    def->label = L("Allow negative extruder position");
     def->category = OptionCategory::output;
-    def->tooltip = L("Deactivate it if the firmware doesn't support it. It will start at 0 and won't retract below 0");
+    def->tooltip = L("Deactivate it if the firmware doesn't support the extruder axis going into negative values. It will start at 0 and won't retract below 0");
     def->mode = comExpert;
     def->set_default_value(new ConfigOptionBool(true));
 
