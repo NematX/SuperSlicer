@@ -1573,7 +1573,7 @@ void PrintObject::slice_volumes()
                             // Apply all three main negative XY compensation normally.
                             expolygons = _shrink_contour_holes(std::min(coord_t(0), outter_delta), std::min(coord_t(0), inner_delta), std::min(coord_t(0), hole_delta), negative_hole_compensation_by_diameter, expolygons);
                         }
-                        if (layer->regions().front()->region().config().curve_smoothing_precision > 0.) {
+                        if (layer->regions().front()->region().config().curve_smoothing_precision > 0.f) {
                             //smoothing
                             expolygons = _smooth_curves(expolygons, layer->regions().front()->region().config());
                         }
