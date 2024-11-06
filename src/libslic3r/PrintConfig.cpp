@@ -1640,6 +1640,14 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comPrusa;
     def->set_default_value(new ConfigOptionBool(false));
 
+    def = this->add("external_perimeters_first_force", coBool);
+    def->label = L("force for all");
+    def->full_label = L("External perimeters first: force for all");
+    def->category = OptionCategory::perimeter;
+    def->tooltip = L("Print all external contours & periemter first, then the internal ones.");
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionBool(false));
+
     def = this->add("external_perimeters_vase", coBool);
     def->label = L("In vase mode (no seam)");
     def->full_label = L("External perimeters in vase mode");
@@ -6907,14 +6915,34 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvancedE | comSuSi;
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionPercents{ 50 });
-
+    
     def = this->add("wipe_lift", coFloatsOrPercents);
     def->label = L("Wipe lift");
     def->category = OptionCategory::extruders;
-    def->tooltip = L("when wiping, it will lift gradually to this height, so the filament can be 'cut' more easily."
-        "\nCan be a percentage of the current extruder diameter.");
+    def->tooltip = L("When wiping, it will lift gradually to this height, so the filament can be 'cut' more easily."
+        "\nCan be a percentage of the current layer height.");
     def->mode = comAdvancedE | comSuSi;
     def->set_default_value(new ConfigOptionFloatsOrPercents{FloatOrPercent{0, false}});
+    
+    def = this->add("wipe_lift_length", coFloatsOrPercents);
+    def->label = L("Wipe lift length");
+    def->full_label = L("Wipe length with lift");
+    def->category = OptionCategory::extruders;
+    def->tooltip = L("Distance in the wipe that is used to lift."
+        " If higher than the wipe distance, then the lift began at the start of the wipe."
+        " If lower than the wipe distance, then the lift began after the start, so the end of the lift occur at the end of the wipe."
+        "\nCan be a percentage of the wipe distance.");
+    def->mode = comAdvancedE | comSuSi;
+    def->set_default_value(new ConfigOptionFloatsOrPercents{FloatOrPercent{50, true}});
+
+    def = this->add("wipe_min", coFloatsOrPercents);
+    def->label = L("Minimum Wipe length");
+    def->category = OptionCategory::extruders;
+    def->tooltip = L("Ensure the nozzle will move at least this much."
+        "\nCan be a percentage of the needed travel for the retraction"
+        " (if this is set to 0, then it's posisble that the end of the retraction occur after the end of the wipe).");
+    def->mode = comAdvancedE | comSuSi;
+    def->set_default_value(new ConfigOptionFloatsOrPercents{FloatOrPercent{150, true}});
 
     def = this->add("wipe_only_crossing", coBools);
     def->label = L("Wipe only when crossing perimeters");
@@ -7475,6 +7503,8 @@ void PrintConfigDef::init_extruder_option_keys()
         "wipe_inside_end",
         "wipe_inside_start",
         "wipe_lift",
+        "wipe_lift_length",
+        "wipe_min",
         "wipe_only_crossing",
         "wipe_speed",
     };
@@ -7508,6 +7538,8 @@ void PrintConfigDef::init_extruder_option_keys()
         "wipe_inside_end",
         "wipe_inside_start",
         "wipe_lift",
+        "wipe_lift_length",
+        "wipe_min",
         "wipe_only_crossing",
         "wipe_speed",
     };
@@ -7537,6 +7569,8 @@ void PrintConfigDef::init_extruder_option_keys()
         "wipe_inside_end",
         "wipe_inside_start",
         "wipe_lift",
+        "wipe_lift_length",
+        "wipe_min",
         "wipe_only_crossing",
         "wipe_speed",
     };
@@ -9501,6 +9535,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "external_perimeter_extrusion_change_odd_layers",
 "external_perimeter_fan_speed",
 "external_perimeter_overlap",
+"external_perimeters_first_force",
 "external_perimeters_hole",
 "external_perimeters_nothole",
 "external_perimeters_vase",
@@ -9742,6 +9777,8 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "wipe_inside_end",
 "wipe_inside_start",
 "wipe_lift",
+"wipe_lift_length",
+"wipe_min",
 "wipe_only_crossing",
 "wipe_speed",
 "filament_wipe_extra_perimeter", // filament override
@@ -9749,6 +9786,8 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "filament_wipe_inside_end", // filament override
 "filament_wipe_inside_start", // filament override
 "filament_wipe_lift", // filament override
+"filament_wipe_lift_length", // filament override
+"filament_wipe_min", // filament override
 "filament_wipe_only_crossing", // filament override
 "filament_wipe_speed", // filament override
 "wipe_tower_speed",
