@@ -6004,6 +6004,10 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
             return corner_point;
         }
 
+        // get entering/existing ratio
+        double ratio_entering = config().stretch_corners_entering_section.get_abs_value(1.);
+        double ratio_exiting = config().stretch_corners_exiting_section.get_abs_value(1.);
+
         // compute deviation
         double unscaled_deviation_max = is_inside ?
             config().stretch_corners_deviation_convex.get_abs_value(unscaled_dist) :
@@ -6014,19 +6018,21 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
         const coord_t deviation_max = scale_t(unscaled_deviation_max);
 
         // compute stretch start point (max half dist)
-        double dist_ratio = deviation_max / last_point.distance_to(corner_point);
+        double dist_ratio = (deviation_max * ratio_entering) / last_point.distance_to(corner_point);
         if (dist_ratio > 0.5) dist_ratio = 0.5;
         Point start_point = corner_point.interpolate(dist_ratio, last_point);
         assert(start_point.distance_to(corner_point) <= last_point.distance_to(corner_point));
-        assert(start_point.distance_to(corner_point) <= deviation_max + SCALED_EPSILON);
+        assert(start_point.distance_to(corner_point) <= (deviation_max * ratio_entering) + SCALED_EPSILON);
         
         // compute stretch corner point
         Point moved_corner;
         {
             Vec2d vec_start = corner_point.cast<double>() - last_point.cast<double>();
             vec_start.normalize();
+            vec_start *= ratio_exiting;
             Vec2d vec_end = corner_point.cast<double>() - next_point.cast<double>();
             vec_end.normalize();
+            vec_end *= ratio_entering;
             vec_start = (vec_start + vec_end) / 2;
             moved_corner = (corner_point.cast<double>() + vec_start * dist).cast<coord_t>();
         }
@@ -6036,11 +6042,11 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
         //   for that, we need its angle (if any)
         if (after_point == next_point) {
             // we are at the end.
-            dist_ratio = deviation_max / next_point.distance_to(corner_point);
+            dist_ratio = (deviation_max * ratio_exiting) / next_point.distance_to(corner_point);
             if (dist_ratio > 0.5) dist_ratio = 0.5;
             assert(dist_ratio <= 1);
             end_point = corner_point.interpolate(dist_ratio, next_point);
-            assert(end_point.distance_to(corner_point) <= deviation_max + SCALED_EPSILON);
+            assert(end_point.distance_to(corner_point) <= (deviation_max * ratio_exiting) + SCALED_EPSILON);
         } else {
             const double next_available_dist = next_point.distance_to(corner_point);
             // compute its angle, deviation
@@ -6058,18 +6064,19 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
             if (m_layer != nullptr && m_layer->bottom_z() < EPSILON) {
                 next_deviation_max = std::min(next_deviation_max, config().stretch_corners_deviation_first_layer.get_abs_value(unscaled_dist));
             }
+            next_deviation_max *= ratio_exiting;
             // if there are enough space
-            if ((next_deviation_max + deviation_max) * 1.5 <= next_available_dist) {
+            if ((next_deviation_max + (deviation_max * ratio_exiting)) * 1.5 <= next_available_dist) {
                 //do it simply
-                dist_ratio = deviation_max / next_available_dist;
+                dist_ratio = (deviation_max * ratio_exiting) / next_available_dist;
             } else {
                 // share it
-                dist_ratio = next_available_dist / ((next_deviation_max + deviation_max) * 1.5);
-                dist_ratio *=  deviation_max / next_available_dist;
+                dist_ratio = next_available_dist / ((next_deviation_max + (deviation_max * ratio_exiting)) * 1.5);
+                dist_ratio *=  (deviation_max * ratio_exiting) / next_available_dist;
             }
             assert(dist_ratio <= 1);
             end_point = corner_point.interpolate(dist_ratio, next_point);
-            assert(end_point.distance_to(corner_point) <= deviation_max + SCALED_EPSILON);
+            assert(end_point.distance_to(corner_point) <= (deviation_max * ratio_exiting) + SCALED_EPSILON);
         }
 
         //create arc if needed and possible

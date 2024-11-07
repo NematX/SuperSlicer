@@ -790,6 +790,8 @@ static std::vector<std::string> s_Preset_print_options {
         "stretch_corners_distance_concave",
         "stretch_corners_distance_convex",
         "stretch_corners_distance_first_layer",
+        "stretch_corners_entering_section",
+        "stretch_corners_exiting_section",
         "stretch_corners_max_angle",
         //milling
         "milling_after_z",

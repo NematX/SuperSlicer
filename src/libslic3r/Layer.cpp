@@ -745,6 +745,8 @@ void Layer::make_perimeters()
                                 && config.stretch_corners_distance_concave      == other_config.stretch_corners_distance_concave
                                 && config.stretch_corners_distance_convex       == other_config.stretch_corners_distance_convex
                                 && config.stretch_corners_distance_first_layer  == other_config.stretch_corners_distance_first_layer
+                                && config.stretch_corners_entering_section  == other_config.stretch_corners_entering_section
+                                && config.stretch_corners_exiting_section  == other_config.stretch_corners_exiting_section
                                 && config.stretch_corners_max_angle             == other_config.stretch_corners_max_angle
                                 ))
                             if (config.perimeter_generator != PerimeterGeneratorType::Arachne || (

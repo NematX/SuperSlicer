@@ -1015,6 +1015,8 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloatOrPercent,       stretch_corners_distance_concave))
     ((ConfigOptionFloatOrPercent,       stretch_corners_distance_convex))
     ((ConfigOptionFloatOrPercent,       stretch_corners_distance_first_layer))
+    ((ConfigOptionPercent,              stretch_corners_entering_section))
+    ((ConfigOptionPercent,              stretch_corners_exiting_section))
     ((ConfigOptionFloat,                stretch_corners_max_angle))
     ((ConfigOptionInt,                  print_first_layer_temperature))
     ((ConfigOptionInt,                  print_temperature))

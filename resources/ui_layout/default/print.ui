@@ -523,6 +523,10 @@ group:Corners
 		setting:label$Concave:stretch_corners_deviation_concave
 		setting:label$First layer:stretch_corners_deviation_first_layer
 	end_line
+	line:Stretch section influence
+		setting:stretch_corners_entering_section
+		setting:stretch_corners_exiting_section
+	end_line
 	setting:stretch_corners_arc
 
 page:Multiple extruders:funnel

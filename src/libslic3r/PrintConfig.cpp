@@ -5912,6 +5912,32 @@ void PrintConfigDef::init_fff_params()
     def->min = 0;
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionFloatOrPercent(100, true));
+    
+    def = this->add("stretch_corners_entering_section", coPercent);
+    def->label = L("Entering section influence");
+    def->full_label = L("Stretch corners entering section influence");
+    def->category = OptionCategory::width;
+    def->tooltip = L("Allow you to reduce the influence of the entering section of the corner stretching."
+        "\nIf 100%, then it stay normal."
+        "\nIf 0%, then there is no deviation for this section, and it doesn't move to the side for the stretch, going strait into it (if the exiting section influence isn't 0)."
+        "\nIf 200%%, then the deviation is doubled for this section, and the stretching position is two time more to the side as normal.");
+    def->sidetext = L("%");
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionPercent(100));
+    
+    def = this->add("stretch_corners_exiting_section", coPercent);
+    def->label = L("Exiting section influence");
+    def->full_label = L("Stretch corners exiting section influence");
+    def->category = OptionCategory::width;
+    def->tooltip = L("Allow you to reduce the influence of the exiting section of the corner stretching."
+        "\nIf 100%, then it stay normal."
+        "\nIf 0%, then there is no deviation for this section, and it doesn't need to move back from the side of the stretch, going strait back into the perimeter (if the entering section influence isn't 0)."
+        "\nIf 200%%, then the deviation is doubled for this section, and the stretching position is two time more from the side as normal.");
+    def->sidetext = L("%");
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionPercent(100));
 
     def = this->add("support_material", coBool);
     def->label = L("Generate support material");
@@ -9733,6 +9759,8 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "stretch_corners_distance_concave",
 "stretch_corners_distance_convex",
 "stretch_corners_distance_first_layer",
+"stretch_corners_entering_section",
+"stretch_corners_exiting_section",
 "stretch_corners_max_angle",
 "support_material_angle_height",
 "support_material_acceleration",

@@ -1424,6 +1424,8 @@ bool PrintObject::invalidate_state_by_config_options(
                 || opt_key == "stretch_corners_distance_concave"
                 || opt_key == "stretch_corners_distance_convex"
                 || opt_key == "stretch_corners_distance_first_layer"
+                || opt_key == "stretch_corners_entering_section"
+                || opt_key == "stretch_corners_exiting_section"
                 || opt_key == "support_material_interface_speed"
                 || opt_key == "support_material_speed"
                 || opt_key == "thin_walls_acceleration"
