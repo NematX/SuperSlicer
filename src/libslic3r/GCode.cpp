@@ -5970,13 +5970,16 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
 
     // get the 'little' angle
     const double full_angle = angle_ccw(last_point - corner_point, next_point - corner_point);
-    double angle = corner_point == last_point ? PI : abs_angle(full_angle);
-    bool is_inside = (*m_current_loop)->is_counter_clockwise() != (angle < PI);
-    if (angle > PI) {
-        angle = 2 * M_PI - angle;
+    const double pos_angle = corner_point == last_point ? PI : abs_angle(full_angle);
+    const double angle_less_PI = pos_angle > PI ? 2 * M_PI - pos_angle : pos_angle;
+    bool is_inside = (*m_current_loop)->is_counter_clockwise() != (pos_angle < PI);
+    //if hole, then the inside is at the other side
+    //is_inside = is_inside != ((*m_current_loop)->loop_role() != elrHole);
+    if (((*m_current_loop)->loop_role() & elrHole) == elrHole) {
+        is_inside = !is_inside;
     }
 
-    double degree_angle = (180 * angle / PI);
+    double degree_angle = (180 * angle_less_PI / PI);
     // start at the degree_min_angle
     if (degree_angle < degree_min_angle) {
         // if smaller than 90, then keep it as with 90
@@ -5998,7 +6001,7 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
                 this->point_to_gcode(corner_point),
                 e_per_mm * unscaled(last_point.distance_to(corner_point)),
                 comment);
-            return corner_point; // todo: investigate if it happens
+            return corner_point;
         }
 
         // compute deviation
@@ -6073,7 +6076,7 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
         ExtrusionPaths paths;
         auto create_path = [&](const Point &pt_start, const Point &pt_corner, const Point &pt_end, ExtrusionPaths &paths, int path_type_idx) {
              bool need_extrude_strait = true;
-            if (config().stretch_corners_arc.value && angle < PI * 0.9 && angle > PI * 0.1) {
+            if (config().stretch_corners_arc.value && angle_less_PI < PI * 0.9 && angle_less_PI > PI * 0.1) {
                 Point intermediate_start = pt_start;
                 Point intermediate_end = pt_end;
                 // 1. find the three points
@@ -7875,10 +7878,23 @@ bool GCodeGenerator::can_cross_perimeter(const Polyline& travel, bool offset)
                     expoly_2_bb.second.cross(travel) )
                     ) {
                     // first, check if it's inside the contour (still, it can go over holes)
-                    Polylines diff_result = diff_pl(travel, expoly_2_bb.first.contour);
-                    if (diff_result.size() == 1 && diff_result.front() == travel)
-                    //if (!diff_pl(travel, expoly_2_bb.first.contour).empty())
+                    bool has_front = contains(expoly_2_bb.first.contour, travel.front(), true);
+                    bool has_back = contains(expoly_2_bb.first.contour, travel.back(), true);
+                    if (!has_front || !has_back) {
+                        // has_intersect = true;
+                        return true;
+                    }
+                    Polylines diff_result;
+                    if (travel.size() <= 2) {
+                        //TODO: put each line from expoly_2_bb.first.contour into a kdtree, and only do a line-to-line from lines that are inside the square crossed by travel
+                        diff_result = diff_pl(travel, expoly_2_bb.first.contour); // extremly costly
+                    } else {
+                        diff_result = diff_pl(travel, expoly_2_bb.first.contour); // extremly costly
+                    }
+                    if (diff_result.size() == 1 && diff_result.front() == travel && has_front && has_back) {
+                        // if (!diff_pl(travel, expoly_2_bb.first.contour).empty())
                         continue;
+                    }
                     //second, check if it's crossing this contour
                     if (!diff_result.empty()) {
                         //has_intersect = true;
