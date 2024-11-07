@@ -132,7 +132,7 @@ void CalibrationPressureDialog::create_geometry(wxCommandEvent& event_args) {
         BoundingBoxf3 instance_bb  = model_object.instance_bounding_box(0);
         TriangleMesh  mesh         = TriangleMesh(its_make_sphere(nozzle_diameter * 10, PI / 18));
         // Mesh will be centered when loading.
-        ModelVolume *new_volume = model_object.add_volume(std::move(mesh), ModelVolumeType::SEAM_POSITION);
+        ModelVolume *new_volume = model_object.add_volume(std::move(mesh), ModelVolumeType::SEAM_POSITION_CENTER);
         new_volume->set_offset(Vec3d(0,-51*xyzScale,0));
         new_volume->name = into_u8(_L("Seam") + "-" + _("Sphere"));
         new_volume->source.is_from_builtin_objects = true;
