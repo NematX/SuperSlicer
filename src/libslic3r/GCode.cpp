@@ -4625,6 +4625,9 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
     //useful var
     const double nozzle_diam = (EXTRUDER_CONFIG_WITH_DEFAULT(nozzle_diameter, 0));
 
+    this->m_current_loop = &original_loop;
+    this->m_current_loop_reversed = this->visitor_flipped;
+
     bool has_spiral_vase = m_spiral_vase_layer > 0;
 
     //no-seam code path redirect
@@ -4633,9 +4636,9 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
         && this->m_layer->id() > 0
         //exclude if min_layer_height * 2 > layer_height (increase from 2 to 3 because it's working but uses in-between)
         && this->m_layer->height >= m_config.min_layer_height.get_abs_value(m_writer.tool()->id(), nozzle_diam) * 2 - EPSILON) {
-        this->m_current_loop = &original_loop; //FIXME: reverse
         std::string returned_gcode = extrude_loop_vase(original_loop, description, speed);
         this->m_current_loop.reset();
+        this->m_current_loop_reversed.reset();
         return returned_gcode;
     }
 
@@ -4652,7 +4655,6 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
         loop_to_seam.reverse();
     }
     this->visitor_flipped = false;
-    this->m_current_loop = &loop_to_seam; //FIXME: reverse
 
     // extrude all loops ccw
     //no! this was decided in perimeter_generator
@@ -4731,6 +4733,7 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
     }
     if (building_paths.empty()) {
         this->m_current_loop.reset();
+        this->m_current_loop_reversed.reset();
         return "";
     }
 
@@ -5202,6 +5205,7 @@ stop_print_loop:
     assert(!this->visitor_flipped);
     this->visitor_flipped = save_flipped;
     this->m_current_loop.reset();
+    this->m_current_loop_reversed.reset();
     return gcode;
 }
 
@@ -5948,7 +5952,8 @@ void GCodeGenerator::_extrude_line_cut_corner(std::string& gcode_str, const Line
 }
 
 //this will extrude between last_point and corner_point, and will possibly push a little bit between corner_point and next_point. The last printed point will be returned, and must be used instead of corner_point for the next call as last_point.
-Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const Point& last_point, const Point& corner_point, const Point& next_point, const Point& after_point, const double path_width, const double e_per_mm, const std::string_view comment)
+Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const Point& last_point, const Point& corner_point, const Point& next_point, const Point& after_point,
+    const bool is_ccw, const double path_width, const double e_per_mm, const std::string_view comment)
 {
     if (last_point == corner_point || !m_current_loop) {
         assert(false);
@@ -5972,11 +5977,17 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
     const double full_angle = angle_ccw(last_point - corner_point, next_point - corner_point);
     const double pos_angle = corner_point == last_point ? PI : abs_angle(full_angle);
     const double angle_less_PI = pos_angle > PI ? 2 * M_PI - pos_angle : pos_angle;
-    bool is_inside = (*m_current_loop)->is_counter_clockwise() != (pos_angle < PI);
-    //if hole, then the inside is at the other side
-    //is_inside = is_inside != ((*m_current_loop)->loop_role() != elrHole);
+    bool is_convex = (pos_angle > PI);
     if (((*m_current_loop)->loop_role() & elrHole) == elrHole) {
-        is_inside = !is_inside;
+        // hole: should be clockwise
+        if (is_ccw) {
+            is_convex = !is_convex;
+        }
+    } else {
+        // contour: shoudl eb counter-clockwise
+        if (!is_ccw) {
+            is_convex = !is_convex;
+        }
     }
 
     double degree_angle = (180 * angle_less_PI / PI);
@@ -5988,7 +5999,7 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
         // compute distance
         const double ratio_from_angle = (degree_angle - degree_min_angle) / (90 - degree_min_angle);
         assert(ratio_from_angle > 0 && ratio_from_angle <= 1);
-        double unscaled_dist = is_inside ? config().stretch_corners_distance_convex.get_abs_value(path_width) :
+        double unscaled_dist = is_convex ? config().stretch_corners_distance_convex.get_abs_value(path_width) :
                                            config().stretch_corners_distance_concave.get_abs_value(path_width);
         if (m_layer != nullptr && m_layer->bottom_z() < EPSILON) {
             unscaled_dist = std::min(unscaled_dist, config().stretch_corners_distance_first_layer.get_abs_value(path_width));
@@ -6009,7 +6020,7 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
         double ratio_exiting = config().stretch_corners_exiting_section.get_abs_value(1.);
 
         // compute deviation
-        double unscaled_deviation_max = is_inside ?
+        double unscaled_deviation_max = is_convex ?
             config().stretch_corners_deviation_convex.get_abs_value(unscaled_dist) :
             config().stretch_corners_deviation_concave.get_abs_value(unscaled_dist);
         if (m_layer != nullptr && m_layer->bottom_z() < EPSILON) {
@@ -6052,13 +6063,13 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
             // compute its angle, deviation
             const double next_ratio_from_angle = (degree_angle - degree_min_angle) / (90 - degree_min_angle);
             assert(next_ratio_from_angle > 0 && next_ratio_from_angle <= 1);
-            double next_unscaled_dist = is_inside ? config().stretch_corners_distance_convex.get_abs_value(path_width) :
+            double next_unscaled_dist = is_convex ? config().stretch_corners_distance_convex.get_abs_value(path_width) :
                                                config().stretch_corners_distance_concave.get_abs_value(path_width);
             if (m_layer != nullptr && m_layer->bottom_z() < EPSILON) {
                 next_unscaled_dist = std::min(next_unscaled_dist, config().stretch_corners_distance_first_layer.get_abs_value(path_width));
             }
             next_unscaled_dist *= ratio_from_angle;
-            double next_deviation_max = is_inside ?
+            double next_deviation_max = is_convex ?
                 config().stretch_corners_deviation_convex.get_abs_value(unscaled_dist) :
                 config().stretch_corners_deviation_concave.get_abs_value(unscaled_dist);
             if (m_layer != nullptr && m_layer->bottom_z() < EPSILON) {
@@ -6078,6 +6089,29 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
             end_point = corner_point.interpolate(dist_ratio, next_point);
             assert(end_point.distance_to(corner_point) <= (deviation_max * ratio_exiting) + SCALED_EPSILON);
         }
+        
+        //std::string comment_stretch = "; stretch";//
+        //if (is_convex) {
+        //    comment_stretch += "_convex";
+        //}
+        //if (((*m_current_loop)->loop_role()&elrHole) == elrHole) {
+        //    comment_stretch += "_hole";
+        //}
+        //if ((*m_current_loop)->is_counter_clockwise()) {
+        //    comment_stretch += "_CCW";
+        //} else {
+        //    comment_stretch += "_CW";
+        //}
+        //gcode_str += comment_stretch;
+        //gcode_str += "\n";
+        //comment_stretch = "; angles";
+        //comment_stretch += std::to_string(int(full_angle*180/PI));
+        //comment_stretch += "_";
+        //comment_stretch += std::to_string(int(pos_angle*180/PI));
+        //comment_stretch += "_";
+        //comment_stretch += std::to_string(int(angle_less_PI*180/PI));
+        //gcode_str += comment_stretch;
+        //gcode_str += "\n";
 
         //create arc if needed and possible
         ExtrusionPaths paths;
@@ -6310,6 +6344,7 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
     // calculate extrusion length per distance unit
     double e_per_mm = _compute_e_per_mm(path);
     ArcPolyline polyline = path.as_polyline();
+    std::optional<bool> is_ccw;
     if (polyline.size() > 1) {
         std::string comment = m_config.gcode_comments ? descr : "";
 
@@ -6323,12 +6358,18 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
             for (size_t idx = 1; idx < polyline.size(); ++idx) {
                 if (path.role().is_external_perimeter() && config().stretch_corners.value) {
                     if (idx + 1 < polyline.size()) {
+                        if (!is_ccw) {
+                            assert(m_current_loop_reversed);
+                            assert(m_current_loop);
+                            assert((*m_current_loop)->polygon().is_counter_clockwise() == (*m_current_loop)->is_counter_clockwise());
+                            is_ccw = (*m_current_loop)->is_counter_clockwise();
+                        }
                         // it return a position between polyline.get_point(idx) (included) and polyline.get_point(idx + 1) (excluded)
                         current_pos = _extrude_line_stretch_corner(gcode, current_pos, polyline.get_point(idx),
                                                      polyline.get_point(idx + 1),
                                                      (idx + 2 < polyline.size()) ? polyline.get_point(idx + 2) :
                                                                                    polyline.get_point(idx + 1),
-                                                     path.width(), e_per_mm, comment);
+                                                     *is_ccw, path.width(), e_per_mm, comment);
                     } else {
                         // print last bit
                         _extrude_line(gcode, Line(current_pos, polyline.get_point(idx)), e_per_mm, comment,
@@ -6371,6 +6412,12 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
                         // TODO: check what angle arcs make with each other, and modify them if a stretch is needed
                         // For now, it's only possible between two strait segment.
                         if (idx + 1 < polyline.size() && polyline.get_arc(idx + 1).radius == 0) {
+                            if (!is_ccw) {
+                                assert(m_current_loop_reversed);
+                                assert(m_current_loop);
+                                assert((*m_current_loop)->polygon().is_counter_clockwise() == (*m_current_loop)->is_counter_clockwise());
+                                is_ccw = (*m_current_loop)->is_counter_clockwise();
+                            }
                             // it return a position between polyline.get_point(idx) (included) and
                             // polyline.get_point(idx + 1) (excluded)
                             current_pos = _extrude_line_stretch_corner(gcode, current_pos, polyline.get_point(idx),
@@ -6378,7 +6425,7 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
                                                                        (idx + 2 < polyline.size()) ?
                                                                            polyline.get_point(idx + 2) :
                                                                            polyline.get_point(idx + 1),
-                                                                       path.width(), e_per_mm, comment);
+                                                                       *is_ccw, path.width(), e_per_mm, comment);
                         } else {
                             // print last bit
                             _extrude_line(gcode, Line(current_pos, polyline.get_point(idx)), e_per_mm, comment,
@@ -7894,6 +7941,9 @@ bool GCodeGenerator::can_cross_perimeter(const Polyline& travel, bool offset)
                     Polylines diff_result;
                     if (travel.size() <= 2) {
                         //TODO: put each line from expoly_2_bb.first.contour into a kdtree, and only do a line-to-line from lines that are inside the square crossed by travel
+                        //EdgeGrid::Grid grid;
+                        //grid.set_bbox(expoly_2_bb.second);
+                        //grid.create(expoly_2_bb.first, m_layer_slices_offseted.diameter / 4);
                         diff_result = diff_pl(travel, expoly_2_bb.first.contour); // extremly costly
                     } else {
                         diff_result = diff_pl(travel, expoly_2_bb.first.contour); // extremly costly
