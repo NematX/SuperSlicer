@@ -187,6 +187,16 @@ ExtrusionRole ExtrusionLoop::role() const
         }
     return role;
 }
+bool ExtrusionLoop::has_role(ExtrusionRole test_role) const
+{
+    if (this->paths.empty())
+        return false;
+    for (const ExtrusionPath &path : this->paths)
+        if (path.has_role(test_role)) {
+            return true;
+        }
+    return false;
+}
 
 bool ExtrusionLoop::split_at_vertex(const Point &point, const double scaled_epsilon)
 {

@@ -1844,7 +1844,8 @@ std::tuple<bool,std::optional<Vec3f>> get_seam_from_modifier(const Layer& layer,
                 double sphere_radius = std::min(bb_volume.size().x() / 2, bb_volume.size().y() / 2);
                 if (v->type() == ModelVolumeType::SEAM_POSITION_CENTER) {
                     test_lambda_z = std::abs(layer.print_z - center_pos.z());
-                } else if (v->type() == ModelVolumeType::SEAM_POSITION_CENTER_Z) {
+                } else if (v->type() == ModelVolumeType::SEAM_POSITION_CENTER_Z ||
+                    (v->type() == ModelVolumeType::SEAM_POSITION_INSIDE_CENTER && !loop.has_role(ExtrusionRole::ExternalPerimeter))) {
                     double min_z = bb_volume.min.z();
                     double max_z = bb_volume.max.z();
                     assert(min_z < max_z);
@@ -1852,6 +1853,8 @@ std::tuple<bool,std::optional<Vec3f>> get_seam_from_modifier(const Layer& layer,
                         // out of z, don't take it into account
                         continue;
                     }
+                } else {
+                    continue;
                 }
                 Point xy_lambda(scale_(center_pos.x()), scale_(center_pos.y()));
                 Point nearest = polygon.point_projection(xy_lambda).first;

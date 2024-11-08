@@ -64,6 +64,7 @@ protected:
     ExtrusionEntity(bool can_reverse) : m_can_reverse(can_reverse) {}
 public:
     virtual ExtrusionRole role() const = 0;
+    virtual bool has_role(ExtrusionRole) const = 0;
     virtual bool is_collection() const { return false; }
     virtual bool is_loop() const { return false; }
     virtual bool can_reverse() const { return m_can_reverse; }
@@ -215,6 +216,7 @@ public:
    
     const ExtrusionAttributes&  attributes() const { return m_attributes; }
     ExtrusionRole               role() const override { return m_attributes.role; }
+    bool has_role(ExtrusionRole test_role) const override { return (m_attributes.role & test_role) == test_role; }
     float                       width() const { return m_attributes.width; }
     float                       height() const { return m_attributes.height; }
     double                      mm3_per_mm() const { return m_attributes.mm3_per_mm; }
@@ -349,6 +351,15 @@ public:
                 return ExtrusionRole::Mixed;
             }
         return role;
+    }
+    bool has_role(ExtrusionRole test_role) const override {
+        if (this->paths.empty())
+            return false;
+        for (const ExtrusionPath &path : this->paths)
+            if (path.has_role(test_role)) {
+                return true;
+            }
+        return false;
     }
 
 
@@ -509,6 +520,7 @@ public:
     // This used to be used to avoid placing seams on overhangs, but now the EdgeGrid is used instead.
     //bool has_overhang_point(const Point &point) const;
     ExtrusionRole role() const override;
+    bool has_role(ExtrusionRole test_role) const override;
     ExtrusionLoopRole loop_role() const { return m_loop_role; }
     // Produce a list of 2D polygons covered by the extruded paths, offsetted by the extrusion width.
     // Increase the offset by scaled_epsilon to achieve an overlap, so a union will produce no gaps.

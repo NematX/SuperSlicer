@@ -50,6 +50,31 @@ void ExtrusionEntityCollection::swap(ExtrusionEntityCollection &c)
     std::swap(this->m_can_reverse, c.m_can_reverse);
 }
 
+ExtrusionRole ExtrusionEntityCollection::role() const
+{
+    ExtrusionRole out{ ExtrusionRole::None };
+    for (const ExtrusionEntity *ee : m_entities) {
+        ExtrusionRole er = ee->role();
+        if (out == ExtrusionRole::None) {
+            out = er;
+        }else if (out != er) {
+            return ExtrusionRole::Mixed;
+        }
+    }
+    return out;
+}
+
+bool ExtrusionEntityCollection::has_role(ExtrusionRole test_role) const
+{
+    if (this->entities().empty())
+        return false;
+    for (const ExtrusionEntity *entity : this->entities())
+        if (entity->has_role(test_role)) {
+            return true;
+        }
+    return false;
+}
+
 void ExtrusionEntityCollection::clear()
 {
 	for (size_t i = 0; i < this->m_entities.size(); ++i)

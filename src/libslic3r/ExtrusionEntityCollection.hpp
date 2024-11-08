@@ -78,18 +78,8 @@ public:
     //ExtrusionEntitiesPtr::iterator          end()          { return this->entities.end(); }
 
     bool is_collection() const override { return true; }
-    ExtrusionRole role() const override {
-        ExtrusionRole out{ ExtrusionRole::None };
-        for (const ExtrusionEntity *ee : m_entities) {
-            ExtrusionRole er = ee->role();
-            if (out == ExtrusionRole::None) {
-                out = er;
-            }else if (out != er) {
-                return ExtrusionRole::Mixed;
-            }
-        }
-        return out;
-    }
+    ExtrusionRole role() const override;
+    bool has_role(ExtrusionRole test_role) const override;
     void set_can_sort_reverse(bool can_sort, bool can_reverse) { this->m_no_sort = !can_sort; this->m_can_reverse = can_reverse; }
     bool can_sort() const { return !this->m_no_sort; }
     bool can_reverse() const override { return can_sort() || this->m_can_reverse; }
