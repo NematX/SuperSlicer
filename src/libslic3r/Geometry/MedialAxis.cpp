@@ -732,10 +732,10 @@ MedialAxis::fusion_corners(ThickPolylines& pp)
         // check if i am at the external side of a curve
         assert(is_approx(abs_angle(angle_ccw(polyline.points[1] - polyline.points[0], pp[crosspoint[0]].points[1] - polyline.points[0])), ccw_angle_old_test(polyline.points[0], polyline.points[1], pp[crosspoint[0]].points[1]), 0.000000001));
         double angle1 = angle_ccw(polyline.points[1] - polyline.points[0], pp[crosspoint[0]].points[1] - polyline.points[0]);//polyline.points[0].ccw_angle(polyline.points[1], pp[crosspoint[0]].points[1]); if (angle1 >= PI) angle1 = 2 * PI - angle1;
-        assert(angle1 < PI);
+        assert(angle1 <= PI);
         double angle2 = angle_ccw(polyline.points[1] - polyline.points[0], pp[crosspoint[1]].points[1] - polyline.points[0]); // polyline.points[0].ccw_angle(polyline.points[1], pp[crosspoint[1]].points[1]); if (angle2 >= PI) angle2 = 2 * PI - angle2;
-        assert(angle2 < PI);
-        if (angle1 + angle2 < PI) continue;
+        assert(angle2 <= PI);
+        if (angle1 + angle2 <= PI) continue;
 
         //check if is smaller or the other ones are not endpoits
         if (pp[crosspoint[0]].endpoints.second && length > pp[crosspoint[0]].length()) continue;

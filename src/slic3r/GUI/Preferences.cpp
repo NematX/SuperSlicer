@@ -1391,8 +1391,8 @@ void PreferencesDialog::layout()
     // add space for buttons and insets of the main panel 
     best_size += wxSize(3 * em, 12 * em);
     // also reduce size to fit in screen if needed
-    wxDisplay display(wxDisplay::GetFromWindow(this));
     try {
+		wxDisplay display(wxDisplay::GetFromWindow(this));
         wxRect screen = display.GetClientArea();
         best_size.x = std::min(best_size.x, screen.width);
         best_size.y = std::min(best_size.y, screen.height);

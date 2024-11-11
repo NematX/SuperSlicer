@@ -45,6 +45,9 @@ namespace Slic3r {
 
 namespace SeamPlacerImpl {
 
+// cache for seam modifier
+std::map<ModelVolume*, BoundingBoxf3> cache_volume_to_bb;
+
 template<typename T> int sgn(T val) {
     return int(T(0) < val) - int(val < T(0));
 }
@@ -1714,6 +1717,7 @@ void SeamPlacer::align_seam_points(const PrintObject *po, const SeamPlacerImpl::
 void SeamPlacer::init(const Print &print, std::function<void(void)> throw_if_canceled_func) {
     using namespace SeamPlacerImpl;
     m_seam_per_object.clear();
+    cache_volume_to_bb.clear();
     this->external_perimeters_first = print.default_region_config().external_perimeters_first;
 
     for (size_t obj_idx = 0; obj_idx < print.objects().size(); ++ obj_idx) {
@@ -1819,19 +1823,40 @@ std::tuple<bool,std::optional<Vec3f>> get_seam_from_modifier(const Layer& layer,
         const ModelInstance* model_instance = po->instances()[print_object_instance_idx].model_instance;
         for (ModelVolume* v : po->model_object()->volumes) {
             if (v->is_seam_position()) {
-                //xy in object coordinates, z in plater coordinates
-                // created/moved shpere have offset in their transformation, and loaded ones have their loaded transformation in the source transformation.
-                Vec3d test_lambda_pos = model_instance->transform_vector((v->get_transformation() * v->source.transform).get_offset(), false);
-                // remove shift, as we used the transform_vector(.., FALSE). that way, we have a correct z vs the layer height, and same for the x and y vs polygon.
-                test_lambda_pos.x() -= unscaled(po->instances()[print_object_instance_idx].shift.x());
-                test_lambda_pos.y() -= unscaled(po->instances()[print_object_instance_idx].shift.y());
+                BoundingBoxf3 bb_volume;
+                if (auto it = SeamPlacerImpl::cache_volume_to_bb.find(v); it != SeamPlacerImpl::cache_volume_to_bb.end()) {
+                    bb_volume = it->second;
+                } else {
+                    // created/moved shpere have offset in their transformation
+                    // the source transformation should only be used for updating the transformation from reload, don't use it.
+                    TriangleMesh mesh = v->mesh();
+                    mesh.transform(v->get_transformation().get_matrix());
+                    mesh.transform(model_instance->get_matrix());
+                    bb_volume = mesh.bounding_box();
+                    SeamPlacerImpl::cache_volume_to_bb[v] = bb_volume;
+                }
 
-                double test_lambda_z = std::abs(layer.print_z - test_lambda_pos.z());
-                Point xy_lambda(scale_(test_lambda_pos.x()), scale_(test_lambda_pos.y()));
+                double test_lambda_z = 0;
+                Vec3d center_pos = (bb_volume.min + bb_volume.max) / 2;
+                // remove shift, as we used the transform. that way, we have a correct z vs the layer height, and same for the x and y vs polygon.
+                center_pos.x() -= unscaled(po->instances()[print_object_instance_idx].shift.x());
+                center_pos.y() -= unscaled(po->instances()[print_object_instance_idx].shift.y());
+                double sphere_radius = std::min(bb_volume.size().x() / 2, bb_volume.size().y() / 2);
+                if (v->type() == ModelVolumeType::SEAM_POSITION_CENTER) {
+                    test_lambda_z = std::abs(layer.print_z - center_pos.z());
+                } else if (v->type() == ModelVolumeType::SEAM_POSITION_CENTER_Z) {
+                    double min_z = bb_volume.min.z();
+                    double max_z = bb_volume.max.z();
+                    assert(min_z < max_z);
+                    if (layer.print_z < min_z || layer.print_z > max_z) {
+                        // out of z, don't take it into account
+                        continue;
+                    }
+                }
+                Point xy_lambda(scale_(center_pos.x()), scale_(center_pos.y()));
                 Point nearest = polygon.point_projection(xy_lambda).first;
                 Vec3d polygon_3dpoint{ unscaled(nearest.x()), unscaled(nearest.y()), (double)layer.print_z };
-                double test_lambda_dist = (polygon_3dpoint - test_lambda_pos).norm();
-                double sphere_radius = po->model_object()->instance_bounding_box(0, true).size().x() / 2;
+                double test_lambda_dist = (polygon_3dpoint - center_pos).norm();
                 max_lambda_radius = std::max(max_lambda_radius, sphere_radius);
 
                 //use this one if the first or nearer (in z, or in xy if same z)
@@ -1839,7 +1864,7 @@ std::tuple<bool,std::optional<Vec3f>> get_seam_from_modifier(const Layer& layer,
                     || (lambda_z > test_lambda_z)
                     || (lambda_z == test_lambda_z && lambda_dist > test_lambda_dist)) {
                     v_lambda_seam = v;
-                    lambda_pos = test_lambda_pos;
+                    lambda_pos = center_pos;
                     lambda_radius = sphere_radius;
                     lambda_dist = test_lambda_dist;
                     lambda_z = test_lambda_z;
