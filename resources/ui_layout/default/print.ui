@@ -555,7 +555,10 @@ group:Wipe tower
 		setting:wipe_tower_cone_angle
 	end_line
 	setting:wipe_tower_bridging
-	setting:wipe_tower_extra_spacing
+	line:Purge lines
+		setting:label$Line width:wipe_tower_extrusion_width
+		setting:label$Spacing between lines:wipe_tower_extra_spacing
+	end_line
 	setting:wipe_tower_no_sparse_layers
 	line:Priming
         setting:single_extruder_multi_material_priming

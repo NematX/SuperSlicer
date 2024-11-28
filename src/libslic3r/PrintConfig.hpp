@@ -1202,6 +1202,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat,               wipe_advanced_nozzle_melted_volume))
     ((ConfigOptionFloat,               wipe_advanced_multiplier))
     ((ConfigOptionFloats,              wipe_extra_perimeter))
+    ((ConfigOptionFloatOrPercent,      wipe_tower_extrusion_width))
     ((ConfigOptionPercents,            wipe_inside_depth))
     ((ConfigOptionBools,               wipe_inside_end))
     ((ConfigOptionBools,               wipe_inside_start))

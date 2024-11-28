@@ -1717,6 +1717,7 @@ void GCodeGenerator::_do_export(Print& print_mod, GCodeOutputStream &file, Thumb
         DynamicConfig config;
         config.set_key_value("previous_extruder", new ConfigOptionInt(-1));
         config.set_key_value("next_extruder", new ConfigOptionInt((int)initial_extruder_id));
+        config.set_key_value("filament_extruder_id", new ConfigOptionInt((int)initial_extruder_id));
         config.set_key_value("layer_num", new ConfigOptionInt(0));
         config.set_key_value("layer_z", new ConfigOptionFloat(0)); //TODO: if the process is changed, please use the real first layer height
         start_filament_gcode = this->placeholder_parser_process("start_filament_gcode", m_config.start_filament_gcode.get_at(initial_extruder_id), initial_extruder_id, &config);
@@ -7696,7 +7697,7 @@ void GCodeGenerator::write_travel_to(std::string &gcode, Polyline& travel, std::
         this->writer().set_lift(this->writer().get_position().z() - *m_new_z_target);
         m_new_z_target.reset();
     }
-    assert(is_approx(this->writer().get_unlifted_position().z(), m_layer->print_z, EPSILON));
+    assert(is_approx(this->writer().get_unlifted_position().z(), m_layer->print_z, EPSILON) || comment == "Travel to a Wipe Tower");
 }
 
 // generate a travel in xyz
