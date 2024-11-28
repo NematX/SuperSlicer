@@ -2432,7 +2432,7 @@ unsafe_variable_width(const ThickPolyline& polyline, const ExtrusionRole role, c
     ExtrusionPath path(role, false);
     ThickLines lines = polyline.thicklines();
     Flow current_flow = flow;
-    
+
 #if _DEBUG
     for (size_t idx = 0; idx < lines.size(); ++idx)
         assert(!lines[idx].a.coincides_with_epsilon(lines[idx].b));
@@ -2483,7 +2483,7 @@ unsafe_variable_width(const ThickPolyline& polyline, const ExtrusionRole role, c
                 for (size_t j = 1; j < segments; ++j) {
                     lines.emplace(lines.begin() + i + j, pp[j], pp[j + 1], width[j], width[j]);
                 }
-                
+
                 for (int j = i; j < i + segments; j++) {
                     assert(lines[j].a_width == lines[j].b_width);
                     assert(!lines[j].a.coincides_with_epsilon(lines[j].b));
@@ -2505,7 +2505,7 @@ unsafe_variable_width(const ThickPolyline& polyline, const ExtrusionRole role, c
                 assert(mid_point.distance_to(next_point) > SCALED_EPSILON);
                 lines.emplace(lines.begin() + i + 1, mid_point, next_point, next_width, next_width);
                 // from here, 'line' variable is invalid (vector is modified);
-                
+
                 assert(lines[i].a_width == lines[i].b_width);
                 assert(lines[i+1].a_width == lines[i+1].b_width);
                 // go after the next point
@@ -2567,7 +2567,7 @@ unsafe_variable_width(const ThickPolyline& polyline, const ExtrusionRole role, c
             assert(!line.a.coincides_with_epsilon(line.b));
         }
     }
-    
+
     // merge too short lines
     for (size_t i = 0; i < lines.size(); ++i) {
         ThickLine &line = lines[i];
