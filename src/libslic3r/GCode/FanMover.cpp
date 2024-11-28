@@ -245,7 +245,7 @@ std::string FanMover::_set_fan(int16_t speed) {
 // or just create that damn new gcode writer arch
 void FanMover::_process_T(const std::string_view command)
 {
-    if (command.length() > 1) {
+    if (command.length() > 1 && command[1] >= '0' && command[1] <= '9') {
         int eid = 0;
         if (!FanMover_func::parse_number(command.substr(1), eid) || eid < 0 || eid > 255) {
             GCodeFlavor flavor = m_writer.config.gcode_flavor;

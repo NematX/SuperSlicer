@@ -1,4 +1,4 @@
-name: C/C++ Release candidate macos
+name: C/C++ Release candidate arm macos
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build_dep:
-    runs-on: macos-12
+    runs-on: macos-14
 
     steps:
     - uses: actions/checkout@v3
@@ -17,14 +17,14 @@ jobs:
       id: cache-action
       uses: actions/cache@v3
       with:
-        key: macos_intel_2.7
+        key: macos_arm_2.7
         path: deps/build/destdir
     - if: steps.cache-action.outputs.cache-hit != 'true'
       name: build deps if new cache
-      run: ./BuildMacOS.sh -d
+      run: ./BuildMacOS.sh -ad
 
   build:
-    runs-on: macos-12
+    runs-on: macos-14
     needs: build_dep
 
     steps:
@@ -33,17 +33,17 @@ jobs:
       id: cache-action
       uses: actions/cache@v3
       with:
-        key: macos_intel_2.7
+        key: macos_arm_2.7
         path: deps/build/destdir
     - name: build slicer
-      run: ./BuildMacOS.sh -si
+      run: ./BuildMacOS.sh -asi
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: rc_${{ github.event.repository.name }}-macOS.tgz
-        path: build/${{ github.event.repository.name }}-macOS-intel.tgz
+        name: rc_${{ github.event.repository.name }}-macOS-arm.dmg
+        path: build/${{ github.event.repository.name }}-macOS-arm.dmg
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: rc_${{ github.event.repository.name }}-macOS.dmg
-        path: build/${{ github.event.repository.name }}-macOS-intel.dmg
+        name: rc_${{ github.event.repository.name }}-macOS-arm.tgz
+        path: build/${{ github.event.repository.name }}-macOS-arm.tgz

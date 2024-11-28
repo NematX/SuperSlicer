@@ -1,4 +1,4 @@
-name: C/C++ Nightly macos
+name: C/C++ Nightly arm macos
 
 on:
   push:
@@ -10,37 +10,12 @@ on:
 
 jobs:
   build_dep:
-    runs-on: macos-12
+    runs-on: macos-14
 
     steps:
     - uses: actions/checkout@v3
-    - name: mkdir in deps
-      run: mkdir deps/build
-    - name: update automake for mpfr
-      run: |
-        curl -O -L http://ftpmirror.gnu.org/automake/automake-1.16.5.tar.gz
-        tar -xzf automake-1.16.5.tar.gz
-        cd automake-*
-        ./configure
-        make
-        sudo make install
-        automake --version
-    - name: dep cache
-      id: cache-action
-      uses: actions/cache@v3
-      with:
-        key: macos_intel_2.7
-        path: deps/build/destdir
-    - if: steps.cache-action.outputs.cache-hit != 'true'
-      name: build deps if new cache
-      run: ./BuildMacOS.sh -d
-
-  build:
-    runs-on: macos-12
-    needs: build_dep
-
-    steps:
-    - uses: actions/checkout@v3
+    - name: install autoconf
+      run: brew install autoconf
     - name: check autoconf version
       run: autoconf --version
     - name: update automake for mpfr
@@ -52,21 +27,39 @@ jobs:
         make
         sudo make install
         automake --version
+    - name: mkdir in deps
+      run: mkdir deps/build
     - name: dep cache
       id: cache-action
       uses: actions/cache@v3
       with:
-        key: macos_intel_2.7
+        key: macos_arm_2.7
+        path: deps/build/destdir
+    - if: steps.cache-action.outputs.cache-hit != 'true'
+      name: build deps if new cache
+      run: ./BuildMacOS.sh -ad
+
+  build:
+    runs-on: macos-14
+    needs: build_dep
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: dep cache
+      id: cache-action
+      uses: actions/cache@v3
+      with:
+        key: macos_arm_2.7
         path: deps/build/destdir
     - name: build slicer
-      run: ./BuildMacOS.sh -siv
+      run: ./BuildMacOS.sh -asiv
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: nightly_${{ github.event.repository.name }}-macOS-intel.tgz
-        path: build/${{ github.event.repository.name }}-macOS-intel.tgz
+        name: nightly_${{ github.event.repository.name }}-macOS-arm.dmg
+        path: build/${{ github.event.repository.name }}-macOS-arm.dmg
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: nightly_${{ github.event.repository.name }}-macOS-intel.dmg
-        path: build/${{ github.event.repository.name }}-macOS-intel.dmg
+        name: nightly_${{ github.event.repository.name }}-macOS-arm.tgz
+        path: build/${{ github.event.repository.name }}-macOS-arm.tgz
