@@ -82,7 +82,7 @@ std::string GCodeWriter::get_default_color_change_gcode(const GCodeConfig &confi
 void GCodeWriter::apply_print_config(const PrintConfig &print_config)
 {
     this->config.apply(print_config, true);
-    m_extrusion_axis = get_extrusion_axis(this->config);
+    //m_extrusion_axis = get_extrusion_axis(this->config, 0); // done in first toolcahnge
     m_single_extruder_multi_material = print_config.single_extruder_multi_material.value;
     m_formatter = GCodeFormatter(this->config.gcode_precision_xyz.value, this->config.gcode_precision_e.value);
 }
@@ -527,10 +527,12 @@ std::string GCodeWriter::toolchange(uint16_t tool_id)
     assert(it_extruder != m_extruders.end() && it_extruder->id() == extruder_id);*/
     //less optimized but it's easier to modify and it's not needed, as it's not called often.
     bool found = false;
+    bool is_extruder = false;
     for (Extruder& extruder : m_extruders) {
         if (tool_id == extruder.id()) {
             m_tool = &extruder;
             found = true;
+            is_extruder = true;
             break;
         }
     }
@@ -543,7 +545,12 @@ std::string GCodeWriter::toolchange(uint16_t tool_id)
             }
         }
     }
-
+    
+    if (is_extruder) {
+        m_extrusion_axis = get_extrusion_axis(this->config, tool_id);
+    } else {
+        m_extrusion_axis = "";
+    }
     // return the toolchange command
     // if we are running a single-extruder setup, just set the extruder and return nothing
     std::ostringstream gcode;
@@ -561,7 +568,6 @@ std::string GCodeWriter::toolchange(uint16_t tool_id)
                     gcode << tool_id;
             }
         } else if (FLAVOR_IS(gcfNematX)) {
-            m_extrusion_axis = 'A' + tool_id;
             return this->reset_e(true);
         } else {
             gcode << this->toolchange_prefix() << tool_id;

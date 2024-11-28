@@ -18,12 +18,20 @@
 
 namespace Slic3r {
 
-static inline char get_extrusion_axis_char(const GCodeConfig &config)
+static inline std::set<char> get_extrusion_axis_char(const GCodeConfig &config)
 {
-    std::string axis = get_extrusion_axis(config);
-    assert(axis.size() <= 1);
-    // Return 0 for gcfNoExtrusion
-    return axis.empty() ? 0 : axis[0];
+    std::set<char> allextruder_char;
+    for (size_t idx = 0; idx < config.extruder_axis.size(); ++idx) {
+        std::string str = get_extrusion_axis(config, idx);
+        if (!str.empty()) {
+            allextruder_char.insert(str.front());
+        }
+    }
+    assert(allextruder_char.find('X') == allextruder_char.end());
+    assert(allextruder_char.find('Y') == allextruder_char.end());
+    assert(allextruder_char.find('Z') == allextruder_char.end());
+    assert(allextruder_char.find('F') == allextruder_char.end());
+    return allextruder_char;
 }
 
 void GCodeReader::apply_config(const GCodeConfig &config)
@@ -41,6 +49,7 @@ void GCodeReader::apply_config(const DynamicPrintConfig &config)
 const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, GCodeLine &gline, std::pair<const char*, const char*> &command)
 {
     assert(is_decimal_separator_point());
+    bool e_axis_parsed = false;
     
     // command and args
     const char *c = ptr;
@@ -74,16 +83,18 @@ const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, G
             case 'Z': axis = Z; break;
             case 'F': axis = F; break;
             default:
-                if (*c == m_extrusion_axis && m_extrusion_axis != 0) {
+                if (m_extrusion_axis.find(*c) != m_extrusion_axis.end()) {
+                    // this is an extrusion axis
                     axis = E;
                     gline.m_e_char = *c;
-                } else if(*c > m_extrusion_axis && *c + 20 < m_extrusion_axis && m_extrusion_axis != 0) {
-                    // kind of a multiple extruder with a letter per extruder.
-                    axis = E;
-                    gline.m_e_char = *c;
-                } else if (*c == '=' || (*c >= 'A' && *c <= 'Z'))
-                	// Unknown axis, but we still want to remember that such a axis was seen.
-                	axis = UNKNOWN_AXIS;
+                    e_axis_parsed = true;
+                } else if (*c == '=' ||
+                           (*c >= 'A' && *c <= 'Z')
+                               // if next char isn't a letter (ie it's a space follow by a single letter)
+                               && !is_end_of_gcode_line(*(c + 1)) && (*(c + 1) >= ' ' && *(c + 1) <= '9')) {
+                    // Unknown axis, but we still want to remember that such a axis was seen.
+                    axis = UNKNOWN_AXIS;
+                }
                 break;
             }
             if (axis != NUM_AXES_WITH_UNKNOWN) {
@@ -97,12 +108,14 @@ const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, G
 	                    gline.m_axis[int(axis)] = float(v);
                     gline.m_mask |= 1 << int(axis);
                     c = pend;
-                } else
+                } else {
                     // Skip the rest of the word.
                     c = skip_word(c);
-            } else
+                }
+            } else {
                 // Skip the rest of the word.
                 c = skip_word(c);
+            }
         }
     }
     
@@ -339,8 +352,9 @@ void GCodeReader::GCodeLine::set(const GCodeReader &reader, const Axis axis, con
     else {
         assert(axis == E);
         // Extruder axis is set.
-        assert(reader.extrusion_axis() != 0);
-        match[1] = reader.extrusion_axis();
+        assert(this->m_e_char != 0);
+        assert(reader.extrusion_axis().find(this->m_e_char) != reader.extrusion_axis().end());
+        match[1] = this->m_e_char;
     }
 
     if (this->has(axis)) {

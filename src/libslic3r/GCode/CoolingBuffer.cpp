@@ -427,7 +427,13 @@ std::vector<PerExtruderAdjustments> CoolingBuffer::parse_layer_gcode(const std::
     PerExtruderAdjustments *adjustment  = &per_extruder_adjustments[map_extruder_to_per_extruder_adjustment[current_extruder]];
     const char       *line_start = gcode.c_str();
     const char       *line_end   = line_start;
-    const char        extrusion_axis = get_extrusion_axis(m_config)[0];
+    std::set<char>    all_extrusion_axis;
+    for (size_t idx = 0; idx < m_config.extruder_axis.size(); ++idx) {
+        std::string str = get_extrusion_axis(m_config, idx);
+        if (!str.empty()) {
+            all_extrusion_axis.insert(str.front());
+        }
+    }
     // Index of an existing CoolingLine of the current adjustment, which holds the feedrate setting command
     // for a sequence of extrusion moves.
     size_t            active_speed_modifier = size_t(-1);
@@ -500,7 +506,8 @@ std::vector<PerExtruderAdjustments> CoolingBuffer::parse_layer_gcode(const std::
 
                 // Parse the axis.
                 size_t axis = (*c >= 'X' && *c <= 'Z') ? (*c - 'X') :
-                              (*c == extrusion_axis) ? AxisIdx::E : (*c == 'F') ? AxisIdx::F : 
+                              (all_extrusion_axis.find(*c) != all_extrusion_axis.end()) ? AxisIdx::E :
+                              (*c == 'F') ? AxisIdx::F : 
                               (*c >= 'I' && *c <= 'K') ? int(AxisIdx::I) + (*c - 'I') : 
                               (*c == 'R') ? AxisIdx::R : size_t(-1);
                 line.has_move = line.has_move || axis != 4;

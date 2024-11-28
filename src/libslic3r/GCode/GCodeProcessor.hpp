@@ -578,6 +578,7 @@ namespace Slic3r {
         EPositioningType m_e_local_positioning_type;
         std::vector<Vec3f> m_extruder_offsets;
         std::vector<std::string> m_extruder_names;
+        std::vector<std::string> m_extruder_axis;
         GCodeFlavor m_flavor;
 
         AxisCoords m_start_position; // mm
@@ -865,6 +866,9 @@ namespace Slic3r {
         void process_T(const GCodeReader::GCodeLine& line);
         void process_T(const std::string_view command);
         void process_toolchange(uint16_t command_id);
+        // nematx-specifc (different axis char per extruder)
+        void process_toolchange_char(const GCodeReader::GCodeLine& line);
+        // klipper-specific
         void process_klipper_ACTIVATE_EXTRUDER(const GCodeReader::GCodeLine& line);
 
         // post process the file with the given filename to:

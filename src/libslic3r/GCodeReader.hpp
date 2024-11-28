@@ -97,7 +97,7 @@ public:
         float            m_axis[NUM_AXES];
         size_t           m_line_number;
         uint32_t         m_mask;
-        char             m_e_char;
+        char             m_e_char = 0;
         friend class GCodeReader;
     };
     class FakeGCodeLine : public GCodeLine {
@@ -112,7 +112,7 @@ public:
     typedef std::function<void(GCodeReader&, const GCodeLine&)> callback_t;
     typedef std::function<void(GCodeReader&, const char*, const char*)> raw_line_callback_t;
     
-    GCodeReader() : m_verbose(false), m_extrusion_axis('E') { this->reset(); }
+    GCodeReader() : m_verbose(false), m_extrusion_axis({'E'}) { this->reset(); }
     void reset() { memset(m_position, 0, sizeof(m_position)); }
     void apply_config(const GCodeConfig &config);
     void apply_config(const DynamicPrintConfig &config);
@@ -172,7 +172,7 @@ public:
 
 
     // Returns 0 for gcfNoExtrusion.
-    char   extrusion_axis() const { return m_extrusion_axis; }
+    std::set<char>   extrusion_axis() const { return m_extrusion_axis; }
 //  void   set_extrusion_axis(char axis) { m_extrusion_axis = axis; }
 
 private:
@@ -206,7 +206,7 @@ private:
     static const char*  axis_pos(const char *raw_str, char axis);
 
     GCodeConfig m_config;
-    char        m_extrusion_axis;
+    std::set<char> m_extrusion_axis;
     float       m_position[NUM_AXES];
     bool        m_verbose;
     // To be set by the callback to stop parsing.

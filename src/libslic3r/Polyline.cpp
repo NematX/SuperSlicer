@@ -1238,6 +1238,7 @@ int ArcPolyline::simplify_straits(coordf_t min_tolerance,
                                    const int buffer_init)
 {
     assert(is_valid());
+    return 0;
 
     // incentive to remove odds points
     float squew[] = { 1, 0.94f, 0.98f, 0.96f, 0.99f, 0.93f, 0.97f, 0.95f};

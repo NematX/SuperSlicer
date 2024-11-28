@@ -1843,14 +1843,14 @@ void PrintConfigDef::init_fff_params()
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionFloats { 0. });
 
-
-    def = this->add("extrusion_axis", coString);
+    def = this->add("extruder_axis", coStrings);
     def->label = L("Extrusion axis");
     def->category = OptionCategory::extruders;
     def->tooltip = L("Use this option to set the axis letter associated with your printer's extruder "
                    "(usually E but some printers use A).");
-    def->mode = comNone | comPrusa; // note: hidden setting
-    def->set_default_value(new ConfigOptionString("E"));
+    def->mode = comExpert | comPrusa; // note: hidden setting (comNone)
+    def->set_default_value(new ConfigOptionStrings("E"));
+    def->aliases = { "extrusion_axis" };
 
     def = this->add("extrusion_multiplier", coFloats);
     def->label = L("Extrusion multiplier");
@@ -7503,6 +7503,7 @@ void PrintConfigDef::init_extruder_option_keys()
     m_extruder_option_keys = {
         "default_filament_profile",
         "deretract_speed",
+        "extruder_axis",
         "extruder_colour",
         "extruder_extrusion_multiplier_speed",
         "extruder_fan_offset",

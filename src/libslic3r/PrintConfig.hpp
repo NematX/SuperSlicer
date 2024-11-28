@@ -1087,7 +1087,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionPoints,              extruder_offset))
     ((ConfigOptionFloats,              extruder_pressure_factor))
     ((ConfigOptionFloats,              extruder_temperature_offset))
-    // ((ConfigOptionString,              extrusion_axis))
+    ((ConfigOptionStrings,             extruder_axis))
     ((ConfigOptionFloats,              extrusion_multiplier))
     ((ConfigOptionFloat,               fan_kickstart))
     ((ConfigOptionBool,                fan_percentage))
@@ -1224,11 +1224,16 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat, max_volumetric_extrusion_rate_slope_negative))
 #endif
 
-static inline std::string get_extrusion_axis(const GCodeConfig& cfg)
+static inline std::string get_extrusion_axis(const GCodeConfig& cfg, uint16_t tool_id)
 {
-    return
+    std::string str_axis = cfg.extruder_axis.get_at(tool_id);
+    if (str_axis.empty()) {
+         return
         ((cfg.gcode_flavor.value == gcfMach3) || (cfg.gcode_flavor.value == gcfMachinekit) || (cfg.gcode_flavor.value == gcfNematX)) ? "A" :
         (cfg.gcode_flavor.value == gcfNoExtrusion) ? "" : "E";
+    } else {
+        return (cfg.gcode_flavor.value == gcfNoExtrusion) ? "" : (str_axis.substr(0,1));
+    }
 }
 
 PRINT_CONFIG_CLASS_DERIVED_DEFINE(

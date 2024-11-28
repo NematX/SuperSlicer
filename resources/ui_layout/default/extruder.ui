@@ -3,6 +3,7 @@ page:idx:Extruder:funnel
 group:Name and Size
 	setting:idx:tool_name
 	setting:idx:nozzle_diameter
+	setting:idx:extruder_axis
 	update_nozzle_diameter
 group:Layer height limits
 	setting:idx:tags$Advanced$Expert:min_layer_height

@@ -635,6 +635,13 @@ void GCodeProcessor::apply_config(const PrintConfig& config)
     for (size_t i = 0; i < extruders_count; ++i) {
         m_extruder_names[i] = config.tool_name.get_at(i);
     }
+    m_extruder_axis.resize(extruders_count);
+    for (size_t i = 0; i < extruders_count; ++i) {
+        m_extruder_axis[i] = get_extrusion_axis(config, i);
+        if (m_extruder_axis[i].empty()) {
+            m_extruder_axis[i] = "E";
+        }
+    }
 
     m_extruder_colors.resize(extruders_count);
     m_result.filament_diameters.resize(extruders_count);
@@ -1916,6 +1923,11 @@ void GCodeProcessor::process_gcode_line(const GCodeReader::GCodeLine& line, bool
             BOOST_LOG_TRIVIAL(error) << "GCodeProcessor failed to parse the klipper command '" << line.raw() << "'.";
         }
     } else if (cmd.length() > 1) {
+        // check if the axis of extrusion is still the same (if any)
+        if (line.has_e() && m_extruder_axis[m_extruder_id].front() != line.e_char()) {
+            //currently, we only support one extruder at a time, so we do a toolchange.
+            process_toolchange_char(line);
+        }
         // process command lines
         switch (cmd[0])
         {
@@ -4063,6 +4075,25 @@ void GCodeProcessor::process_T(const std::string_view command)
             }
         }
     }
+}
+
+void GCodeProcessor::process_toolchange_char(const GCodeReader::GCodeLine &line) {
+    assert(line.has_e());
+    assert(m_extruder_axis[m_extruder_id].front() != line.e_char());
+    // find extruder id
+    uint16_t new_extruder_id = 0;
+    for (new_extruder_id = 0; new_extruder_id < uint16_t(m_extruder_axis.size()); ++new_extruder_id) {
+        assert(!m_extruder_axis[new_extruder_id].empty());
+        if (m_extruder_axis[new_extruder_id].front() == line.e_char()) {
+            break;
+        }
+    }
+    if (new_extruder_id >= m_extruder_axis.size() || m_extruder_axis[new_extruder_id].front() != line.e_char()) {
+        // error
+        assert(false);
+        return;
+    }
+    process_toolchange(new_extruder_id);
 }
 
 void GCodeProcessor::process_toolchange(uint16_t new_id)
