@@ -1871,7 +1871,7 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("Use this option to set the axis letter associated with your printer's extruder "
                    "(usually E but some printers use A).");
     def->mode = comExpert | comPrusa; // note: hidden setting (comNone)
-    def->set_default_value(new ConfigOptionStrings("E"));
+    def->set_default_value(new ConfigOptionStrings(""));
     def->aliases = { "extrusion_axis" };
 
     def = this->add("extrusion_multiplier", coFloats);
