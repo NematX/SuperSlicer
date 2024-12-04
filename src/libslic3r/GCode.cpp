@@ -3260,7 +3260,7 @@ LayerResult GCodeGenerator::process_layer(
             set_extra_lift(m_last_layer_z, layer.id(), print.config(), m_writer, first_extruder_id);
         gcode += this->change_layer(print_z);  // this will increase m_layer_index
         //forget wipe from previous layer
-        gcode += "; m_wipe.reset_path(); after change_layer\n";
+        //gcode += "; m_wipe.reset_path(); after change_layer\n";
         assert(m_new_z_target || is_approx(print_z, m_writer.get_unlifted_position().z(), EPSILON));
     }
     m_layer = &layer;
@@ -4347,8 +4347,12 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
     assert(notch_extrusion_start.empty());
     assert(notch_extrusion_end.empty());
     assert(!building_paths.empty());
+
+    if (building_paths.size() == 1)
+        assert(is_full_loop_ccw == Polygon(building_paths.front().polyline.to_polyline().points).is_counter_clockwise());
     if (original_loop.role().is_external_perimeter() && building_paths.front().size() > 1 && building_paths.back().size() > 1
-        && (this->m_config.seam_notch_all.get_abs_value(1.) > 0 || this->m_config.seam_notch_inner.get_abs_value(1.) > 0 || this->m_config.seam_notch_outer.get_abs_value(1.) > 0)) {
+        && (this->m_config.seam_notch_all.get_abs_value(1.) > 0 || this->m_config.seam_notch_inner.get_abs_value(1.) > 0 
+            || this->m_config.seam_notch_outer.get_abs_value(1.) > 0)) {
         //TODO: check there is at least 4 points
         coord_t notch_value = 0;
         //check if applicable to seam_notch_inner
@@ -4362,10 +4366,10 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
                 if (is_hole_loop) {
                     //test if convex (as it's clockwise bc it's a hole, we have to do the opposite)
                     // 3.07 instead of PI to allow for some convex outliers (sometimes, stl can be a bit imprecise)
-                    is_convex = polygon_to_test.convex_points(3.07).empty();
+                    is_convex = polygon_to_test.convex_points(0, 3.07).empty();
                 } else {
                     // 3.3 instead of PI to allow for some concave outliers (sometimes, stl can be a bit imprecise)
-                    is_convex = polygon_to_test.concave_points(3.3).empty();
+                    is_convex = polygon_to_test.concave_points(0, 3.3).empty();
                 }
                 if (is_convex) {
                     // Computing circle center
@@ -4416,44 +4420,52 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
         notch_value = std::min(notch_value, scale_t(building_paths.front().width()) / 2);
 
         // found a suitable path, move the seam inner
-        
+        if (building_paths.size() == 1)
+            assert(is_full_loop_ccw == Polygon(building_paths.front().polyline.to_polyline().points).is_counter_clockwise());
+
         // extract paths from the start
         coordf_t dist = notch_length;
-        while (dist > 0) {
+        while (dist > SCALED_EPSILON) {
             coordf_t length = building_paths.front().as_polyline().length();
-            if(length > dist){
-                //found the place to split
-                notch_extrusion_start.emplace_back(building_paths.front().attributes(), building_paths.front().can_reverse());
+            if (length > dist) {
+                // found the place to split
+                notch_extrusion_start.emplace_back(building_paths.front().attributes(),
+                                                   building_paths.front().can_reverse());
                 ArcPolyline ap2;
                 building_paths.front().as_polyline().split_at(dist, notch_extrusion_start.back().polyline, ap2);
                 building_paths.front().polyline = ap2;
                 dist = 0;
-            }else{
+            } else {
                 notch_extrusion_start.push_back(std::move(building_paths.front()));
                 building_paths.erase(building_paths.begin());
                 dist -= length;
             }
+            assert(notch_extrusion_start.back().polyline.back() == building_paths.front().polyline.front());
         }
         // extract paths from the end
         dist = notch_length;
-        while (dist > 0) {
+        while (dist > SCALED_EPSILON) {
             coordf_t length = building_paths.back().as_polyline().length();
-            if(length > dist){
-                //found the place to split
-                notch_extrusion_end.emplace_back(building_paths.back().attributes(), building_paths.back().can_reverse());
-                ArcPolyline ap1;
-                building_paths.back().as_polyline().split_at(dist, ap1, notch_extrusion_end.back().polyline);
-                building_paths.back().polyline = ap1;
+            if (length > dist) {
+                // found the place to split
+                notch_extrusion_end.emplace_back(building_paths.back().attributes(),
+                                                 building_paths.back().can_reverse());
+                ArcPolyline ap2;
+                building_paths.back().polyline.split_at(length - dist, ap2, notch_extrusion_end.back().polyline);
+                building_paths.back().polyline = ap2;
                 dist = 0;
-            }else{
+            } else {
                 notch_extrusion_end.push_back(std::move(building_paths.back()));
-                building_paths.erase(building_paths.begin());
+                notch_extrusion_end.back().polyline.reverse();
+                building_paths.pop_back();
                 dist -= length;
             }
-            //notch_extrusion_end has benn created "in-reverse", I have to put it the right way
-            std::reverse(notch_extrusion_end.begin(), notch_extrusion_end.end());
+            assert(building_paths.back().polyline.back() == notch_extrusion_end.front().polyline.front());
         }
-        
+        // notch_extrusion_end has benn created "in-reverse", I have to put it the right way
+        std::reverse(notch_extrusion_end.begin(), notch_extrusion_end.end());
+        assert(building_paths.back().polyline.back() == notch_extrusion_end.front().polyline.front());
+
         //kind of the same as the wipe
         Point prev_point = notch_extrusion_end.back().first_point();       // second to last point
         Point end_point = notch_extrusion_end.back().last_point();
@@ -4461,9 +4473,10 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
         Point next_point = notch_extrusion_start.front().last_point();  // second point
         //safeguard : if a ExtrusionRole::ror exist abord;
         if (next_point == start_point || prev_point == end_point) {
-            throw Slic3r::SlicingError(_u8L("ExtrusionRole::ror while writing gcode: two points are at the same position. Please send the .3mf project to the dev team for debugging. Extrude loop: seam notch."));
+            throw Slic3r::SlicingError(_u8L("ExtrusionRole::error while writing gcode: two points are at the same position. Please send the .3mf project to the dev team for debugging. Extrude loop: seam notch."));
         }
-        if(building_paths.size() == 1)
+
+        if (building_paths.size() == 1)
             assert(is_full_loop_ccw == Polygon(building_paths.front().polyline.to_polyline().points).is_counter_clockwise());
         double angle = PI / 2;
         if (is_hole_loop ? (is_full_loop_ccw) : (!is_full_loop_ccw)) {
@@ -4498,13 +4511,13 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
             assert(ccw_angle_old_test(start_point, prev_point, next_point) == abs_angle(angle_ccw( prev_point -start_point,next_point- start_point)));
             check_angle = abs_angle(angle_ccw( prev_point -start_point,next_point- start_point));
         } else {
-            assert(ccw_angle_old_test(end_point, prev_point, start_point) == abs_angle(angle_ccw( start_point -end_point,prev_point- end_point)));
-            check_angle = abs_angle(angle_ccw( start_point -end_point,prev_point- end_point));
+            assert(is_approx(ccw_angle_old_test(end_point, prev_point, start_point), abs_angle(angle_ccw(prev_point- end_point, start_point -end_point)), EPSILON));
+            check_angle = abs_angle(angle_ccw(prev_point- end_point, start_point -end_point));
             if ((is_hole_loop ? -check_angle : check_angle) > min_angle) {
                 BOOST_LOG_TRIVIAL(debug) << "notch abord: too big angle\n";
                 return;
             }
-            assert(ccw_angle_old_test(start_point, end_point, next_point) == abs_angle(angle_ccw( end_point - start_point,next_point - start_point)));
+            assert(is_approx(ccw_angle_old_test(start_point, end_point, next_point), abs_angle(angle_ccw( end_point - start_point,next_point - start_point)), EPSILON));
             check_angle = abs_angle(angle_ccw( end_point - start_point,next_point - start_point));
         }
         assert(end_point != start_point);
@@ -4530,6 +4543,9 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
             path.attributes_mutable().width = path.width() * ratio;
             path.attributes_mutable().mm3_per_mm = path.mm3_per_mm() * ratio;
         };
+        for (ExtrusionPath &ep : notch_extrusion_start) {
+            assert(!ep.can_reverse());
+        }
 
         //TODO change below things to avoid deleting more than one path, or at least preserve their flow
         
@@ -4542,13 +4558,16 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
             Point p1 = Line(moved_start, Line(start_point, notch_extrusion_start.front().polyline.front()).midpoint()).midpoint();
             Point p2 = Line(p1, building_paths.front().first_point()).midpoint();
             p2 = Line(p2, notch_extrusion_start.back().polyline.back()).midpoint();
-            ExtrusionPath model = notch_extrusion_start.front();
+            ExtrusionPath model(notch_extrusion_start.front());
             model.polyline.clear();
             notch_extrusion_start.clear();
             create_new_extrusion(notch_extrusion_start, model, 0.25f, moved_start, p1);
             create_new_extrusion(notch_extrusion_start, model, 0.5f, p1, p2);
             create_new_extrusion(notch_extrusion_start, model, 0.75f, p2, building_paths.front().first_point());
         } //else : keep the path as-is
+        for (ExtrusionPath &ep : notch_extrusion_start) {
+            assert(!ep.can_reverse());
+        }
         //reduce the flow of the notch path, as it's longer than previously
         length_temp = notch_length;
         if (length_temp * length_temp < 
@@ -4575,6 +4594,9 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
             create_new_extrusion(notch_extrusion_end, model, 0.f, p1, moved_end);
         } //else : keep the path as-is
     }
+        for (ExtrusionPath &ep : notch_extrusion_start) {
+            assert(!ep.can_reverse());
+        }
 }
 
 std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, const std::string_view description, double speed)
@@ -4671,6 +4693,8 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
         //assert(!path.can_reverse() || !is_perimeter(path.role())); //just ensure the perimeter have their direction enforced.
         path.set_can_reverse(false);
     }
+    if (building_paths.size() == 1)
+        assert(is_full_loop_ccw == Polygon(building_paths.front().polyline.to_polyline().points).is_counter_clockwise());
     if (m_enable_loop_clipping && m_writer.tool_is_extruder()) {
         coordf_t clip_length = scale_(m_config.seam_gap.get_abs_value(m_writer.tool()->id(), nozzle_diam));
         if (loop_to_seam.role().is_external_perimeter()) {
@@ -4713,6 +4737,8 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
         this->m_current_loop_reversed.reset();
         return "";
     }
+    if (building_paths.size() == 1)
+        assert(is_full_loop_ccw == Polygon(building_paths.front().polyline.to_polyline().points).is_counter_clockwise());
 
     const ExtrusionPaths& wipe_paths = building_paths;
     for (const ExtrusionPath &path : wipe_paths)
@@ -5331,8 +5357,14 @@ std::string GCodeGenerator::extrude_entity(const ExtrusionEntityReference &entit
 
 void GCodeGenerator::use(const ExtrusionEntityCollection &collection) {
     if (!collection.can_sort() /*|| collection.role() == ExtrusionRole::Mixed*/ || collection.entities().size() <= 1) {
-        for (const ExtrusionEntity* next_entity : collection.entities()) {
-            next_entity->visit(*this);
+        if (this->visitor_flipped && collection.can_reverse()) {
+            for (size_t idx = collection.entities().size() - 1; idx <collection.entities().size(); --idx) {
+                collection.entities()[idx]->visit(*this);
+            }
+        } else {
+            for (const ExtrusionEntity *next_entity : collection.entities()) {
+                next_entity->visit(*this);
+            }
         }
     } else {
         bool reversed = this->visitor_flipped;
@@ -5351,7 +5383,9 @@ std::string GCodeGenerator::extrude_path(const ExtrusionPath &path, const std::s
     for (int i = 1; i < simplifed_path.polyline.size(); ++i)
         assert(!simplifed_path.polyline.get_point(i - 1).coincides_with_epsilon(simplifed_path.polyline.get_point(i)));
     if (this->visitor_flipped) {
-        assert(path.can_reverse());
+        // in a multipath, the multipath can be reversed, but all individual path are marqued as 'unreversable', even if they can be reversed by the multipath.
+        // hence, it's possible to have a !can_reverse and a visitor_flipped from the multipath.
+        //assert(path.can_reverse());
         simplifed_path.reverse();
     }
 
@@ -5603,9 +5637,9 @@ void GCodeGenerator::extrude_infill(const ExtrudeArgs& print_args, const LayerIs
             }
             if (!temp_fill_extrusions.empty()) {
                 set_region_for_extrude(print, nullptr, &layerm, gcode);
-                for (const ExtrusionEntityReference &fill :
-                     chain_extrusion_references(temp_fill_extrusions, last_pos_defined() ? &last_pos() : nullptr)) {
-                    gcode += this->extrude_entity(fill, "infill"sv);
+                std::vector<ExtrusionEntityReference> fills_eer = chain_extrusion_references(temp_fill_extrusions, last_pos_defined() ? &last_pos() : nullptr);
+                for (const ExtrusionEntityReference &fill_eer : fills_eer) {
+                    gcode += this->extrude_entity(fill_eer, "infill"sv);
                 }
             }
         }
@@ -7060,20 +7094,20 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
                             poly_start.clip_end(length * ratio);
                             poly_end.clip_start(length * (1 - ratio));
                         }
-                        gcode += "; acceleration to travel\n";
+                        //gcode += "; acceleration to travel\n";
                         m_writer.set_travel_acceleration((uint32_t) floor(travel_acceleration + 0.5));
                         this->write_travel_to(gcode, poly_start,
                                               "move to first " + description + " point (acceleration)");
                         // travel acceleration should be already set at startup via special gcode, and so it's
                         // automatically used by G0.
-                        gcode += "; decel to extrusion\n";
+                        //gcode += "; decel to extrusion\n";
                         m_writer.set_travel_acceleration((uint32_t) floor(acceleration + 0.5));
                         this->write_travel_to(gcode, poly_end,
                                               "move to first " + description + " point (deceleration)");
                         // restore travel accel and ensure the new extrusion accel is set
                         m_writer.set_travel_acceleration((uint32_t) floor(travel_acceleration + 0.5));
                         m_writer.set_acceleration((uint32_t) floor(acceleration + 0.5));
-                        gcode += "; end travel\n";
+                        //gcode += "; end travel\n";
                         assert(!moved_to_point);
                         moved_to_point = true;
                     }
@@ -7123,7 +7157,7 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
         m_delayed_layer_change.clear();
         gcode += unlift;
         //now that we move to the new layer, forget previous layer wipe (if any).
-        gcode += "; m_wipe.reset_path(); after m_delayed_layer_change\n";
+        //gcode += "; m_wipe.reset_path(); after m_delayed_layer_change\n";
     }
     gcode += m_writer.unretract();
 
