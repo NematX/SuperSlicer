@@ -1132,23 +1132,8 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
                                         intersection_ex(ExPolygons{surface_fill.surface.expolygon}, f->no_overlap_expolygons);
                     double real_surface = 0;
                     for(auto &t : temp) real_surface += t.area();
-                    {
-                        static int iRun = 0;
-                        SVG svg(debug_out_path("make_fill_exactly-%d.svg", iRun++), bbox);
-                        svg.draw(surface_fill.surface.expolygon, "grey");
-                        svg.draw(temp, "green");
-                        for (ExtrusionPath *path : get_path.paths) {
-                            Polygons out;
-                            path->polygons_covered_by_spacing(out, 1, 0);
-                            svg.draw(out, "red");
-                            //for (ArcPolyline &poly : path.as_polylines()) {
-                            //    svg.draw(poly.to_polyline(), "red");
-                            //}
-                        }
-                        svg.Close();
-                    }
                     assert(compute_volume.volume < unscaled(unscaled(surface_fill.surface.area())) * surface_fill.params.layer_height * surface_fill.params.flow_mult + EPSILON
-                        || f->debug_verify_flow_mult <= 0.80000001 || f->debug_verify_flow_mult >= 1.30000001);
+                        || f->debug_verify_flow_mult <= 0.80001);
                     double area = unscaled(unscaled(real_surface));
                     if(surface_fill.surface.has_pos_top())
                         area *= surface_fill.params.config->fill_top_flow_ratio.get_abs_value(1);
