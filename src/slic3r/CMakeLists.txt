@@ -41,6 +41,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/CalibrationBridgeDialog.hpp
     GUI/CalibrationCubeDialog.cpp
     GUI/CalibrationCubeDialog.hpp
+    GUI/CalibrationExtruderOffsetDialog.cpp
+    GUI/CalibrationExtruderOffsetDialog.hpp
     GUI/CalibrationFlowDialog.cpp
     GUI/CalibrationFlowDialog.hpp
     GUI/CalibrationFlowSpeedDialog.cpp

@@ -83,6 +83,7 @@
 #include "CalibrationBedDialog.hpp"
 #include "CalibrationBridgeDialog.hpp"
 #include "CalibrationCubeDialog.hpp"
+#include "CalibrationExtruderOffsetDialog.hpp"
 #include "CalibrationFlowDialog.hpp"
 #include "CalibrationFlowSpeedDialog.hpp"
 #include "CalibrationOverBridgeDialog.hpp"
@@ -2308,6 +2309,10 @@ void GUI_App::calibration_retraction_dialog()
 void GUI_App::calibration_pressureadv_dialog()
 {
     change_calibration_dialog(nullptr, new CalibrationPressureAdvDialog(this, mainframe));
+}
+void GUI_App::calibration_extruder_offset_dialog()
+{
+    change_calibration_dialog(nullptr, new CalibrationExtruderOffsetDialog(this, mainframe));
 }
 void GUI_App::freecad_script_dialog()
 {

@@ -2080,6 +2080,9 @@ void MainFrame::init_menubar_as_editor()
         m_calibration_menu->AppendSeparator();
         append_menu_item(m_calibration_menu, wxID_ANY, _(L("Calibration cube")), _(L("Print a calibration cube, for various calibration goals.")),
             [this](wxCommandEvent&) { wxGetApp().calibration_cube_dialog(); });
+        m_calibration_menu->AppendSeparator();
+        append_menu_item(m_calibration_menu, wxID_ANY, _(L("Extruder offset")), _(L("Print a calibration to set the offset of an extruder in relation of the first extruder.")),
+            [this](wxCommandEvent&) { wxGetApp().calibration_extruder_offset_dialog();  }, "", nullptr, [this]() {return m_plater && m_plater->config()->option("nozzle_diameter")->size() > 1; }, this);
     }
 
     // objects menu
