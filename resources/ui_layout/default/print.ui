@@ -529,6 +529,7 @@ group:Corners
 		setting:stretch_corners_entering_section
 		setting:stretch_corners_exiting_section
 	end_line
+	setting:stretch_corners_inner_perimeters
 	setting:stretch_corners_arc
 
 page:Multiple extruders:funnel

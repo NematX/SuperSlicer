@@ -582,7 +582,8 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig* config)
     for (auto el : {"stretch_corners_arc", "stretch_corners_max_angle",
         "stretch_corners_deviation_concave", "stretch_corners_deviation_convex", "stretch_corners_deviation_first_layer",
         "stretch_corners_distance_concave", "stretch_corners_distance_convex", "stretch_corners_distance_first_layer",
-        "stretch_corners_entering_section", "stretch_corners_exiting_section"})
+        "stretch_corners_entering_section", "stretch_corners_exiting_section",
+        "stretch_corners_inner_perimeters"})
         toggle_field(el, has_corner_stretch);
     toggle_field("external_perimeter_cut_corners", !has_corner_stretch);
     

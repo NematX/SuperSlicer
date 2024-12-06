@@ -5980,6 +5980,18 @@ void PrintConfigDef::init_fff_params()
     def->min = 0;
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionPercent(100));
+    
+    def = this->add("stretch_corners_inner_perimeters", coPercent);
+    def->label = L("Also for inner perimeters");
+    def->full_label = L("Stretch corners also for inner perimeters");
+    def->category = OptionCategory::width;
+    def->tooltip = L("Also appy the stretch corners for inner perimter and not only for the external ones."
+        "The percentage value scale the deviation an external periemter should have in the same situation."
+        "\nSet to zero to deactovate.");
+    def->sidetext = L("%");
+    def->min = 0;
+    def->mode = comExpert | comSuSi;
+    def->set_default_value(new ConfigOptionPercent(0));
 
     def = this->add("support_material", coBool);
     def->label = L("Generate support material");
@@ -9837,6 +9849,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "stretch_corners_entering_section",
 "stretch_corners_exiting_section",
 "stretch_corners_max_angle",
+"stretch_corners_inner_perimeters",
 "support_material_angle_height",
 "support_material_acceleration",
 "support_material_contact_distance_type",

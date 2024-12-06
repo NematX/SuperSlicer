@@ -5968,7 +5968,7 @@ void GCodeGenerator::_extrude_line_cut_corner(std::string& gcode_str, const Line
 }
 
 //this will extrude between last_point and corner_point, and will possibly push a little bit between corner_point and next_point. The last printed point will be returned, and must be used instead of corner_point for the next call as last_point.
-Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const Point& last_point, const Point& corner_point, const Point& next_point, const Point& after_point,
+Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const ExtrusionRole path_role, const Point& last_point, const Point& corner_point, const Point& next_point, const Point& after_point,
     const bool is_ccw, const double path_width, const double e_per_mm, const std::string_view comment)
 {
     if (last_point == corner_point || !m_current_loop) {
@@ -6034,6 +6034,11 @@ Point GCodeGenerator::_extrude_line_stretch_corner(std::string& gcode_str, const
         // get entering/existing ratio
         double ratio_entering = config().stretch_corners_entering_section.get_abs_value(1.);
         double ratio_exiting = config().stretch_corners_exiting_section.get_abs_value(1.);
+        // also the ratio for internal periemters.
+        if (!path_role.is_external_perimeter()) {
+            ratio_entering *= config().stretch_corners_inner_perimeters.get_abs_value(1.);
+            ratio_exiting *= config().stretch_corners_inner_perimeters.get_abs_value(1.);
+        }
 
         // compute deviation
         double unscaled_deviation_max = is_convex ?
@@ -6372,7 +6377,8 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
             Point last_pos    = polyline.front();
             Point current_pos = polyline.front();
             for (size_t idx = 1; idx < polyline.size(); ++idx) {
-                if (path.role().is_external_perimeter() && config().stretch_corners.value) {
+                if ((path.role().is_external_perimeter() && config().stretch_corners.value) ||
+                    (path.role().is_perimeter() && config().stretch_corners_inner_perimeters.value > 0)) {
                     if (idx + 1 < polyline.size()) {
                         if (!is_ccw) {
                             assert(m_current_loop_reversed);
@@ -6381,7 +6387,7 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
                             is_ccw = (*m_current_loop)->is_counter_clockwise();
                         }
                         // it return a position between polyline.get_point(idx) (included) and polyline.get_point(idx + 1) (excluded)
-                        current_pos = _extrude_line_stretch_corner(gcode, current_pos, polyline.get_point(idx),
+                        current_pos = _extrude_line_stretch_corner(gcode, path.role(), current_pos, polyline.get_point(idx),
                                                      polyline.get_point(idx + 1),
                                                      (idx + 2 < polyline.size()) ? polyline.get_point(idx + 2) :
                                                                                    polyline.get_point(idx + 1),
@@ -6423,7 +6429,8 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
                         radius = 0;
                 }
                 if (radius == 0) {
-                    if (path.role().is_external_perimeter() && config().stretch_corners.value) {
+                    if ((path.role().is_external_perimeter() && config().stretch_corners.value) ||
+                        (path.role().is_perimeter() && config().stretch_corners_inner_perimeters.value > 0)) {
                         last_pos    = current_pos;
                         // TODO: check what angle arcs make with each other, and modify them if a stretch is needed
                         // For now, it's only possible between two strait segment.
@@ -6436,7 +6443,7 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
                             }
                             // it return a position between polyline.get_point(idx) (included) and
                             // polyline.get_point(idx + 1) (excluded)
-                            current_pos = _extrude_line_stretch_corner(gcode, current_pos, polyline.get_point(idx),
+                            current_pos = _extrude_line_stretch_corner(gcode, path.role(), current_pos, polyline.get_point(idx),
                                                                        polyline.get_point(idx + 1),
                                                                        (idx + 2 < polyline.size()) ?
                                                                            polyline.get_point(idx + 2) :
