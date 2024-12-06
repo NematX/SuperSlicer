@@ -7,6 +7,7 @@
 namespace Slic3r {
 
 class GCodeGenerator;
+enum GCodeFlavor : unsigned char;
 
 namespace GCode {
 
@@ -41,7 +42,7 @@ private:
     std::string append_tcr(GCodeGenerator &gcodegen, const WipeTower::ToolChangeResult &tcr, int new_extruder_id, double z = -1.) const;
 
     // Postprocesses gcode: rotates and moves G1 extrusions and returns result
-    std::string post_process_wipe_tower_moves(const WipeTower::ToolChangeResult& tcr, const Vec2f& translation, float angle) const;
+    std::string post_process_wipe_tower_moves(const WipeTower::ToolChangeResult& tcr, const Vec2f& translation, float angle,const GCodeFlavor gcode_flavor, const std::string &extruder_letter) const;
 
     // Left / right edges of the wipe tower, for the planning of wipe moves.
     const float                                                  m_left;
@@ -58,6 +59,9 @@ private:
     int                                                          m_layer_idx;
     int                                                          m_tool_change_idx;
     double                                                       m_last_wipe_tower_print_z;
+    //for nametx G91 for relative e
+    //GCodeFlavor     m_gcode_flavor;
+    //char m_extruder_letter;
 };
 
 } // namespace GCode

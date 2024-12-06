@@ -55,7 +55,7 @@ std::string WipeTowerIntegration::append_tcr(GCodeGenerator &gcodegen, const Wip
     Vec2f wipe_tower_offset = tcr.priming ? Vec2f::Zero() : m_wipe_tower_pos;
     float wipe_tower_rotation = tcr.priming ? 0.f : alpha;
 
-    std::string tcr_rotated_gcode = post_process_wipe_tower_moves(tcr, wipe_tower_offset, wipe_tower_rotation);
+    std::string tcr_rotated_gcode = post_process_wipe_tower_moves(tcr, wipe_tower_offset, wipe_tower_rotation, gcodegen.config().gcode_flavor.value, gcodegen.writer().extrusion_axis());
 
     double current_z = gcodegen.writer().get_position().z();
 
@@ -158,8 +158,11 @@ std::string WipeTowerIntegration::append_tcr(GCodeGenerator &gcodegen, const Wip
 
 // This function postprocesses gcode_original, rotates and moves all G1 extrusions and returns resulting gcode
 // Starting position has to be supplied explicitely (otherwise it would fail in case first G1 command only contained one coordinate)
-std::string WipeTowerIntegration::post_process_wipe_tower_moves(const WipeTower::ToolChangeResult& tcr, const Vec2f& translation, float angle) const
-{
+std::string WipeTowerIntegration::post_process_wipe_tower_moves(const WipeTower::ToolChangeResult &tcr,
+                                                                const Vec2f &translation,
+                                                                float angle,
+                                                                const GCodeFlavor gcode_flavor,
+                                                                const std::string &extruder_letter) const {
     Vec2f extruder_offset = m_extruder_offsets[tcr.initial_tool].cast<float>();
 
     std::istringstream gcode_str(tcr.gcode);
@@ -187,11 +190,19 @@ std::string WipeTowerIntegration::post_process_wipe_tower_moves(const WipeTower:
             std::istringstream line_str(line);
             line_str >> std::noskipws;  // don't skip whitespace
             char ch = 0;
+            bool has_z = false, has_e = false;
+            double pos_z, pos_e;
             line_str >> ch >> ch; // read the "G1"
             while (line_str >> ch) {
                 if (ch == 'X' || ch == 'Y')
                     line_str >> (ch == 'X' ? pos.x() : pos.y());
-                else
+                else if (gcode_flavor == (gcfNematX) && ch == 'Z') {
+                    line_str >> pos_z;
+                    has_z = true;
+                } else if (gcode_flavor == (gcfNematX) && (ch == 'E')) {
+                    line_str >> pos_e;
+                    has_e = true;
+                } else
                     line_out << ch;
             }
 
@@ -203,17 +214,33 @@ std::string WipeTowerIntegration::post_process_wipe_tower_moves(const WipeTower:
             if (transformed_pos != old_pos || never_skip || ! line.empty()) {
                 std::ostringstream oss;
                 oss << std::fixed << std::setprecision(3) << "G1";
+                bool has_xyz = never_skip || has_z;
+                if(transformed_pos.x() != old_pos.x()) has_xyz = true;
+                if(transformed_pos.y() != old_pos.y()) has_xyz = true;
+                if (has_xyz && gcode_flavor == (gcfNematX)) {
+                    oss << " G90 ";
+                }
                 if (transformed_pos.x() != old_pos.x() || never_skip)
                     oss << " X" << transformed_pos.x() - extruder_offset.x();
                 if (transformed_pos.y() != old_pos.y() || never_skip)
                     oss << " Y" << transformed_pos.y() - extruder_offset.y();
+                if (has_z) {
+                    oss << " Z" << pos_z;
+                }
+                if (has_e) {
+                    if (gcode_flavor == (gcfNematX)) {
+                        oss << " G91";
+                    }
+                    oss << " " << extruder_letter << pos_e;
+                }
                 if (! line.empty())
                     oss << " ";
                 line = oss.str() + line;
                 old_pos = transformed_pos;
             }
+        } else if (boost::starts_with(line, "G92 ") && gcode_flavor == (gcfNematX)) {
+            line = "";
         }
-
         gcode_out += line + "\n";
 
         // If this was a toolchange command, we should change current extruder offset

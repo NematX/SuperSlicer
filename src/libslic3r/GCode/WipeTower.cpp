@@ -173,11 +173,12 @@ public:
 		}
 
         std::string gcode;
-        if (std::abs(rot.x() - rotated_current_pos.x()) > (float)EPSILON)
+        if (std::abs(rot.x() - rotated_current_pos.x()) > (float) EPSILON) {
             gcode += set_format_X(rot.x());
-
-        if (std::abs(rot.y() - rotated_current_pos.y()) > (float)EPSILON)
+        }
+        if (std::abs(rot.y() - rotated_current_pos.y()) > (float) EPSILON) {
             gcode += set_format_Y(rot.y());
+        }
 
 
         if (e != 0.f)

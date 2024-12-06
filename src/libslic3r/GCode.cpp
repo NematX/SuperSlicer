@@ -775,8 +775,8 @@ void GCodeGenerator::do_export(Print* print, const char* path, GCodeProcessorRes
             return;
     }
 
-    if(print->config().gcode_flavor.value == gcfNematX && print->config().use_relative_e_distances)
-            throw Slic3r::SlicingError(_u8L("NematX firmware can only handle absolute E gcode, please change it from relative in printer settings (use_relative_e_distances)."));
+    //if(print->config().gcode_flavor.value == gcfNematX && print->config().use_relative_e_distances)
+            //throw Slic3r::SlicingError(_u8L("NematX firmware can only handle absolute E gcode, please change it from relative in printer settings (use_relative_e_distances)."));
 
     // Enabled and either not done, or marked as done while the output file is missing.
     monitor.set_started(psGCodeExport);
@@ -3279,7 +3279,7 @@ LayerResult GCodeGenerator::process_layer(
     //put G92 E0 is relative extrusion
     bool before_layer_gcode_resets_extruder = std::regex_search(print.config().before_layer_gcode.value, regex_g92e0_gcode);
     bool layer_gcode_resets_extruder = std::regex_search(print.config().layer_gcode.value, regex_g92e0_gcode);
-    if (m_config.use_relative_e_distances) {
+    if (m_config.use_relative_e_distances && !config().gcode_flavor.value == gcfNematX ) {
         // See GH issues prusa#6336 #5073$
         if (!before_layer_gcode_resets_extruder && !layer_gcode_resets_extruder) {
             gcode += "G92 E0";

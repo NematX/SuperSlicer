@@ -172,8 +172,9 @@ std::string GCodeWriter::preamble()
     if(FLAVOR_IS(gcfNematX)) {
         gcode << "G90 ; use absolute coordinates\n";
         gcode << "G71 ; use metric units\n;";
-        if (this->config.use_relative_e_distances)
-            throw Slic3r::InvalidArgument("Error: NematX firmware does only allow relative e distance.");
+        //if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances)
+            //throw Slic3r::InvalidArgument("Error: NematX firmware does only allow relative e distance.");
+        // if use_relative_e_distances, the G91 is emmbeded in the G1/G2/g3 line just for the A/B value
         return gcode.str();
     }
     
@@ -611,6 +612,9 @@ std::string GCodeWriter::travel_to_xy(const Vec2d &point, const double speed, co
     m_pos.x() = point.x();
     m_pos.y() = point.y();
     GCodeG1Formatter w(this->get_default_gcode_formatter());
+    if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+        w.emit_axis('G', 90, 0);
+    }
     if (!w.emit_xy(point, m_pos_str_x, m_pos_str_y)) {
         //if point too close to the other, then do not write it, it's useless.
         return "";
@@ -637,6 +641,9 @@ std::string GCodeWriter::travel_arc_to_xy(const Vec2d& point, const Vec2d& cente
     m_pos.y()             = point.y();
 
     GCodeG2G3Formatter w(this->config.gcode_precision_xyz.value, this->config.gcode_precision_e.value, is_ccw);
+    if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+        w.emit_axis('G', 90, 0);
+    }
     bool has_x_y = w.emit_xy(point, m_pos_str_x, m_pos_str_y);
     if (!has_x_y) {
         //if point too close to the other, then do not write it, it's useless.
@@ -695,11 +702,17 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const bool is_lift, c
     m_pos = point;
     
     GCodeG1Formatter w(this->get_default_gcode_formatter());
+    if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+        w.emit_axis('G', 90, 0);
+    }
     bool has_x_y = w.emit_xy(point.head<2>(), m_pos_str_x, m_pos_str_y);
     if (!has_x_y) {
         //if point too close to the other, then whatever, as long as the z is different.
          //if point too close to the other, then do not write it, it's useless.
          w.clear();
+        if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+            w.emit_axis('G', 90, 0);
+        }
     }
     if (config.z_step > SCALING_FACTOR) {
         w.m_gcode_precision_xyz = 6;
@@ -742,6 +755,9 @@ std::string GCodeWriter::get_travel_to_z_gcode(const double z, const std::string
         speed = this->config.travel_speed.value;
 
     GCodeG1Formatter w(this->get_default_gcode_formatter());
+    if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+        w.emit_axis('G', 90, 0);
+    }
     if (config.z_step > SCALING_FACTOR) {
         w.m_gcode_precision_xyz = 6;
     }
@@ -778,6 +794,9 @@ std::string GCodeWriter::extrude_to_xy(const Vec2d &point, const double dE, cons
     bool is_extrude  = std::abs(delta_e) > 0.00000001;
 
     GCodeG1Formatter w(this->get_default_gcode_formatter());
+    if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+        w.emit_axis('G', 90, 0);
+    }
     if (!w.emit_xy(point, m_pos_str_x, m_pos_str_y)) {
         //if point too close to the other, then do not write it, it's useless.
         this->m_tool->cancel_extrude(dE + this->m_de_left);
@@ -786,6 +805,9 @@ std::string GCodeWriter::extrude_to_xy(const Vec2d &point, const double dE, cons
     }
     this->m_de_left += dE - delta_e;
     if (is_extrude) {
+        if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+            w.emit_axis('G', 91, 0);
+        }
         double delta = w.emit_e(m_extrusion_axis, e_to_write);
         this->m_de_left += delta;
     }
@@ -812,6 +834,9 @@ std::string GCodeWriter::extrude_arc_to_xy(const Vec2d& point, const Vec2d& cent
     bool is_extrude  = std::abs(delta_e) > 0.00000001;
 
     GCodeG2G3Formatter w(this->config.gcode_precision_xyz.value, this->config.gcode_precision_e.value, is_ccw);
+    if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+        w.emit_axis('G', 90, 0);
+    }
     bool has_x_y = w.emit_xy(point, m_pos_str_x, m_pos_str_y);
     if (!has_x_y) {
         //if point too close to the other, then do not write it, it's useless.
@@ -823,6 +848,9 @@ std::string GCodeWriter::extrude_arc_to_xy(const Vec2d& point, const Vec2d& cent
     w.emit_ij(center_offset);
     this->m_de_left += dE - delta_e;
     if (is_extrude) {
+        if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+            w.emit_axis('G', 91, 0);
+        }
         double delta = w.emit_e(m_extrusion_axis, e_to_write);
         this->m_de_left += delta;
     }
@@ -843,6 +871,9 @@ std::string GCodeWriter::extrude_to_xyz(const Vec3d &point, const double dE, con
     bool is_extrude  = std::abs(delta_e) > 0.00000001;
 
     GCodeG1Formatter w(this->get_default_gcode_formatter());
+    if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+        w.emit_axis('G', 90, 0);
+    }
     bool has_x_y = w.emit_xy(Vec2d(point.x(), point.y()), m_pos_str_x, m_pos_str_y);
     if (!has_x_y) {
         w.clear();
@@ -859,11 +890,17 @@ std::string GCodeWriter::extrude_to_xyz(const Vec3d &point, const double dE, con
         } else {
             w.clear();
             // re-write x & y. the m_pos_str_x & m_pos_str_y must stay the same, the return boolan must be 'false'
+            if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+                w.emit_axis('G', 90, 0);
+            }
             w.emit_xy(Vec2d(point.x(), point.y()), m_pos_str_x, m_pos_str_y);
         }
     }
     this->m_de_left += dE - delta_e;
     if (is_extrude) {
+        if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+            w.emit_axis('G', 91, 0);
+        }
         double delta = w.emit_e(m_extrusion_axis, e_to_write);
         if((delta < 0.00000000001) & (delta > -0.00000000001)) delta = 0;
         assert(delta == 0 ); // shoulde be already taken into account by m_tool->extrude
@@ -886,6 +923,9 @@ std::string GCodeWriter::extrude_arc_to_xyz(const Vec3d& point, const Vec2d& cen
     bool is_extrude  = std::abs(delta_e) > 0.00000001;
 
     GCodeG2G3Formatter w(this->config.gcode_precision_xyz.value, this->config.gcode_precision_e.value, is_ccw);
+    if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+        w.emit_axis('G', 90, 0);
+    }
     bool has_x_y = w.emit_xy(Vec2d(point.x(), point.y()), m_pos_str_x, m_pos_str_y);
     bool has_z = w.emit_z(point.z() + this->config.z_offset.value, m_pos_str_z);
     if (!has_x_y && !has_z) {
@@ -898,6 +938,9 @@ std::string GCodeWriter::extrude_arc_to_xyz(const Vec3d& point, const Vec2d& cen
     w.emit_ij(center_offset);
     this->m_de_left += dE - delta_e;
     if (is_extrude) {
+        if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+            w.emit_axis('G', 91, 0);
+        }
         double delta = w.emit_e(m_extrusion_axis, e_to_write);
         this->m_de_left += delta;
     }
@@ -986,6 +1029,9 @@ std::string GCodeWriter::_retract(double length, std::optional<double> restart_e
                 gcode += "G10 ; retract\n";
         } else if (!m_extrusion_axis.empty() && dE != 0) {
             GCodeG1Formatter w(this->get_default_gcode_formatter());
+            if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+                w.emit_axis('G', 91, 0);
+            }
             w.emit_e(m_extrusion_axis, emit_E);
             w.emit_f(m_tool->retract_speed() * 60.);
             w.emit_comment(this->config.gcode_comments, comment);
@@ -1020,6 +1066,9 @@ std::string GCodeWriter::unretract()
         } else if (! m_extrusion_axis.empty()) {
             // use G1 instead of G0 because G0 will blend the restart with the previous travel move
             GCodeG1Formatter w(this->get_default_gcode_formatter());
+            if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+                w.emit_axis('G', 91, 0);
+            }
             w.emit_e(m_extrusion_axis, emit_E);
             w.emit_f(m_tool->deretract_speed() * 60.);
             w.emit_comment(this->config.gcode_comments, " ; unretract");
