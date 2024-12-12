@@ -287,8 +287,8 @@ std::shared_ptr<ConfigOptionsGroup> PreferencesDialog::create_options_group(cons
                 assert( int(field->m_opt.enum_def->values().size()) > value_idx && value_idx >= 0);
                 if (int(field->m_opt.enum_def->values().size()) > value_idx && value_idx >= 0) {
                     m_values[opt_key] = field->m_opt.enum_def->value(value_idx);
-					}
-				}
+                }
+			}
 		} else {
 			assert(false);
 			m_values[opt_key] = boost::any_cast<bool>(value) ? "1" : "0";
