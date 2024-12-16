@@ -1,7 +1,10 @@
 
 page:idx:Extruder:funnel
 group:Name and Size
-	setting:idx:tool_name
+	line:Name
+		setting:idx:tool_name
+		setting:idx:nozzle_type
+	end_line
 	setting:idx:nozzle_diameter
 	setting:idx:extruder_axis
 	update_nozzle_diameter

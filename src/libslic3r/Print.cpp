@@ -174,6 +174,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
         "max_volumetric_extrusion_rate_slope_positive",
         "max_volumetric_extrusion_rate_slope_negative",
         "notes",
+        "nozzle_type",
         "only_retract_when_crossing_perimeters",
         "output_filename_format",
         "overhangs_fan_speed",

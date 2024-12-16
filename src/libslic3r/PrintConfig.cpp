@@ -2381,6 +2381,7 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("The filament material type for use in custom G-codes.");
     def->gui_flags = "show_value";
     def->set_enum_values(ConfigOptionDef::GUIType::select_open, {
+        "LCP",
         "PLA", 
         "PET",
         "ABS",
@@ -4170,6 +4171,14 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvancedE | comPrusa;
     def->is_vector_extruder = true;
     def->set_default_value(new ConfigOptionFloats{ 0.4 });
+
+    def = this->add("nozzle_type", coStrings);
+    def->label = L("Nozzle name");
+    def->category = OptionCategory::extruders;
+    def->tooltip = L("This is the nozzle description (like E3D V6 0.25 nozzleX).");
+    def->mode = comAdvancedE | comSuSi;
+    def->is_vector_extruder = true;
+    def->set_default_value(new ConfigOptionStrings{ "" });
 
     def = this->add("host_type", coEnum);
     def->label = L("Host Type");
@@ -7564,6 +7573,7 @@ void PrintConfigDef::init_extruder_option_keys()
         "max_layer_height",
         "min_layer_height",
         "nozzle_diameter",
+        "nozzle_type",
         "retract_before_travel",
         "retract_before_wipe",
         "retract_layer_change",
@@ -9765,6 +9775,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "min_width_top_surface",
 "model_precision",
 "no_perimeter_unsupported_algo",
+"nozzle_type",
 "object_gcode",
 "only_one_perimeter_top_other_algo",
 "only_one_perimeter_top",
