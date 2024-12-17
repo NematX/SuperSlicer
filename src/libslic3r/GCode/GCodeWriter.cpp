@@ -270,7 +270,7 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
         if (FLAVOR_IS(gcfRepRap)) { // M104 is deprecated on RepRapFirmware
             code = "G10"sv;
         } else if (FLAVOR_IS(gcfNematX) && tool > 0) {
-            code = "M107";
+            code = "M124";
         } else {
             code = "M104"sv;
         }
@@ -303,7 +303,7 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
         if (tool == 0)
             gcode << "M109 ; wait for extruder 1 temperature to be reached\n";
         else
-            gcode << "M110 ; wait for extruder 2 temperature to be reached\n";
+            gcode << "M129 ; wait for extruder 2 temperature to be reached\n";
     
     m_last_temperature = temperature;
     m_last_temperature_with_offset = temp_w_offset;
@@ -1206,7 +1206,7 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comm
         } else if ((gcfMakerWare == gcode_flavor) || (gcfSailfish == gcode_flavor)) {
             gcode << "M127";
         } else if (gcfNematX == gcode_flavor) {
-            gcode << (tool_id == 0 ? "M106=0" : "M108=0");
+            gcode << (tool_id == 0 ? "M106=0" : "M126=0");
         } else {
             gcode << "M107";
         }
@@ -1217,7 +1217,7 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comm
         if ((gcfMakerWare == gcode_flavor) || (gcfSailfish == gcode_flavor)) {
             gcode << "M126 T";
         } else  if (gcfNematX == gcode_flavor) {
-            gcode << (tool_id == 0 ? "M106=" : "M108=");
+            gcode << (tool_id == 0 ? "M106=" : "M126=");
         } else{
             gcode << "M106";
             if ((gcfMach3 == gcode_flavor) || (gcfMachinekit == gcode_flavor) || (gcfNematX == gcode_flavor)) {
