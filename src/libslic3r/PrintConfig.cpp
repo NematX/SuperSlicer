@@ -8680,7 +8680,8 @@ static std::set<std::string> PrintConfigDef_ignore = {
     "gcode_resolution", // now in printer config.
     "enable_dynamic_fan_speeds", "overhang_fan_speed_0","overhang_fan_speed_1","overhang_fan_speed_2","overhang_fan_speed_3", // converted in composite_legacy
     "enable_dynamic_overhang_speeds", "overhang_speed_0", "overhang_speed_1", "overhang_speed_2", "overhang_speed_3", // converted in composite_legacy
-    "travel_max_lift", "filament_travel_max_lift" // removed, using retract_lift also for rampping lift instead.
+    "travel_max_lift", "filament_travel_max_lift", // removed, using retract_lift also for rampping lift instead.
+    "small_area_infill_flow_compensation",
 };
 
 void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &value, bool remove_unkown_keys)
@@ -9053,29 +9054,8 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
 // Called after a config is loaded as a whole.
 // Perform composite conversions, for example merging multiple keys into one key.
 // Don't convert single options here, implement such conversion in PrintConfigDef::handle_legacy() instead.
-void PrintConfigDef::handle_legacy_composite(DynamicPrintConfig &config, std::vector<std::pair<t_config_option_key, std::string>> &opt_deleted)
+void PrintConfigDef::handle_legacy_composite(DynamicPrintConfig &config, std::map<t_config_option_key, std::string> &opt_deleted)
 {
-    std::map<t_config_option_key, std::string> useful_items;
-    for (auto& opt_pair : opt_deleted) {
-        t_config_option_key &opt_key = opt_pair.first;
-        std::string &value = opt_pair.second;
-        if (opt_key.find("overhang_fan_speed_") != std::string::npos) {
-            useful_items[opt_key] = value;
-            opt_key = "";
-        }
-        if ("enable_dynamic_fan_speeds" == opt_key) {
-            useful_items[opt_key] = value;
-            opt_key = "";
-        }
-        if (opt_key.find("overhang_speed_") != std::string::npos) {
-            useful_items[opt_key] = value;
-            opt_key = "";
-        }
-        if ("enable_dynamic_overhang_speeds" == opt_key) {
-            useful_items[opt_key] = value;
-            opt_key = "";
-        }
-    }
     bool old = true;
     if (config.has("print_version")) {
         std::string str_version = config.option<ConfigOptionString>("print_version")->value;
@@ -9102,6 +9082,31 @@ void PrintConfigDef::handle_legacy_composite(DynamicPrintConfig &config, std::ve
     }
     if (old && config.has("overhangs_width") && config.get_float("overhangs_width") == 0 && config.is_enabled("overhangs_width")) {
         config.option("overhangs_width")->set_enabled(false);
+    }
+    
+    // enable_dynamic_overhang/fan_speeds
+    std::map<t_config_option_key, std::string> useful_items;
+    std::vector<t_config_option_key> to_erase;
+    for (auto& [opt_key, value] : opt_deleted) {
+        if (opt_key.find("overhang_fan_speed_") != std::string::npos) {
+            useful_items[opt_key] = value;
+            to_erase.push_back(opt_key);
+        }
+        if ("enable_dynamic_fan_speeds" == opt_key) {
+            useful_items[opt_key] = value;
+            to_erase.push_back(opt_key);
+        }
+        if (opt_key.find("overhang_speed_") != std::string::npos) {
+            useful_items[opt_key] = value;
+            to_erase.push_back(opt_key);
+        }
+        if ("enable_dynamic_overhang_speeds" == opt_key) {
+            useful_items[opt_key] = value;
+            to_erase.push_back(opt_key);
+        }
+    }
+    for (const t_config_option_key &opt_key : to_erase) {
+        useful_items.erase(opt_key);
     }
     if (useful_items.find("enable_dynamic_overhang_speeds") != useful_items.end()) {
         ConfigOptionBool enable_dynamic_overhang_speeds;
@@ -9202,7 +9207,12 @@ void PrintConfigDef::handle_legacy_composite(DynamicPrintConfig &config, std::ve
         }
         config.set_key_value("overhangs_dynamic_fan_speed", opt.clone());
     }
-
+    
+    if (auto it = opt_deleted.find("small_area_infill_flow_compensation"); it != opt_deleted.end()) {
+        if (config.has("small_area_infill_flow_compensation_model")) {
+            config.option("small_area_infill_flow_compensation_model")->set_enabled(it->second == "1");
+        }
+    }
     
     //if (config.has("thumbnails")) {
     //    std::string extention;
@@ -9355,7 +9365,7 @@ std::map<std::string,std::string> PrintConfigDef::from_prusa(t_config_option_key
         // format (the first) is still set by prusa, no need to parse it.
         //output["thumbnails_format"] = opt_format.serialize();
     }
-/*
+    /*
     if ("thumbnails" == opt_key) {
         //check if their format is inside the size
         if (value.find('/') != std::string::npos) {
@@ -9488,7 +9498,7 @@ void _deserialize_maybe_from_prusa(const std::map<t_config_option_key, std::stri
                                            bool                                       with_phony,
                                            bool                                       check_prusa)
 {
-    std::vector<std::pair<t_config_option_key, std::string>> deleted_keys;
+    std::map<t_config_option_key, std::string> deleted_keys;
     std::vector<std::pair<t_config_option_key, std::string>> unknown_keys;
     const ConfigDef *def = config.def();
     for (const auto &[key, value] : settings) {
@@ -9504,7 +9514,7 @@ void _deserialize_maybe_from_prusa(const std::map<t_config_option_key, std::stri
                     config.set_deserialize(opt_key, opt_value, config_substitutions);
                 }
             } else {
-                deleted_keys.emplace_back(key, value);
+                deleted_keys[key] = value;
             }
         } catch (UnknownOptionException & /* e */) {
             // log & ignore

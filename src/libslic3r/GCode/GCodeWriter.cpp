@@ -1071,7 +1071,7 @@ std::string GCodeWriter::unretract()
             }
             w.emit_e(m_extrusion_axis, emit_E);
             w.emit_f(m_tool->deretract_speed() * 60.);
-            w.emit_comment(this->config.gcode_comments, " ; unretract");
+            w.emit_comment(this->config.gcode_comments, "unretract");
             gcode += w.string();
         }
     }
