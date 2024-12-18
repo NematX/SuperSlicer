@@ -624,6 +624,30 @@ std::string GCodeWriter::travel_to_xy(const Vec2d &point, const double speed, co
     return write_acceleration() + w.string();
 }
 
+std::string GCodeWriter::travel_to_xy_writez(const Vec2d &point, const double speed, const std::string_view comment)
+{
+    assert(std::abs(point.x()) < 120000.);
+    assert(std::abs(point.y()) < 120000.);
+
+    double travel_speed = this->config.travel_speed.value;
+    if ((speed > 0) & (speed < travel_speed))
+        travel_speed = speed;
+
+    m_pos.x() = point.x();
+    m_pos.y() = point.y();
+    GCodeG1Formatter w(this->get_default_gcode_formatter());
+    if (FLAVOR_IS(gcfNematX) && this->config.use_relative_e_distances) {
+        w.emit_axis('G', 90, 0);
+    }
+    // Force the write of the position, it's the use of this method
+    w.emit_xy(point, m_pos_str_x, m_pos_str_y);
+    assert(m_pos.z() > 0);
+    w.emit_z(m_pos.z() + this->config.z_offset.value, m_pos_str_z);
+    w.emit_f(travel_speed * 60);
+    w.emit_comment(this->config.gcode_comments, comment);
+    return write_acceleration() + w.string();
+}
+
 std::string GCodeWriter::travel_arc_to_xy(const Vec2d& point, const Vec2d& center_offset, const bool is_ccw, const double speed, const std::string_view comment)
 {
     assert(std::abs(point.x()) < 120000.);

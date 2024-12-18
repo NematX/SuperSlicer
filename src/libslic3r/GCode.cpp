@@ -2559,6 +2559,10 @@ std::string GCodeGenerator::placeholder_parser_process(
             // Update G-code writer. (without z_offset)
             m_writer.update_position_by_lift({ pos[0], pos[1], pos[2] - m_writer.config.z_offset.value});
             this->set_last_pos(this->gcode_to_point({pos[0], pos[1]}));
+        } else {
+            // to be sure, we invalidate the position.
+            // TODO that shouldn't be necessary if we diddn't detect any problematic lines.
+            this->unset_last_pos();
         }
 
         for (const Extruder &e : m_writer.extruders()) {
@@ -3279,7 +3283,7 @@ LayerResult GCodeGenerator::process_layer(
     //put G92 E0 is relative extrusion
     bool before_layer_gcode_resets_extruder = std::regex_search(print.config().before_layer_gcode.value, regex_g92e0_gcode);
     bool layer_gcode_resets_extruder = std::regex_search(print.config().layer_gcode.value, regex_g92e0_gcode);
-    if (m_config.use_relative_e_distances && !config().gcode_flavor.value == gcfNematX ) {
+    if (m_config.use_relative_e_distances && config().gcode_flavor.value != gcfNematX ) {
         // See GH issues prusa#6336 #5073$
         if (!before_layer_gcode_resets_extruder && !layer_gcode_resets_extruder) {
             gcode += "G92 E0";
@@ -7026,7 +7030,7 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
 
     bool moved_to_point = last_pos_defined() && last_pos().coincides_with_epsilon(path.first_point());
     if (m_config.travel_deceleration_use_target) {
-        if (travel_acceleration <= acceleration || travel_acceleration == 0 || acceleration == 0) {
+        if (travel_acceleration <= acceleration || travel_acceleration == 0 || acceleration == 0 || !last_pos_defined()) {
             m_writer.set_travel_acceleration((uint32_t)floor(acceleration + 0.5));
             m_writer.set_acceleration((uint32_t)floor(acceleration + 0.5));
             // go to first point of extrusion path (stop at midpoint to let us set the decel speed)
@@ -7708,7 +7712,13 @@ void GCodeGenerator::write_travel_to(std::string &gcode, Polyline& travel, std::
         this->set_last_pos(travel.points.back());
     } else if (travel.size() >= 2) {
         if (z_relative_travel.empty()) {
-            for (size_t i = 1; i < travel.size(); ++i) {
+            // ensure we're at the right z if our position has been unset.
+            if (last_pos_defined()) {
+                gcode += m_writer.travel_to_xy(this->point_to_gcode(travel.points[1]), 0.0, comment);
+            } else {
+                gcode += m_writer.travel_to_xy_writez(this->point_to_gcode(travel.points[1]), 0.0, comment + " (from unsure position)");
+            }
+            for (size_t i = 2; i < travel.size(); ++i) {
                 // use G1 because we rely on paths being straight (G0 may make round paths)
                 gcode += m_writer.travel_to_xy(this->point_to_gcode(travel.points[i]), 0.0, comment);
             }
@@ -7720,7 +7730,9 @@ void GCodeGenerator::write_travel_to(std::string &gcode, Polyline& travel, std::
         this->set_last_pos(travel.points.back());
     } else if (travel.size() == 1){
         //simple travel, as we don't know where we are.
-        gcode += m_writer.travel_to_xy(this->point_to_gcode(travel.back()), 0.0, comment);
+        gcode += m_writer.travel_to_xy_writez(this->point_to_gcode(travel.back()), 0.0, comment + " (from unsure position)");
+    } else {
+        assert(false);
     }
     
     // ramping travel (in a new layer) -> set lift if needed (so unlift() works)
