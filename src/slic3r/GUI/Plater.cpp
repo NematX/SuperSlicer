@@ -4494,7 +4494,7 @@ void Plater::priv::on_slicing_update(SlicingStatusEvent &evt)
 
 void Plater::priv::on_slicing_completed(wxCommandEvent & evt)
 {
-//    if( ( get_app_config()->get("auto_switch_preview") == "1" || (get_app_config()->get("auto_switch_preview") == "2"
+//    if( ( get_app_config()->get("auto_switch_preview") == "gcode" || (get_app_config()->get("auto_switch_preview") == "platter"
 //          && main_frame->selected_tab() < MainFrame::ETabType::LastPlater) )
 //        && !this->preview->can_display_gcode())
 //        main_frame->select_tab(MainFrame::ETabType::PlaterPreview);

@@ -443,11 +443,6 @@ void CalibrationFlowSpeedDialog::create_geometry(
         if (plat->printer_technology() == ptFFF)
             plat->fff_print().apply(plat->model(), *plat->config());
         plat->arrange();
-        //std::shared_ptr<ProgressIndicatorStub> fake_statusbar = std::make_shared<ProgressIndicatorStub>();
-        //ArrangeJob arranger(std::dynamic_pointer_cast<ProgressIndicator>(fake_statusbar), plat);
-        //arranger.prepare_all();
-        //arranger.process();
-        //arranger.finalize();
     }
 
     plat->reslice();

@@ -307,7 +307,7 @@ void AppConfig::set_defaults()
            set("notify_release", "all"); // or "none" or "release"
 
         if (get("auto_switch_preview").empty())
-            set("auto_switch_preview", "2");
+            set("auto_switch_preview", "platter");
 
 #if ENABLE_ENVIRONMENT_MAP
         if (get("use_environment_map").empty())
