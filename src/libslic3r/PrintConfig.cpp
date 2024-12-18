@@ -2698,24 +2698,18 @@ void PrintConfigDef::init_fff_params()
     def->sidetext = L("%");
     def->set_default_value(new ConfigOptionPercent(10));
 
-    def = this->add("small_area_infill_flow_compensation", coBool);
-    def->label = L("Enable small area flow compensation");
-    def->category = OptionCategory::infill;
-    def->tooltip = L("Enable flow compensation for small infill areas."
-                    "\nFirst layer is always disabled, to not compromise adhesion.");
-    def->mode = comExpert | comSuSi;
-    def->set_default_value(new ConfigOptionBool(false));
-
     def = this->add("small_area_infill_flow_compensation_model", coGraph);
     def->label = L("Flow Compensation Model");
     def->category = OptionCategory::infill;
     def->tooltip = L("Flow Compensation Model, used to adjust the flow for small solid infill "
                      "lines. The model is a graph of flow correction factors (between 0 and 1) per extrusion length (in mm)."
-                     "\nThe first point length has to be 0mm. the last point need to have a flow correction of 1.");
+                     "\nThe first point length has to be 0mm. the last point need to have a flow correction of 1."
+                    "\nIt's always disabled on the first layer, to not compromise adhesion.");
     def->mode = comExpert | comSuSi;
-    def->set_default_value(new ConfigOptionGraph(GraphData(0,10, GraphData::GraphType::SPLINE,
+    def->can_be_disabled = true;
+    def->set_default_value(disable_defaultoption(new ConfigOptionGraph(GraphData(0,10, GraphData::GraphType::SPLINE,
         {{0,0},{0.2,0.44},{0.4,0.61},{0.6,0.7},{0.8,0.76},{1.5,0.86},{2,0.89},{3,0.92},{5,0.95},{10,1}}
-    )));
+    ))));
     def->graph_settings = std::make_shared<GraphSettings>();
     def->graph_settings->title       = L("Flow Compensation Model");
     def->graph_settings->description = def->tooltip;
@@ -4354,12 +4348,12 @@ void PrintConfigDef::init_fff_params()
     def->is_vector_extruder = true;
     def->can_be_disabled = true;
     def->mode       = comExpert | comPrusa;
-    def->set_default_value(disable_defaultoption(new ConfigOptionGraphs({GraphData(0,4, GraphData::GraphType::LINEAR,
+    def->set_default_value(disable_defaultoption(new ConfigOptionGraphs({GraphData(0,5, GraphData::GraphType::LINEAR,
         {{0,100},{25,80},{50,60},{75,40},{100,20}}
     )})));
     def->graph_settings = std::make_shared<GraphSettings>();
     def->graph_settings->title       = L("Overhangs fan speed by % of overlap");
-    def->graph_settings->description = L("Choose the Overhangs maximu fan speed for each percentage of overlap with the layer below."
+    def->graph_settings->description = L("Choose the Overhangs maximum fan speed for each percentage of overlap with the layer below."
         "If the current fan speed (from perimeter, external, of default) is higher, then this setting won't slow the fan."
         "\n100% overlap is when the extrusion is fully on top of the previous layer's extrusion."
         "\n0% overlap is when the extrusion centerline is at a distance of 'overhangs threshold for speed'(overhangs_bridge_threshold)"
@@ -4390,16 +4384,17 @@ void PrintConfigDef::init_fff_params()
     def->sidetext   = L("mm/s");
     def->can_be_disabled = true;
     def->mode       = comExpert | comPrusa;
-    def->set_default_value(disable_defaultoption(new ConfigOptionGraph(GraphData(0,4, GraphData::GraphType::LINEAR,
+    def->set_default_value(disable_defaultoption(new ConfigOptionGraph(GraphData(0,5, GraphData::GraphType::LINEAR,
         {{0,0},{25,10},{50,40},{75,70},{100,100}}
     ))));
     def->graph_settings = std::make_shared<GraphSettings>();
     def->graph_settings->title       = L("Overhangs speed ratio by % of overlap");
     def->graph_settings->description = L("Choose the Overhangs speed for each percentage of overlap with the layer below."
-        "\nThe speed is a percentage ratio between overhangs speed (for 0% overlap) and perimeter / external perimeter speed (for 100% overlap)."
+        "\nThe speed is a percentage ratio between overhangs speed (for 0% overlap) and"
+        "\nperimeter / external perimeter speed (for 100% overlap)."
         "\n100% overlap is when the extrusion is fully on top of the previous layer's extrusion."
-        "\n0% overlap is when the extrusion centerline is at a distance of 'overhangs threshold for speed'(overhangs_bridge_threshold)"
-        "\nfrom the nearest extrusion of the previous layer.");
+        "\n0% overlap is when the extrusion centerline is at a distance of 'overhangs threshold for speed'"
+        "\n(overhangs_bridge_threshold) from the nearest extrusion of the previous layer.");
     def->graph_settings->x_label     = L("overlap % with previous layer");
     def->graph_settings->y_label     = L("Speed ratio (%)");
     def->graph_settings->null_label  = L("Uses overhangs speed");
@@ -9209,10 +9204,6 @@ void PrintConfigDef::handle_legacy_composite(DynamicPrintConfig &config, std::ve
     }
 
     
-    if (!config.has("ensure_vertical_shell_thickness") && config.has("perimeters")) {
-        config.set_key_value("ensure_vertical_shell_thickness", new ConfigOptionEnum<EnsureVerticalShellThickness>(EnsureVerticalShellThickness::Enabled));
-    }
-
     //if (config.has("thumbnails")) {
     //    std::string extention;
     //    if (config.has("thumbnails_format")) {
@@ -9848,7 +9839,6 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "skirt_brim",
 "skirt_distance_from_brim",
 "skirt_extrusion_width",
-"small_area_infill_flow_compensation",
 "small_area_infill_flow_compensation_model",
 "small_perimeter_max_length",
 "small_perimeter_min_length",

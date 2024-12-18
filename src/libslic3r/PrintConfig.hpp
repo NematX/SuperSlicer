@@ -999,7 +999,6 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat,                print_retract_lift))
     ((ConfigOptionString,               region_gcode))
     ((ConfigOptionPercent,              second_layer_flow_ratio))
-    ((ConfigOptionBool,                 small_area_infill_flow_compensation))
     ((ConfigOptionGraph,                small_area_infill_flow_compensation_model))
     ((ConfigOptionFloatOrPercent,       small_perimeter_speed))
     ((ConfigOptionFloatOrPercent,       small_perimeter_min_length))

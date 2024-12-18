@@ -126,18 +126,31 @@ namespace Slic3r {
 
     struct GraphSettings
     {
+        // title to the graph window
         std::string title;
+        // a text written in the graph window, to explain how to use it for hte specified setting
         std::string description;
+        // label displayed on the left of the y axis (rotated)
         std::string y_label;
+        // label displayed below the x axis
         std::string x_label;
+        // what's displayed instead of the graph when there is no points
         std::string null_label;
+        // default values for min & max x, it's enforced if label_min_x & label_max_x are empty
         double min_x, max_x, step_x;
+        // default values for min & max y, it's enforced if label_min_y & label_max_y are empty
         double min_y, max_y, step_y;
+        // label for the box that allow to change the min x (hidden if empty)
         std::string label_min_x;
+        // label for the box that allow to change the max x (hidden if empty)
         std::string label_max_x;
+        // label for the box that allow to change the min y (hidden if empty)
         std::string label_min_y;
+        // label for the box that allow to change the max y (hidden if empty)
         std::string label_max_y;
+        // the kinds of graph types allowed. the button that allow toc hange them is hidden if only one is available.
         std::vector<GraphData::GraphType> allowed_types;
+        // the values when you click on the "reset" button (dynamically set to the current data stored in the setting)
         GraphData reset_vals;
     };
 }

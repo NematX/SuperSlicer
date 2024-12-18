@@ -248,6 +248,7 @@ public:
     const wxColour& get_label_highlight_clr()   { return m_color_highlight_label_default; }
     const wxColour& get_highlight_default_clr() { return m_color_highlight_default; }
     const wxColour& get_color_hovered_btn_label() { return m_color_hovered_btn_label; }
+    const wxColour& get_color_default_btn_label() { return m_color_default_btn_label; }
     const wxColour& get_color_hovered_btn() { return m_color_hovered_btn; }
     const wxColour& get_color_selected_btn_bg() { return m_color_selected_btn_bg; }
     void            force_colors_update();
