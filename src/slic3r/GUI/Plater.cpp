@@ -661,7 +661,7 @@ Sidebar::priv::~priv()
 
 void Sidebar::priv::show_preset_comboboxes()
 {
-    PrinterTechnology tech = wxGetApp().preset_bundle->printers.get_edited_preset().printer_technology();
+    PrinterTechnology tech = wxGetApp().get_current_printer_technology();
 
     for (size_t i = 0; i < 2; ++i)
         sizer_presets->Show(i, tech == ptFFF);
@@ -8723,7 +8723,7 @@ bool Plater::can_paste_from_clipboard() const
     if (clipboard.is_empty() && p->sidebar->obj_list()->clipboard_is_empty())
         return false;
 
-    if ((wxGetApp().preset_bundle->printers.get_edited_preset().printer_technology() == ptSLA) && !clipboard.is_sla_compliant())
+    if ((wxGetApp().get_current_printer_technology() == ptSLA) && !clipboard.is_sla_compliant())
         return false;
 
     Selection::EMode mode = clipboard.get_mode();
@@ -8742,7 +8742,7 @@ bool Plater::can_copy_to_clipboard() const
         return false;
 
     const Selection& selection = p->view3D->get_canvas3d()->get_selection();
-    if ((wxGetApp().preset_bundle->printers.get_edited_preset().printer_technology() == ptSLA) && !selection.is_sla_compliant())
+    if ((wxGetApp().get_current_printer_technology() == ptSLA) && !selection.is_sla_compliant())
         return false;
 
     return true;

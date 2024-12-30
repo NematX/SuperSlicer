@@ -1444,14 +1444,15 @@ bool GUI_App::on_init_inner()
         scrn->SetText(_L("Loading configuration")+ dots);
     }
 
-    preset_bundle.reset(new PresetBundle());
+    preset_bundle.reset(nullptr);
+    PresetBundle* new_preset_bundle = new PresetBundle();
 
     // just checking for existence of Slic3r::data_dir is not enough : it may be an empty directory
     // supplied as argument to --datadir; in that case we should still run the wizard
-    preset_bundle->setup_directories();
+    new_preset_bundle->setup_directories();
     
     if (! older_data_dir_path.empty()) {
-        preset_bundle->import_newer_configs(older_data_dir_path);
+        new_preset_bundle->import_newer_configs(older_data_dir_path);
     }
 
     if (is_editor()) {
@@ -1513,15 +1514,18 @@ bool GUI_App::on_init_inner()
     std::string delayed_error_load_presets;
     wxImage::AddHandler(new wxJPEGHandler());
     // Suppress the '- default -' presets.
-    preset_bundle->set_default_suppressed(app_config->get_bool("no_defaults"));
+    new_preset_bundle->set_default_suppressed(app_config->get_bool("no_defaults"));
     try {
         // Enable all substitutions (in both user and system profiles), but log the substitutions in user profiles only.
         // If there are substitutions in system profiles, then a "reconfigure" event shall be triggered, which will force
         // installation of a compatible system preset, thus nullifying the system preset substitutions.
-        init_params->preset_substitutions = preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
+        init_params->preset_substitutions = new_preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
     } catch (const std::exception &ex) {
         delayed_error_load_presets = ex.what(); 
     }
+
+    //now that new_preset_bundle is initialized, we can publish it
+    preset_bundle.reset(new_preset_bundle);
 
 #ifdef WIN32
 #if !wxVERSION_EQUAL_OR_GREATER_THAN(3,1,3)
@@ -1674,24 +1678,40 @@ bool GUI_App::dark_mode()
 #endif
 }
 
-const wxColour GUI_App::get_label_default_clr_system()
+const wxColour GUI_App::get_label_default_clr_system(bool is_dark_mode)
 {
-    return dark_mode() ? wxColour(115, 220, 103) : wxColour(26, 132, 57);
+    return is_dark_mode ? wxColour(115, 220, 103) : wxColour(26, 132, 57);
 }
 
-const wxColour GUI_App::get_label_default_clr_modified()
+const wxColour GUI_App::get_label_default_clr_modified(bool is_dark_mode)
 {
-    return dark_mode() ? wxColour(253, 111, 40) : wxColour(252, 77, 1);
+    return is_dark_mode ? wxColour(253, 111, 40) : wxColour(252, 77, 1);
 }
 
-const wxColour GUI_App::get_label_default_clr_default()
+const wxColour GUI_App::get_label_default_clr_default(bool is_dark_mode)
 {
-    return dark_mode() ? wxColour(250, 250, 250) : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
+    return is_dark_mode ? wxColour(230, 230, 230) : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
 }
 
-const wxColour GUI_App::get_label_default_clr_phony()
+const wxColour GUI_App::get_label_default_clr_phony(bool is_dark_mode)
 {
-    return dark_mode() ? wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT) : wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT);
+    return is_dark_mode ? wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT) : wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT);
+}
+
+const wxColour &GUI_App::get_label_clr_default() {
+    return dark_mode() ? m_color_dark_mode_label_default : m_color_label_default;
+}
+
+const wxColour &GUI_App::get_label_clr_modified() {
+    return dark_mode() ? m_color_dark_mode_label_modified : m_color_label_modified;
+}
+
+const wxColour &GUI_App::get_label_clr_sys() {
+    return dark_mode() ? m_color_dark_mode_label_sys : m_color_label_sys;
+}
+
+const wxColour &GUI_App::get_label_clr_phony() {
+    return dark_mode() ? m_color_dark_mode_label_phony : m_color_label_phony;
 }
 
 #ifdef GUI_TAG_PALETTE
@@ -1712,17 +1732,20 @@ std::map<ConfigOptionMode, std::string> GUI_App::get_mode_default_palette()
 
 void GUI_App::init_ui_colours()
 {
-    m_color_label_modified          = get_label_default_clr_modified();
-    m_color_label_sys               = get_label_default_clr_system();
+    m_color_label_modified  = get_label_default_clr_modified(false);
+    m_color_label_sys       = get_label_default_clr_system(false);
+    m_color_label_default   = get_label_default_clr_default(false);
+    m_color_label_phony     = get_label_default_clr_phony(false);
+    m_color_dark_mode_label_modified = get_label_default_clr_modified(true);
+    m_color_dark_mode_label_sys      = get_label_default_clr_system(true);
+    m_color_dark_mode_label_default  = get_label_default_clr_default(true);
+    m_color_dark_mode_label_phony    = get_label_default_clr_phony(true);
 #ifdef GUI_TAG_PALETTE
-    m_mode_palette                  = get_mode_default_palette();
+    m_mode_palette = get_mode_default_palette();
 #endif
-    m_color_label_default           = get_label_default_clr_default();
-    m_color_label_phony             = get_label_default_clr_phony();
 
-    bool is_dark_mode = dark_mode();
-#ifdef _WIN32
-    m_color_label_default           = 
+    const bool is_dark_mode = dark_mode();
+#ifdef _MSW_DARK_MODE
     m_color_highlight_label_default = is_dark_mode ? wxColour(230, 230, 230): wxSystemSettings::GetColour(/*wxSYS_COLOUR_HIGHLIGHTTEXT*/wxSYS_COLOUR_WINDOWTEXT);
     m_color_highlight_default       = is_dark_mode ? wxColour(78, 78, 78)   : wxSystemSettings::GetColour(wxSYS_COLOUR_3DLIGHT);
     // Prusa: is_dark_mode ? wxColour(253, 111, 40) : wxColour(252, 77, 1); (fd6f28 & fc4d01) SV: 84 99 ; 100 99 (with light hue diff)
@@ -1734,8 +1757,6 @@ void GUI_App::init_ui_colours()
     m_color_default_btn_label       = is_dark_mode ? wxColour(255, 181, 100): wxColour(203, 61, 0);
     // Prusa: is_dark_mode ? wxColour(95, 73, 62)   : wxColour(228, 220, 216); (f2ba9e & e4dcd8) SV: 35 37 ;  5 90
     m_color_selected_btn_bg         = is_dark_mode ? wxColour(95, 73, 62)   : wxColour(228, 220, 216);
-#else
-    m_color_label_default = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
 #endif
     m_color_window_default          = is_dark_mode ? wxColour(43, 43, 43)   : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
 }
@@ -1748,11 +1769,43 @@ void GUI_App::update_ui_colours_from_appconfig()
         if (!str.empty())
             m_color_label_sys = wxColour(str);
     }
+    if (app_config->has("label_clr_dark_mode_sys")) {
+        auto str = app_config->get("label_clr_dark_mode_sys");
+        if (str != "")
+            m_color_dark_mode_label_sys = wxColour(str);
+    }
 
     if (app_config->has("label_clr_modified")) {
         auto str = app_config->get("label_clr_modified");
         if (!str.empty())
             m_color_label_modified = wxColour(str);
+    }
+    if (app_config->has("label_clr_dark_mode_modified")) {
+        auto str = app_config->get("label_clr_dark_mode_modified");
+        if (str != "")
+            m_color_dark_mode_label_modified = wxColour(str);
+    }
+
+    if (app_config->has("label_clr_default")) {
+        auto str = app_config->get("label_clr_default");
+        if (str != "")
+            m_color_label_default = wxColour(str);
+    }
+    if (app_config->has("label_clr_dark_mode_default")) {
+        auto str = app_config->get("label_clr_dark_mode_default");
+        if (str != "")
+            m_color_dark_mode_label_default = wxColour(str);
+    }
+    
+    if (app_config->has("label_clr_phony")) {
+        auto str = app_config->get("label_clr_phony");
+        if (str != "")
+            m_color_label_phony = wxColour(str);
+    }
+    if (app_config->has("label_clr_dark_mode_phony")) {
+        auto str = app_config->get("label_clr_dark_mode_phony");
+        if (str != "")
+            m_color_dark_mode_label_phony = wxColour(str);
     }
     
 #ifdef GUI_TAG_PALETTE
@@ -1767,25 +1820,13 @@ void GUI_App::update_ui_colours_from_appconfig()
     }
 #endif
 
-    if (app_config->has("label_clr_default")) {
-        auto str = app_config->get("label_clr_default");
-        if (str != "")
-            m_color_label_default = wxColour(str);
-    }
-
-    if (app_config->has("label_clr_phony")) {
-        auto str = app_config->get("label_clr_phony");
-        if (str != "")
-            m_color_label_phony = wxColour(str);
-    }
-
     Slic3r::GUI::Widget::set_clr_border_hovered(change_endian_int24(
         app_config->create_color(0.86f, 0.93f, AppConfig::EAppColorType::Highlight)));
     Slic3r::GUI::Widget::set_clr_background_focused(change_endian_int24(
         app_config->create_color(0.86f, 0.93f, AppConfig::EAppColorType::Main)));
 
 #ifdef _WIN32
-    bool is_dark_mode = dark_mode();
+    const bool is_dark_mode = dark_mode();
     m_color_hovered_btn = is_dark_mode ? color_from_int(app_config->create_color(0.84f, 0.99f, AppConfig::EAppColorType::Main)) :
         color_from_int(app_config->create_color(1.00f, 0.99f, AppConfig::EAppColorType::Main));
     m_color_hovered_btn_label = is_dark_mode ? color_from_int(app_config->create_color(0.84f, 0.99f, AppConfig::EAppColorType::Highlight)) :
@@ -1826,6 +1867,7 @@ static bool is_default(wxWindow* win)
 void GUI_App::UpdateDarkUI(wxWindow* window, bool highlited/* = false*/, bool just_font/* = false*/)
 {
 #ifdef _WIN32
+    const bool is_dark_mode = dark_mode();
     bool is_focused_button = false;
     bool is_default_button = false;
     if (wxButton* btn = dynamic_cast<wxButton*>(window)) {
@@ -1836,10 +1878,15 @@ void GUI_App::UpdateDarkUI(wxWindow* window, bool highlited/* = false*/, bool ju
         // button marking
         {
             auto mark_button = [this, btn, highlited](const bool mark) {
-                if (btn->GetLabel().IsEmpty())
-                    btn->SetBackgroundColour(mark ? m_color_selected_btn_bg   : highlited ? m_color_highlight_default : m_color_window_default);
-                else
-                    btn->SetForegroundColour(mark ? m_color_hovered_btn_label : (is_default(btn) ? m_color_default_btn_label : m_color_label_default));
+                if (btn->GetLabel().IsEmpty()) {
+                    btn->SetBackgroundColour(mark          ? m_color_selected_btn_bg :
+                                                 highlited ? m_color_highlight_default :
+                                                             m_color_window_default);
+                } else {
+                    btn->SetForegroundColour(
+                        mark ? m_color_hovered_btn_label :
+                               (is_default(btn) ? m_color_default_btn_label : get_label_clr_default()));
+                }
                 btn->Refresh();
                 btn->Update();
             };
@@ -1867,7 +1914,7 @@ void GUI_App::UpdateDarkUI(wxWindow* window, bool highlited/* = false*/, bool ju
         for (size_t i = 0; i < list->GetCount(); i++)
             if (wxOwnerDrawn* item = list->GetItem(i)) {
                 item->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
-                item->SetTextColour(m_color_label_default);
+                item->SetTextColour(is_dark_mode ? m_color_dark_mode_label_default : m_color_label_default);
             }
         return;
     }
@@ -1879,19 +1926,19 @@ void GUI_App::UpdateDarkUI(wxWindow* window, bool highlited/* = false*/, bool ju
             pane->SetWindowStyle(pane->GetWindowStyle() | wxNO_BORDER);
         }
         pane->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
-        pane->SetForegroundColour(m_color_label_default);
+        pane->SetForegroundColour(is_dark_mode ? m_color_dark_mode_label_default : m_color_label_default);
         wxWindowList& lst = pane->GetChildren();
         for (size_t i = 0; i < lst.size(); i++)
             if (wxWindow* item = lst[i]) {
                 item->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
-                item->SetForegroundColour(m_color_label_default);
+                item->SetForegroundColour(is_dark_mode ? m_color_dark_mode_label_default : m_color_label_default);
             }
     }
 
     if (!just_font)
         window->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
     if (!is_focused_button && !is_default_button)
-        window->SetForegroundColour(m_color_label_default);
+        window->SetForegroundColour(is_dark_mode ? m_color_dark_mode_label_default : m_color_label_default);
 #endif
 }
 
@@ -1940,7 +1987,7 @@ void GUI_App::UpdateAllStaticTextDarkUI(wxWindow* parent)
     auto children = parent->GetChildren();
     for (auto child : children) {
         if (dynamic_cast<wxStaticText*>(child))
-            child->SetForegroundColour(m_color_label_default);
+            child->SetForegroundColour(dark_mode() ? m_color_dark_mode_label_default : m_color_label_default);
     }
 #endif
 }
@@ -2005,6 +2052,14 @@ void GUI_App::update_fonts(const MainFrame *main_frame)
 
 void GUI_App::set_label_clr_modified(const wxColour& clr) 
 {
+    if (dark_mode()) {
+        if (m_color_dark_mode_label_modified == clr)
+            return;
+        m_color_dark_mode_label_modified = clr;
+        const std::string str = encode_color(ColorRGB(clr.Red(), clr.Green(), clr.Blue()));
+        app_config->set("label_clr_dark_mode_modified", str);
+        return;
+    }
     if (m_color_label_modified == clr)
         return;
     m_color_label_modified = clr;
@@ -2014,6 +2069,14 @@ void GUI_App::set_label_clr_modified(const wxColour& clr)
 
 void GUI_App::set_label_clr_sys(const wxColour& clr)
 {
+    if (dark_mode()) {
+        if (m_color_dark_mode_label_sys == clr)
+            return;
+        m_color_dark_mode_label_sys = clr;
+        const std::string str = encode_color(ColorRGB(clr.Red(), clr.Green(), clr.Blue()));
+        app_config->set("label_clr_dark_mode_sys", str);
+        return;
+    }
     if (m_color_label_sys == clr)
         return;
     m_color_label_sys = clr;
@@ -2022,6 +2085,16 @@ void GUI_App::set_label_clr_sys(const wxColour& clr)
 }
 
 void GUI_App::set_label_clr_default(const wxColour& clr) {
+    if (dark_mode()) {
+        if (m_color_dark_mode_label_default == clr)
+            return;
+        m_color_dark_mode_label_default = clr;
+        auto clr_str = wxString::Format(wxT("#%02X%02X%02X"), clr.Red(), clr.Green(), clr.Blue());
+        std::string str = clr_str.ToStdString();
+        app_config->set("label_clr_dark_mode_default", str);
+        app_config->save();
+        return;
+    }
     if (m_color_label_default == clr)
         return;
     m_color_label_default = clr;
@@ -2032,6 +2105,16 @@ void GUI_App::set_label_clr_default(const wxColour& clr) {
 }
 
 void GUI_App::set_label_clr_phony(const wxColour& clr) {
+    if (dark_mode()) {
+        if (m_color_dark_mode_label_phony == clr)
+            return;
+        m_color_dark_mode_label_phony = clr;
+        auto clr_str = wxString::Format(wxT("#%02X%02X%02X"), clr.Red(), clr.Green(), clr.Blue());
+        std::string str = clr_str.ToStdString();
+        app_config->set("label_clr_dark_mode_phony", str);
+        app_config->save();
+        return;
+    }
     if (m_color_label_phony == clr)
         return;
     m_color_label_phony = clr;
@@ -2679,6 +2762,14 @@ bool GUI_App::select_language()
     return false;
 }
 
+PrinterTechnology GUI_App::get_current_printer_technology() const {
+    if (preset_bundle) {
+        return preset_bundle->printers.get_edited_preset().printer_technology();
+    }
+    // still initialisating
+    return ptUnknown;
+}
+
 // Load gettext translation files and activate them at the start of the application,
 // based on the "translation_language" key stored in the application config.
 bool GUI_App::load_language(wxString language, bool initial)
@@ -3139,7 +3230,7 @@ void GUI_App::open_preferences(const std::string& highlight_option /*= std::stri
 
 bool GUI_App::has_unsaved_preset_changes() const
 {
-    PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+    PrinterTechnology printer_technology = get_current_printer_technology();
     for (const Tab* const tab : tabs_list) {
         if (tab->supports_printer_technology(printer_technology) && tab->completed() && tab->saved_preset_is_dirty())
             return true;
@@ -3149,7 +3240,7 @@ bool GUI_App::has_unsaved_preset_changes() const
 
 bool GUI_App::has_current_preset_changes() const
 {
-    PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+    PrinterTechnology printer_technology = get_current_printer_technology();
     for (const Tab* const tab : tabs_list) {
         if (tab->supports_printer_technology(printer_technology) && tab->completed() && tab->current_preset_is_dirty())
             return true;
@@ -3159,7 +3250,7 @@ bool GUI_App::has_current_preset_changes() const
 
 void GUI_App::update_saved_preset_from_current_preset()
 {
-    PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+    PrinterTechnology printer_technology = get_current_printer_technology();
     for (Tab* tab : tabs_list) {
         if (tab->supports_printer_technology(printer_technology) && tab->completed())
             tab->update_saved_preset_from_current_preset();
@@ -3169,7 +3260,7 @@ void GUI_App::update_saved_preset_from_current_preset()
 std::vector<const PresetCollection*> GUI_App::get_active_preset_collections() const
 {
     std::vector<const PresetCollection*> ret;
-    PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+    PrinterTechnology printer_technology = get_current_printer_technology();
     for (const Tab* tab : tabs_list)
         if (tab->supports_printer_technology(printer_technology) && tab->completed()) {
             assert(tab->get_presets());
@@ -3227,7 +3318,7 @@ bool GUI_App::check_and_save_current_preset_changes(const wxString& caption, con
 
 void GUI_App::apply_keeped_preset_modifications()
 {
-    PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+    PrinterTechnology printer_technology = get_current_printer_technology();
     for (Tab* tab : tabs_list) {
         if (tab->supports_printer_technology(printer_technology))
             tab->apply_config_from_cache();
@@ -3257,7 +3348,7 @@ bool GUI_App::check_and_keep_current_preset_changes(const wxString& caption, con
             if (is_called_from_configwizard)
                 return; // no need to discared changes. It will be done fromConfigWizard closing
 
-            PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+            PrinterTechnology printer_technology = get_current_printer_technology();
             for (const Tab* const tab : tabs_list) {
                 if (tab->supports_printer_technology(printer_technology) && tab->completed() && tab->current_preset_is_dirty())
                     tab->m_presets->discard_current_changes();
@@ -3370,7 +3461,7 @@ void GUI_App::load_current_presets(bool check_printer_presets_ /*= true*/)
     if (check_printer_presets_)
         check_printer_presets();
 
-    PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+    PrinterTechnology printer_technology = get_current_printer_technology();
 	this->plater()->set_printer_technology(printer_technology);
     for (Tab *tab : tabs_list)
 		if (tab->supports_printer_technology(printer_technology) && tab->get_presets()) {
@@ -3628,7 +3719,7 @@ bool GUI_App::run_wizard(ConfigWizard::RunReason reason, ConfigWizard::StartPage
         load_current_presets();
 
         // #ysFIXME - delete after testing: This part of code looks redundant. All checks are inside ConfigWizard::priv::apply_config() 
-        if (preset_bundle->printers.get_edited_preset().printer_technology() == ptSLA)
+        if (get_current_printer_technology() == ptSLA)
             may_switch_to_SLA_preset(_L("Configuration is editing from ConfigWizard"));
     }
 
@@ -3851,37 +3942,35 @@ bool GUI_App::check_updates(const bool verbose)
     return true;
 }
 
-bool GUI_App::open_browser_with_warning_dialog(const wxString& url, wxWindow* parent/* = nullptr*/, bool force_remember_choice /*= true*/, int flags/* = 0*/)
+bool GUI_App::open_browser_with_warning_dialog(const wxString& url,  wxWindow* parent/* = nullptr*/, bool allow_remember_choice/* = true*/, int flags/* = 0*/)
 {
-    bool launch = true;
 
     // warning dialog containes a "Remember my choice" checkbox
     std::string option_key = "suppress_hyperlinks";
-    if (force_remember_choice || app_config->get(option_key).empty()) {
-        if (app_config->get(option_key).empty()) {
-            RichMessageDialog dialog(parent, _L("Open hyperlink in default browser?"), format(_L("%1%: Open hyperlink"), SLIC3R_APP_NAME), wxICON_QUESTION | wxYES_NO);
-            dialog.ShowCheckBox(_L("Remember my choice"));
-            auto answer = dialog.ShowModal();
-            launch = answer == wxID_YES;
-            if (dialog.IsCheckBoxChecked()) {
-                wxString preferences_item = _L("Suppress to open hyperlink in browser");
-                wxString msg =
-                    format(_L("%1% will remember your choice."), SLIC3R_APP_NAME) + "\n\n" +
-                    _L("You will not be asked about it again on hyperlinks hovering.") + "\n\n" +
-                    format_wxstr(_L("Visit \"Preferences\" and check \"%1%\"\nto changes your choice."), preferences_item);
+    std::string option_value = app_config->get(option_key);
+    bool launch = true;
+    if (allow_remember_choice && option_value != "allow") {
+        RichMessageDialog dialog(parent, _L("Open hyperlink in default browser?"), format(_L("%1%: Open hyperlink"), SLIC3R_APP_NAME), wxICON_QUESTION | wxYES_NO);
+        dialog.ShowCheckBox(_L("Remember my choice"));
+        auto answer = dialog.ShowModal();
+        launch = answer == wxID_YES;
+        if (dialog.IsCheckBoxChecked()) {
+            this->open_preferences("suppress_hyperlinks", "General");
+            //wxString preferences_item = _L("Suppress to open hyperlink in browser");
+            //wxString msg =
+            //    format(_L("%1% will remember your choice."), SLIC3R_APP_NAME) + "\n\n" +
+            //    _L("You will not be asked about it again on hyperlinks hovering.") + "\n\n" +
+            //    format_wxstr(_L("Visit \"Preferences\" and check \"%1%\"\nto changes your choice."), preferences_item);
 
-                MessageDialog msg_dlg(parent, msg, format(_L("%1%: Don't ask me again"), SLIC3R_APP_NAME), wxOK | wxCANCEL | wxICON_INFORMATION);
-                if (msg_dlg.ShowModal() == wxID_CANCEL)
-                    return false;
-                app_config->set(option_key, answer == wxID_NO ? "1" : "0");
-            }
+            //MessageDialog msg_dlg(parent, msg, format(_L("%1%: Don't ask me again"), SLIC3R_APP_NAME), wxOK | wxCANCEL | wxICON_INFORMATION);
+            //if (msg_dlg.ShowModal() == wxID_CANCEL)
+            //    return false;
+            //app_config->set(option_key, answer == wxID_NO ? "1" : "0");
         }
-        if (launch)
-            launch = !app_config->get_bool(option_key);
     }
     // warning dialog doesn't containe a "Remember my choice" checkbox
     // and will be shown only when "Suppress to open hyperlink in browser" is ON.
-    else if (app_config->get_bool(option_key)) {
+    else if (option_value != "allow") {
         MessageDialog dialog(parent, _L("Open hyperlink in default browser?"), format(_L("%1%: Open hyperlink"), SLIC3R_APP_NAME), wxICON_QUESTION | wxYES_NO);
         launch = dialog.ShowModal() == wxID_YES;
     }
