@@ -1707,6 +1707,15 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert | comSuSi;
     def->set_default_value(new ConfigOptionBool(true));
 
+    def = this->add("external_perimeters_staggered", coFloatOrPercent);
+    def->label = L("Staggered external periemter");
+    // TRN PrintSettings: "Staggered inner seams"
+    def->category = OptionCategory::perimeter;
+    def->tooltip = L("Print the external periemter a bit lower to avoid dragging the nozzle into it while printing other perimeters."
+        "Can be a percentage of the current layer height.");
+    def->mode = comAdvancedE | comSuSi;
+    def->set_default_value(new ConfigOptionFloatOrPercent(0, false));
+
     def = this->add("extra_perimeters", coBool);
     def->label = L("filling horizontal gaps on slopes");
     def->full_label = L("Extra perimeters (do nothing)");
@@ -9672,6 +9681,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "external_perimeters_first_force",
 "external_perimeters_hole",
 "external_perimeters_nothole",
+"external_perimeters_staggered",
 "external_perimeters_vase",
 "extra_perimeters_odd_layers",
 "extruder_extrusion_multiplier_speed",

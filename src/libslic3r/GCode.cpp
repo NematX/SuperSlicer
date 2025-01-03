@@ -6371,18 +6371,28 @@ double GCodeGenerator::_compute_e_per_mm(const ExtrusionPath &path) {
 std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::string_view description, double speed) {
 
     std::string descr = description.empty() ? gcode_extrusion_role_to_string(extrusion_role_to_gcode_extrusion_role(path.role())) : std::string(description);
+    // external_perimeters_staggered
+    std::optional<double> saved_z;
+    if (config().external_perimeters_first.value && config().external_perimeters_staggered.value > 0 && !config().infill_first.value && path.role().is_external_perimeter()) {
+        saved_z = m_writer.get_unlifted_position().z();
+        Vec3d position = m_writer.get_unlifted_position();
+        position.z() -= config().external_perimeters_staggered.get_abs_value(layer()->height);
+        m_writer.update_position_by_lift(position);
+    }
+    // end external_perimeters_staggered
+
     std::string gcode = this->_before_extrude(path, descr, speed);
 
-    std::function<void(std::string&, const Line&, double, const std::string&)> func = [this](std::string& gcode, const Line& line, double e_per_mm, const std::string& comment) {
-        if (line.a == line.b) return; //todo: investigate if it happens (it happens in perimeters)
-        gcode += m_writer.extrude_to_xy(
-            this->point_to_gcode(line.b),
-            e_per_mm * unscaled(line.length()),
-            comment);
-    };
+    if (saved_z) {
+        gcode += m_writer.extrude_to_xyz(m_writer.get_position(), 0, "ensure end of staggered z");
+    }
 
     // calculate extrusion length per distance unit
     double e_per_mm = _compute_e_per_mm(path);
+
+    if (saved_z && layer()->id() == 0 && *saved_z <= layer()->height + EPSILON && m_writer.get_unlifted_position().z() < layer()->height) {
+        e_per_mm *= m_writer.get_unlifted_position().z() / layer()->height;
+    }
     ArcPolyline polyline = path.as_polyline();
     std::optional<bool> is_ccw;
     if (polyline.size() > 1) {
@@ -6552,6 +6562,14 @@ std::string GCodeGenerator::_extrude(const ExtrusionPath &path, const std::strin
     //    }
     }
     gcode += this->_after_extrude(path);
+    // external_perimeters_staggered
+    if (saved_z) {
+        Vec3d position = m_writer.get_unlifted_position();
+        position.z() = *saved_z;
+        m_writer.update_position_by_lift(position);
+        gcode += m_writer.extrude_to_xyz(m_writer.get_position(), 0, "ensure end of staggered z");
+    }
+    // end external_perimeters_staggered
 
     return gcode;
 }
@@ -7172,11 +7190,13 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
     // compensate retraction
     if (m_delayed_layer_change.empty()) {
         gcode += m_writer.unlift();//this->unretract();
-        assert(is_approx(m_writer.get_position().z(), m_layer->print_z, EPSILON));
+        assert(is_approx(m_writer.get_position().z(), m_layer->print_z, EPSILON) ||
+               (config().external_perimeters_first && config().external_perimeters_staggered));
     } else {
         //check if an unlift happens
         std::string unlift = m_writer.unlift();
-        assert(is_approx(m_writer.get_position().z(), m_layer->print_z, EPSILON));
+        assert(is_approx(m_writer.get_position().z(), m_layer->print_z, EPSILON) ||
+               (config().external_perimeters_first && config().external_perimeters_staggered));
         if (unlift.empty()) {
             unlift = m_delayed_layer_change;
         }
@@ -7738,7 +7758,8 @@ void GCodeGenerator::write_travel_to(std::string &gcode, Polyline& travel, std::
         this->writer().set_lift(this->writer().get_position().z() - *m_new_z_target);
         m_new_z_target.reset();
     }
-    assert(is_approx(this->writer().get_unlifted_position().z(), m_layer->print_z, EPSILON) || comment == "Travel to a Wipe Tower");
+    assert(is_approx(this->writer().get_unlifted_position().z(), m_layer->print_z, EPSILON) || comment == "Travel to a Wipe Tower" ||
+               (config().external_perimeters_first && config().external_perimeters_staggered));
 }
 
 // generate a travel in xyz

@@ -348,6 +348,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig* config)
     for (auto el : {
         "extra_perimeters", "extra_perimeters_odd_layers", "extra_perimeters_on_overhangs",
         "external_perimeters_first", "external_perimeter_extrusion_width", "external_perimeter_extrusion_spacing","external_perimeter_extrusion_change_odd_layers",
+        "external_perimeters_staggered",
         "overhangs",
         "seam_position","staggered_inner_seams",
         "perimeter_speed", "perimeter_reverse", "perimeter_generator",
@@ -443,11 +444,14 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig* config)
         toggle_field(el, has_solid_infill);
 
     toggle_field("infill_first", (has_solid_infill || have_infill));
+    bool is_infill_first = (has_solid_infill || have_infill) && config->opt_bool("infill_first");
+
+    toggle_field("external_perimeters_staggered", has_external_peri_not_loop && !is_infill_first);
 
     for (auto el : {"fill_angle_cross","fill_angle_follow_model","fill_angle_increment", "fill_angle_template", "bridge_angle", "infill_extrusion_width",
                     "infill_extrusion_spacing", "infill_extrusion_change_odd_layers", "infill_speed" })
         toggle_field(el, have_infill || has_solid_infill);
-        
+
     toggle_field("fill_angle", (have_infill || has_solid_infill) && ((ConfigOptionVectorBase*)config->option("fill_angle_template"))->size() == 0);
 
     const bool has_ensure_vertical_shell_thickness = config->opt_enum<EnsureVerticalShellThickness>("ensure_vertical_shell_thickness") != EnsureVerticalShellThickness::Disabled;

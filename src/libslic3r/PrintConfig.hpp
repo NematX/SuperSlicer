@@ -890,6 +890,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionBool,                 external_perimeters_first_force))
     ((ConfigOptionBool,                 external_perimeters_hole))
     ((ConfigOptionBool,                 external_perimeters_nothole))
+    ((ConfigOptionFloatOrPercent,       external_perimeters_staggered))
     ((ConfigOptionBool,                 external_perimeters_vase))
     ((ConfigOptionBool,                 extra_perimeters))
     ((ConfigOptionBool,                 extra_perimeters_odd_layers))

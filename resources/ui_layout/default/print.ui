@@ -115,6 +115,7 @@ group:External perimeter first
 	end_line
 	setting:external_perimeters_vase
 	setting:perimeter_bonding
+	setting:external_perimeters_staggered
 group:Arachne perimeter generator (variable width)
 	line:Wall Transition
 		setting:label$Angle:wall_transition_angle

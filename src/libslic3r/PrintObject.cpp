@@ -1560,6 +1560,7 @@ bool PrintObject::invalidate_state_by_config_options(
                 || opt_key == "default_speed"
                 || opt_key == "external_perimeter_acceleration"
                 || opt_key == "external_perimeter_cut_corners"
+                || opt_key == "external_perimeters_staggered"
                 || opt_key == "first_layer_acceleration"
                 || opt_key == "first_layer_acceleration_over_raft"
                 || opt_key == "first_layer_flow_ratio"
