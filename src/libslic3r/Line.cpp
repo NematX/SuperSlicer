@@ -17,6 +17,35 @@
 
 namespace Slic3r {
 
+namespace line_alg {
+    
+bool intersection(const Point &l1_a, const Point &l1_b, const Point &l2_a, const Point &l2_b, Point &intersection_pt)
+{
+    const Vec2crd v1    = (l1_b - l1_a);
+    const Vec2crd v2    = (l2_b - l2_a);
+    double      denom = cross2(v1, v2);
+    if (fabs(denom) < EPSILON)
+#if 0
+        // Lines are collinear. Return true if they are coincident (overlappign).
+        return ! (fabs(nume_a) < EPSILON && fabs(nume_b) < EPSILON);
+#else
+        return false;
+#endif
+    const Vec2crd v12 = (l1_a - l2_a);
+    double nume_a = cross2(v2, v12);
+    double nume_b = cross2(v1, v12);
+    double t1     = nume_a / denom;
+    double t2     = nume_b / denom;
+    if (t1 >= 0 && t1 <= 1.0f && t2 >= 0 && t2 <= 1.0f) {
+        // Get the intersection point.
+        intersection_pt = l1_a + Vec2crd(coord_t(t1 * v1.x()),coord_t(t1 * v1.y()));
+        return true;
+    }
+    return false; // not intersecting
+}
+
+} // namespace line_alg
+
 Linef3 transform(const Linef3& line, const Transform3d& t)
 {
     typedef Eigen::Matrix<double, 3, 2> LineInMatrixForm;

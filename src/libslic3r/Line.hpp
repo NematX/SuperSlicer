@@ -184,6 +184,8 @@ template<class L> bool intersection(const L &l1, const L &l2, Vec<Dim<L>, Scalar
     }
     return false; // not intersecting
 }
+// a bit less precise, but faster than the other intersection (not Line container, no int->double->int converts)
+bool intersection(const Point &l1_a, const Point &l1_b, const Point &l2_a, const Point &l2_b, Point &intersection_pt);
 
 } // namespace line_alg
 

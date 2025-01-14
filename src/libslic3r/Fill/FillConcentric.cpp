@@ -436,7 +436,7 @@ FillConcentricWGapFill::fill_surface_extrusion(
             for (ExtrusionEntity *ee : out_to_check) ee->visit(get_volume);
             // compute flow to remove spacing_ratio from the equation
             // compute real volume to fill
-            double polyline_volume = compute_unscaled_volume_to_fill(surface, params);
+            double polyline_volume = compute_unscaled_volume_to_fill(*surface, params);
             if (get_volume.volume != 0 && polyline_volume != 0)
                 mult_flow = polyline_volume / get_volume.volume;
             // failsafe, it can happen

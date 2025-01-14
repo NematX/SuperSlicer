@@ -5405,7 +5405,7 @@ std::string GCodeGenerator::extrude_multi_path(const ExtrusionMultiPath &multipa
     else
         should_reverse = last_pos_defined() && multipath.can_reverse() 
             && multipath.first_point().distance_to_square(last_pos()) > multipath.last_point().distance_to_square(last_pos());
-
+    m_mm3_per_mm_target = multipath.try_keep_same_flow ? multipath.keep_same_flow_mm3_per_mm_target : 0;
     bool saved_flipped = this->visitor_flipped;
     if (should_reverse) {
         //reverse to get a shorter point (hopefully there is still no feature that choose a point that need no perimeter crossing before).
@@ -5430,6 +5430,7 @@ std::string GCodeGenerator::extrude_multi_path(const ExtrusionMultiPath &multipa
     this->visitor_flipped = saved_flipped;
     // reset acceleration
     m_writer.set_acceleration((uint16_t)floor(get_default_acceleration(m_config) + 0.5));
+    m_mm3_per_mm_target = 0;
     return gcode;
 }
 
@@ -6995,6 +6996,11 @@ double_t GCodeGenerator::_compute_speed_mm_per_sec(const ExtrusionPath& path, co
     if (filament_max_speed > 0 && filament_max_speed < speed) {
         speed = filament_max_speed;
         if(comment) *comment += ", reduced by filament_max_speed";
+    }
+
+    // mm3_per_mm_target : change speed to have same mm3 per sec
+    if (m_mm3_per_mm_target > 0) {
+        speed *= m_mm3_per_mm_target / path.mm3_per_mm();
     }
 
     return speed;

@@ -127,7 +127,7 @@ enum InfillPattern : uint8_t{
     ipRectilinear, ipRectilinearWGapFill,
     ipMonotonic, ipMonotonicWGapFill,
     ipAlignedRectilinear,
-    ipGrid,
+    ipGrid, ipGridVarSpeed,
     ipTriangles, ipStars, ipCubic,
     ipLine, ipMonotonicLines,
     ipRectilinearAroundHoles,

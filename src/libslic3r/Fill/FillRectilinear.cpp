@@ -3156,11 +3156,15 @@ void FillRectilinear::make_fill_lines(const ExPolygonWithOffset &poly_with_offse
     }
 }
 
-bool FillRectilinear::fill_surface_by_multilines(const Surface *surface, FillParams params, const std::initializer_list<SweepParams> &sweep_params, Polylines &polylines_out) const
+bool FillRectilinear::fill_surface_by_multilines(const Surface *surface, FillParams params, const std::initializer_list<SweepParams> &sweep_params, Polylines &polylines_out, float density_mult) const
 {
     assert(sweep_params.size() > 1);
     assert(!params.full_infill());
-    params.density /= float(sweep_params.size());
+    if (density_mult == 0) {
+        params.density /= float(sweep_params.size());
+    } else {
+        params.density *= density_mult;
+    }
     assert(params.density > 0.0001f && params.density <= 1.f);
 
     ExPolygonWithOffset poly_with_offset_base(surface->expolygon, 0, scale_t(this->overlap - 0.5 * this->get_spacing()));
@@ -3239,6 +3243,415 @@ Polylines FillGrid::fill_surface(const Surface *surface, const FillParams &param
         polylines_out))
         BOOST_LOG_TRIVIAL(error) << "FillGrid::fill_surface() failed to fill a region.";
     return polylines_out;
+}
+
+void remove_too_near_points(Polylines &polylines, coord_t spacing) {
+    //assert: no point nearer than spacing.
+    coordf_t sqr_spacing = spacing * spacing;
+    for (Polyline &polyline : polylines) {
+        for (size_t idx_pt = 1; idx_pt < polyline.points.size() - 1; ++idx_pt) {
+            if (polyline[idx_pt - 1].distance_to_square(polyline[idx_pt]) < sqr_spacing) {
+                polyline.points.erase(polyline.points.begin() + idx_pt);
+                --idx_pt;
+            }
+        }
+        if (polyline.size() > 2 && polyline[polyline.points.size() - 2].distance_to_square(polyline[polyline.points.size() - 1]) < sqr_spacing) {
+            polyline.points.erase(polyline.points.begin() + polyline.points.size() - 2);
+        }
+    }
+}
+
+void FillGridVarSpeed::fill_surface_extrusion(const Surface *surface, const FillParams &params, ExtrusionEntitiesPtr &out) const
+{
+    Polylines polylines_first_pass;
+    Polylines polylines_second_pass;
+    
+    //if (!this->fill_surface_by_multilines(
+    //    surface, params,
+    //    { { 0.f, 0.f }},
+    //    polylines_first_pass,
+    //    // don't reduce density, the change_flow_intersection takes care of it.
+    //    1.f))
+    //    BOOST_LOG_TRIVIAL(error) << "FillGridVarSpeed::fill_surface() failed to fill a region.";
+    //if (!this->fill_surface_by_multilines(
+    //    surface, params,
+    //    {{ float(M_PI / 2.), 0.f } },
+    //    polylines_second_pass,
+    //    // don't reduce density, the change_flow_intersection takes care of it.
+    //    1.f))
+    //    BOOST_LOG_TRIVIAL(error) << "FillGridVarSpeed::fill_surface() failed to fill a region.";
+    if (! fill_surface_by_lines(surface, params, 0.f, 0.f, polylines_first_pass))
+        BOOST_LOG_TRIVIAL(error) << "FillGridVarSpeed::fill_surface() failed to fill a region.";
+    if (! fill_surface_by_lines(surface, params, float(M_PI / 2.), 0.f, polylines_second_pass))
+        BOOST_LOG_TRIVIAL(error) << "FillGridVarSpeed::fill_surface() failed to fill a region.";
+    
+    // ensure it doesn't over or under-extrude
+    double mult_flow = compute_flow_no_overextrude(*surface, polylines_first_pass, params);
+    double mult_flow2 = compute_flow_no_overextrude(*surface, polylines_second_pass, params);
+    mult_flow = (mult_flow + mult_flow2) / 2;
+
+    // Save into layer.
+    auto* eec = new ExtrusionEntityCollection();
+    // pass the no_sort attribute to the extrusion path
+    eec->set_can_sort_reverse(false, false);//!this->no_sort(), !this->no_sort());
+    // add it into the collection
+    out.push_back(eec);
+    // get the role
+    ExtrusionRole good_role = getRoleFromSurfaceType(params, surface);
+    std::cout<<"mult_flow: "<<mult_flow<<"\n";
+    // decrease flow because of the  flow reduction and spacing reduction
+    // note: it's not needed if it was 0.5 & 1
+    mult_flow = 0.776284;
+    std::cout<<"mult_flow_after: "<<mult_flow<<"\n";
+    // get defautl attribute
+    ExtrusionAttributes default_attribute{good_role, ExtrusionFlow{params.flow.mm3_per_mm() * params.flow_mult * mult_flow,
+                                                                        (float) (params.flow.width() * params.flow_mult * mult_flow),
+                                                                        (float) params.flow.height()}};
+
+    //prepare
+    remove_too_near_points(polylines_first_pass, coord_t(params.flow.scaled_spacing()));
+    remove_too_near_points(polylines_second_pass, coord_t(params.flow.scaled_spacing()));
+    // create paths from polylines
+    auto* eec_first_pass = new ExtrusionEntityCollection();
+    eec_first_pass->set_can_sort_reverse(!this->no_sort(), !this->no_sort());
+    this->change_flow_intersection(polylines_first_pass, polylines_second_pass, 0.5, 0.5, *eec_first_pass, default_attribute, params);
+    auto* eec_second_pass = new ExtrusionEntityCollection();
+    eec_second_pass->set_can_sort_reverse(!this->no_sort(), !this->no_sort());
+    this->change_flow_intersection(polylines_second_pass, polylines_first_pass, 0.1, 0.5, *eec_second_pass, default_attribute, params);
+    eec->set_entities().push_back(eec_first_pass);
+    eec->set_entities().push_back(eec_second_pass);
+#ifdef _DEBUG
+    double surface_volume = compute_unscaled_volume_to_fill(*surface, params);
+    ExtrusionVolume compute_volume_first;
+    eec_first_pass->visit(compute_volume_first);
+    ExtrusionVolume compute_volume_second;
+    eec_second_pass->visit(compute_volume_second);
+    std::cout<<"volume: "<<surface_volume<<"\n";
+    std::cout<<"extr vol first pass: "<<compute_volume_first.volume<<"\n";
+    std::cout<<"extr vol second pass: "<<compute_volume_second.volume<<"\n";
+    std::cout<<"extr vol both pass: "<<(compute_volume_first.volume + compute_volume_second.volume)<<"\n";
+    assert(is_approx((compute_volume_first.volume + compute_volume_second.volume), surface_volume, EPSILON));
+    //eec->visit(ExtrusionModifyFlow(surface_volume / eec_first_pass.volume + eec_second_pass.volume);
+#endif
+}
+
+void FillRectilinear::change_flow_intersection(const Polylines &polylines_first_pass, const Polylines &polylines_second_pass, float flow_reduction, float spacing_reduction,
+                            ExtrusionEntityCollection &collection_out, const ExtrusionAttributes &default_attr,
+                            const FillParams &params) const
+{
+    assert(1 > flow_reduction);
+
+    // compute the offset of the decreased flow: spacing/2
+    coord_t half_spacing = params.flow.scaled_spacing() / 2 * spacing_reduction;
+    //coord_t length_reduced = half_spacing;
+    double flow_mult_reduced = flow_reduction;
+    //// but it's useful to also take care of the acceleration
+    //// TODO: use real acceleration value to do it.
+    //// currently, we accelration for spacing/2 and the length of the reduced flow is halved.
+    //coord_t length_acceleration = length_reduced;
+    //length_reduced -= length_acceleration / 2;
+    //coord_t length_cut = length_reduced + length_acceleration;
+    //// set flows for accel & reduced so the quantity of plastic extruded doesn't change from reduced without accel
+    //// currently, accel is set to half the flow, and go over both the reduced area and the normal area
+    double flow_mult_acceleration = 1 - (1 - flow_mult_reduced) / 2;
+    assert(flow_mult_acceleration < 1 && flow_mult_acceleration > flow_reduction);
+    
+    ExtrusionAttributes modified_flow_attr = default_attr;
+    modified_flow_attr.mm3_per_mm *= flow_mult_reduced;
+    modified_flow_attr.width *= flow_mult_reduced;
+    //modified_flow_attr.role = ExtrusionRole::TopSolidInfill;
+    
+    ExtrusionAttributes half_modified_flow_attr = default_attr;
+    half_modified_flow_attr.mm3_per_mm *= flow_mult_acceleration;
+    half_modified_flow_attr.width *= flow_mult_acceleration;
+    //half_modified_flow_attr.role = ExtrusionRole::SolidInfill;
+    
+    ExtrusionAttributes decel_modified_flow_attr = default_attr;
+    decel_modified_flow_attr.mm3_per_mm *= flow_mult_acceleration;
+    decel_modified_flow_attr.width *= flow_mult_acceleration;
+    //decel_modified_flow_attr.role = ExtrusionRole::Ironing;
+
+
+    std::vector<Point> collisions;
+    Point collision_point;
+    // for each polyline
+    for (const Polyline &polyline : polylines_first_pass) {
+        // my extrusionmulti path
+        ExtrusionMultiPath multi_path;
+        multi_path.try_keep_same_flow = true;
+        multi_path.keep_same_flow_mm3_per_mm_target = default_attr.mm3_per_mm;
+
+        auto add_polyline_to_multipath = [&multi_path, &params](Points &&pts, const ExtrusionAttributes &attr) {
+            if (!multi_path.empty() &&
+                is_approx(multi_path.paths.back().attributes().mm3_per_mm, attr.mm3_per_mm, EPSILON * EPSILON + attr.mm3_per_mm * 0.01)) {
+                // less than 1% flow diff, reuse
+                multi_path.paths.back().polyline.append(std::move(pts));
+            } else {
+                // create new
+                multi_path.paths.push_back(ExtrusionPath(std::move(pts), attr, !params.monotonic));
+                if (multi_path.paths.size() > 1)
+                    assert(std::abs(multi_path.paths[multi_path.paths.size() - 2].mm3_per_mm() -
+                                    multi_path.paths[multi_path.paths.size() - 1].mm3_per_mm()) >
+                           multi_path.paths[multi_path.paths.size() - 1].mm3_per_mm() / 10);
+            }
+            assert(multi_path.paths.back().polyline.is_valid());
+        };
+        // create an extrusionpath
+        ExtrusionPath path(default_attr);
+        // for each line of the polyline
+        Point pt_previous = polyline.points.front();
+        path.polyline.append(pt_previous);
+        for (size_t idx_pt = 1; idx_pt < polyline.points.size(); ++idx_pt) {
+            Point pt_current = polyline.points[idx_pt];
+            // check if collision with another polyline
+            collisions.clear();
+            for (const Polyline &other_polyline : polylines_second_pass) {
+                // check collision
+                for (size_t idx_pt_other = 1; idx_pt_other < other_polyline.points.size(); ++idx_pt_other) {
+                    if (line_alg::intersection(pt_previous, pt_current, other_polyline.points[idx_pt_other - 1],
+                                               other_polyline.points[idx_pt_other], collision_point)) {
+                        collisions.push_back(collision_point);
+                    }
+                }
+            }
+            if (!collisions.empty()) {
+                // sort by distance from pt_previous
+                std::sort(collisions.begin(), collisions.end(), [&pt_previous](const Point &p1, const Point &p2) {
+                    return p1.distance_to_square(pt_previous) < p2.distance_to_square(pt_previous);
+                });
+                // ensure first collision is ~more than spacing/2 from startpt_previous
+                assert(pt_previous.distance_to(collisions.front()) > half_spacing - SCALED_EPSILON);
+                // ensure each collision is ~more than spacing apart
+                for (size_t idx_coll = 1; idx_coll < collisions.size(); ++idx_coll) {
+                    assert(collisions[idx_coll - 1].distance_to(collisions[idx_coll]) >
+                           half_spacing * 2 - SCALED_EPSILON);
+                }
+                // ensure last collision is ~more than spacing/2 from start
+                assert(pt_current.distance_to(collisions.back()) > half_spacing - SCALED_EPSILON);
+            }
+
+            // add point to the current path
+            if (collisions.empty()) {
+                path.polyline.append(pt_current);
+            } else {
+                // finish the path
+                if (path.polyline.back().distance_to(collisions.front()) < SCALED_EPSILON + half_spacing) {
+                    path.polyline.append(collisions.front());
+                    // check the flow
+                    double my_flow_reduction = flow_reduction;
+                    if (path.polyline.length() > half_spacing) {
+                        double percent_reduced = double(half_spacing) / path.polyline.length();
+                        my_flow_reduction = 1 - (1 - flow_mult_reduced) * percent_reduced;
+                    }
+                    // too small, no acceleration, just reduced flow
+                    // note: this works because collision are all on the same strait path, and the distance
+                    // between points is always higher than half_spacing
+                    path.polyline.clip_end(-half_spacing);
+                    collisions.front() = path.polyline.back();
+                    // check if we can reuse previous path
+                    if (!multi_path.empty() &&
+                        is_approx(multi_path.paths.back().attributes().mm3_per_mm,
+                                  path.attributes().mm3_per_mm * my_flow_reduction,
+                                  path.attributes().mm3_per_mm * 0.01)) {
+                        // less than 1% flow diff, reuse
+                        multi_path.paths.back().polyline.append(path.polyline);
+                        assert(multi_path.paths.back().polyline.is_valid());
+                    } else {
+                        path.attributes_mutable().mm3_per_mm *= flow_reduction;
+                        path.attributes_mutable().width *= flow_reduction;
+                        add_polyline_to_multipath(path.polyline.to_polyline().points, path.attributes());
+                        // path is invalidated
+                    }
+                } else {
+                    path.polyline.append(collisions.front());
+                    path.polyline.clip_end(half_spacing);
+                    add_polyline_to_multipath(path.polyline.to_polyline().points, path.attributes());
+                    // path is invalidated
+                }
+                Point pt_previous_end = multi_path.paths.back().polyline.back();
+                for (size_t idx_collision = 0; idx_collision < collisions.size(); ++idx_collision) {
+                    const Point &pt_collision = collisions[idx_collision];
+                    Point pt_end_accel = pt_previous_end;
+                    Point pt_start_decel;
+                    Point pt_next_end;
+                    coord_t length_reduced_a = half_spacing;
+                    coord_t length_reduced_b = half_spacing;
+                    coord_t length = 0;
+                    coord_t length_acceleration = 0;
+                    coord_t length_deceleration = 0;
+                    // compute steady & acceleration path
+                    // do it in one step (for now)
+                    if (pt_previous_end.distance_to(pt_collision) > SCALED_EPSILON) {
+                        if (pt_previous_end.distance_to(pt_collision) < half_spacing + SCALED_EPSILON) {
+                            // not enough place to decelerate
+                            pt_end_accel = pt_previous_end;
+                            length_acceleration = 0;
+                            length_reduced_a = pt_previous_end.distance_to(pt_collision);
+                        } else {
+                            Point steady_start = pt_previous_end;
+                            length_acceleration = 0;
+                            // also extrude steady section before?
+                            // available_dist is the dist between pt_previous_end and the start of the reduced section.
+                            if (coord_t available_dist = coord_t(pt_previous_end.distance_to(pt_collision) - half_spacing); available_dist < half_spacing / 2 - SCALED_EPSILON) {
+                                assert(available_dist > 0);
+                                length_acceleration = available_dist * 2;
+                            } else {
+                                // extrude steady section
+                                // remove a quarter spacing to have a half-spacing acceleration
+                                coord_t steady_length = available_dist - half_spacing / 2;
+                                length_acceleration = half_spacing;
+                                if (steady_length < half_spacing / 2) {
+                                    // if steady too short, then reduce the accel section
+                                    length_acceleration = available_dist - half_spacing / 2;
+                                    steady_length = half_spacing / 2;
+                                }
+                                Line line_to_get_point(pt_previous_end, pt_collision);
+                                Points poly_steady{pt_previous_end, line_to_get_point.point_at(steady_length)};
+                                pt_previous_end = poly_steady.back();
+                                add_polyline_to_multipath(std::move(poly_steady), default_attr);
+                            }
+                            // update length
+                            length_reduced_a -= length_acceleration / 2;
+                            // get modified line
+                            ArcPolyline poly_accel(Points{pt_previous_end, pt_collision});
+                            assert(poly_accel.length() > length_reduced_a + SCALED_EPSILON);
+                            poly_accel.clip_end(length_reduced_a);
+                            assert(is_approx(coordf_t(length_acceleration), poly_accel.length(), coordf_t(SCALED_EPSILON)));
+                            // update end point and push the line into a new path in the multipath
+                            pt_end_accel = poly_accel.back();
+                        }
+                    }
+                    // compute decelleration path
+                    {
+                        // update length
+                        Point next_pt = idx_collision + 1 < collisions.size() ? collisions[idx_collision + 1] :
+                                                                                pt_current;
+                        length_deceleration = half_spacing;
+                        // check distance
+                        if (pt_collision.distance_to(next_pt) / 2 < half_spacing + SCALED_EPSILON) {
+                            // no decel
+                            length_deceleration = 0;
+                            pt_start_decel = ((next_pt + pt_collision) / 2);
+                            length_reduced_b = pt_collision.distance_to(pt_start_decel);
+                            pt_next_end = pt_start_decel;
+                        } else {
+                            // update length
+                            length_deceleration = std::min(half_spacing / 2,
+                                                           coord_t(next_pt.distance_to(pt_collision) / 2 -
+                                                                   half_spacing));
+                            length_reduced_b -= length_deceleration;
+                            length_deceleration *= 2;
+                            // compute pt_start_decel
+                            Line compute_pt(pt_end_accel, next_pt);
+                            pt_start_decel = compute_pt.point_at(length_reduced_a + length_reduced_b);
+                            compute_pt = Line(pt_start_decel, next_pt);
+                            pt_next_end = compute_pt.point_at(length_deceleration);
+                        }
+                    }
+                    //choose to keep accel & decel or merge them if too small
+                    float changed_flow = 1.f;
+                    if (length_acceleration > 0 && length_acceleration < (length_reduced_a + length_reduced_b) / 5) {
+                        double accel_ratio = length_acceleration / double(length_acceleration + length_reduced_a + length_reduced_b);
+                        assert(accel_ratio > 0 && accel_ratio < 1);
+                        double new_mm3_per_mm = accel_ratio * half_modified_flow_attr.mm3_per_mm + (1-accel_ratio) * modified_flow_attr.mm3_per_mm * changed_flow;
+                        assert(new_mm3_per_mm / (modified_flow_attr.mm3_per_mm * changed_flow) > 1 && new_mm3_per_mm / (modified_flow_attr.mm3_per_mm * changed_flow) < 1.2);
+                        changed_flow *= float(new_mm3_per_mm / (modified_flow_attr.mm3_per_mm * changed_flow));
+                        length_reduced_a += length_acceleration;
+                        length_acceleration = 0;
+                        pt_end_accel = pt_previous_end;
+                    }
+                    if (length_deceleration >0 && length_deceleration < (length_reduced_a + length_reduced_b) / 5) {
+                        double decel_ratio = length_deceleration / double(length_deceleration + length_reduced_a + length_reduced_b);
+                        assert(decel_ratio > 0 && decel_ratio < 1);
+                        double new_mm3_per_mm = decel_ratio * half_modified_flow_attr.mm3_per_mm + (1-decel_ratio) * modified_flow_attr.mm3_per_mm * changed_flow;
+                        assert(new_mm3_per_mm / (modified_flow_attr.mm3_per_mm * changed_flow) > 1 && new_mm3_per_mm / (modified_flow_attr.mm3_per_mm * changed_flow) < 1.2);
+                        changed_flow *= float(new_mm3_per_mm / (modified_flow_attr.mm3_per_mm * changed_flow));
+                        length_reduced_b += length_deceleration;
+                        length_deceleration = 0;
+                        pt_start_decel = pt_next_end;
+                    }
+                    // add acceleration
+                    if (length_acceleration > 0) {
+                        assert(length_acceleration > SCALED_EPSILON);
+                        // get modified line
+                        Points poly_accel{pt_previous_end, pt_end_accel};
+                        // update end point and push the line into a new path in the multipath
+                        // check if we can reuse previous path
+                        add_polyline_to_multipath(std::move(poly_accel), half_modified_flow_attr);
+                    }
+                    // add reduced flow path
+                    {
+                        // get modified line
+                        Points poly_reduced{pt_end_accel, pt_start_decel};
+                        // update end point and push the line into a new path in the multipath
+                        add_polyline_to_multipath(std::move(poly_reduced), modified_flow_attr);
+                    }
+                    // add deceleration
+                    if (length_deceleration > 0) {
+                        assert(length_deceleration > SCALED_EPSILON);
+                        // get modified line
+                        Points poly_decel{pt_start_decel, pt_next_end};
+                        // update end point and push the line into a new path in the multipath
+                        add_polyline_to_multipath(std::move(poly_decel), decel_modified_flow_attr);
+                    }
+                    // update pt_previous_end for next iteration.
+                    pt_previous_end = pt_next_end;
+                }
+
+                // finish the path to the current point, if far away enough
+                if (pt_previous_end.distance_to(pt_current) > SCALED_EPSILON * 2) {
+                    add_polyline_to_multipath(Points{pt_previous_end, pt_current}, default_attr);
+                }
+
+                // reset current path
+                path = ExtrusionPath(default_attr);
+                path.polyline.append(pt_current);
+            }
+
+            // relance
+            pt_previous = pt_current;
+        }
+
+        // add path to the collection
+        if (path.size() > 2) {
+            if (multi_path.empty()) {
+                assert(path.polyline.is_valid());
+                collection_out.append(std::move(path));
+            } else {
+                assert(path.polyline.is_valid());
+                multi_path.paths.push_back(std::move(path));
+            }
+        } else {
+            assert(!path.empty());
+            assert(path.polyline.front() == polyline.points.back());
+        }
+        if (!multi_path.empty()) {
+//#ifdef _DEBUG
+//            {
+//                static int iRun = 0;
+//                std::stringstream filename;
+//                filename << this->layer_id << "_" << iRun++ << "_";
+//                filename << "_fillgridVarSpeed_paths.svg";
+//                ::Slic3r::SVG svg(filename.str()); // , scale_(1.));
+//                svg.draw(polylines_first_pass, "blue", params.flow.scaled_width() / 2);
+//                svg.draw(polylines_second_pass, "cyan", params.flow.scaled_width() / 2);
+//                for (ExtrusionPath &path : multi_path.paths) {
+//                    svg.draw(path.polyline.to_polyline(), "red", scaled(path.width() / 2));
+//                }
+//                svg.Close();
+//            }
+//#endif /* SLIC3R_DEBUG */
+            // simplify (remove collinear)
+            for (ExtrusionPath &path : multi_path.paths) {
+                path.polyline.make_arc(ArcFittingType::Disabled, coordf_t(SCALED_EPSILON), 0);
+            }
+            // ensure they are merged
+            for (size_t path_idx = 1; path_idx < multi_path.paths.size(); ++path_idx) {
+                assert(std::abs(multi_path.paths[path_idx-1].mm3_per_mm() - multi_path.paths[path_idx].mm3_per_mm()) > multi_path.paths[path_idx].mm3_per_mm()/10);
+            }
+            collection_out.append(std::move(multi_path));
+        }
+    }
 }
 
 Polylines FillTriangles::fill_surface(const Surface *surface, const FillParams &params) const
@@ -3896,7 +4309,7 @@ void FillRectilinearAroundHoles::fill_surface_extrusion(const Surface* surface, 
             multi->visit(vol_visitor);
         }
         // compute real volume
-        double polyline_volume = compute_unscaled_volume_to_fill(surface, params);
+        double polyline_volume = compute_unscaled_volume_to_fill(*surface, params);
         if (vol_visitor.volume != 0 && polyline_volume != 0)
             mult_flow *= polyline_volume / vol_visitor.volume;
         //failsafe, it can happen
@@ -4169,7 +4582,7 @@ FillRectilinearWGapFill::fill_surface_extrusion(const Surface *surface, const Fi
             double extruded_volume = ExtrusionVolume{}.get(*coll_nosort);
             // compute flow to remove spacing_ratio from the equation
             // compute real volume to fill
-            double polyline_volume = compute_unscaled_volume_to_fill(surface, params);
+            double polyline_volume = compute_unscaled_volume_to_fill(*surface, params);
             if (extruded_volume != 0 && polyline_volume != 0)
                 mult_flow = polyline_volume / extruded_volume;
             // failsafe, it can happen

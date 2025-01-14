@@ -663,14 +663,14 @@ void ArcPolyline::append(const ArcPolyline &src)
                 m_path.back().point = src.get_point(1);
                 if (src.size() > 2) {
                     const size_t next_size = this->size() + src.size() - 2;
-                    m_path.reserve(next_size);
+                    //m_path.reserve(next_size);
                     this->m_path.insert(this->m_path.end(), src.m_path.begin() + 2, src.m_path.end());
                     assert(next_size == m_path.size());
                 }
             } else {
                 assert(src.is_valid());
                 const size_t next_size = m_path.size() + src.m_path.size() - 1;
-                m_path.reserve(next_size);
+                //m_path.reserve(next_size);
                 // std::move(src.m_path.begin() + 1, src.m_path.end(), std::back_inserter(m_path));
                 this->m_path.insert(this->m_path.end(), src.m_path.begin() + 1, src.m_path.end());
                 assert(next_size == m_path.size());
@@ -680,7 +680,7 @@ void ArcPolyline::append(const ArcPolyline &src)
         // weird, are you sure you want to append it?
         assert(false);
         const size_t next_size = m_path.size() + src.m_path.size();
-        m_path.reserve(next_size);
+        //m_path.reserve(next_size);
         //std::move(src.m_path.begin(), src.m_path.end(), std::back_inserter(m_path));
         this->m_path.insert(this->m_path.end(), src.m_path.begin(), src.m_path.end());
         assert(next_size == m_path.size());
@@ -701,7 +701,7 @@ void ArcPolyline::append(ArcPolyline &&src) {
     } else if (src.m_path.front().point == this->m_path.back().point) {
         if (src.size() > 1) {
             const size_t next_size = m_path.size() + src.m_path.size() - 1;
-            m_path.reserve(next_size);
+            //m_path.reserve(next_size);
             m_path.insert(m_path.end(), std::make_move_iterator(src.m_path.begin() + 1), std::make_move_iterator(src.m_path.end()));
             assert(is_valid());
             assert(next_size == m_path.size());
@@ -710,7 +710,7 @@ void ArcPolyline::append(ArcPolyline &&src) {
         // weird, are you sure you want to append it?
         assert(false);
         const size_t next_size = m_path.size() + src.m_path.size();
-        m_path.reserve(next_size);
+        //m_path.reserve(next_size);
         m_path.insert(m_path.end(), std::make_move_iterator(src.m_path.begin()), std::make_move_iterator(src.m_path.end()));
         assert(next_size == m_path.size());
     }
@@ -1824,7 +1824,7 @@ void ArcPolyline::make_arc(ArcFittingType with_fitting_arc, coordf_t tolerance, 
 }
 
 bool ArcPolyline::is_valid() const {
-#ifdef _DEBUG
+#ifdef _DEBEUG
     assert(m_path.empty() || m_path.front().radius == 0);
     double min_radius = 0;
     double max_radius = 0;

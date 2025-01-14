@@ -43,7 +43,8 @@ protected:
         float pattern_shift;
     };
     void make_fill_lines(const ExPolygonWithOffset& poly_with_offset, Point refpt, double angle, coord_t x_margin, coord_t line_spacing, coord_t pattern_shift, Polylines& fill_lines, const FillParams& params) const;
-    bool fill_surface_by_multilines(const Surface* surface, FillParams params, const std::initializer_list<SweepParams>& sweep_params, Polylines& polylines_out) const;
+    bool fill_surface_by_multilines(const Surface* surface, FillParams params, const std::initializer_list<SweepParams>& sweep_params, Polylines& polylines_out, float density_mult = 0.f) const;
+    void change_flow_intersection(const Polylines &polylines_first_pass, const Polylines &polylines_second_pass, float flow_reduction, float spacing_reduction, ExtrusionEntityCollection &collection_out, const ExtrusionAttributes &default_attr, const FillParams &params) const;
 };
 
 class FillAlignedRectilinear : public FillRectilinear
@@ -87,6 +88,23 @@ public:
     Fill* clone() const override { return new FillGrid(*this); }
     ~FillGrid() override = default;
     Polylines fill_surface(const Surface* surface, const FillParams& params) const override;
+
+protected:
+    // The grid fill will keep the angle constant between the layers, see the implementation of Slic3r::Fill.
+    float _layer_angle(size_t idx) const override { return 0.f; }
+};
+
+class FillGridVarSpeed : public FillRectilinear
+{
+public:
+    Fill* clone() const override { return new FillGridVarSpeed(*this); }
+    ~FillGridVarSpeed() override = default;
+    Polylines fill_surface(const Surface *surface, const FillParams &params) const override {
+        BOOST_LOG_TRIVIAL(error)<<"Error, the fill isn't implemented";
+        assert(false);
+        return {};
+    };
+    void fill_surface_extrusion(const Surface* surface, const FillParams& params, ExtrusionEntitiesPtr& out) const override;
 
 protected:
     // The grid fill will keep the angle constant between the layers, see the implementation of Slic3r::Fill.

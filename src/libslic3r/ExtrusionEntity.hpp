@@ -343,10 +343,22 @@ template <typename THING = ExtrusionEntity>
 class ExtrusionMultiEntity : public ExtrusionEntity {
 public:
     std::vector<THING> paths;
+    // Ask the gcode creator to keep the same flow rate (more speed if the flow of a path is lower).
+    // should put the setting's speed for 'keep_smae_flow_mm3_per_mm_target', and so lower mm3_per_mm will increase speed
+    // Used by infill with varying flow.
+    bool try_keep_same_flow = false;
+    double keep_same_flow_mm3_per_mm_target = 0;
 
     ExtrusionMultiEntity(): ExtrusionEntity(false) {};
-    ExtrusionMultiEntity(const ExtrusionMultiEntity &rhs) : paths(rhs.paths), ExtrusionEntity(rhs.m_id, rhs.m_can_reverse) {}
-    ExtrusionMultiEntity(ExtrusionMultiEntity &&rhs) : paths(std::move(rhs.paths)), ExtrusionEntity(rhs.m_id, rhs.m_can_reverse) {}
+    ExtrusionMultiEntity(const ExtrusionMultiEntity &rhs)
+        : paths(rhs.paths), ExtrusionEntity(rhs.m_id, rhs.m_can_reverse)
+        , try_keep_same_flow(rhs.try_keep_same_flow)
+        , keep_same_flow_mm3_per_mm_target(rhs.keep_same_flow_mm3_per_mm_target)  {}
+    ExtrusionMultiEntity(ExtrusionMultiEntity &&rhs)
+        : paths(std::move(rhs.paths))
+        , ExtrusionEntity(rhs.m_id, rhs.m_can_reverse)
+        , try_keep_same_flow(rhs.try_keep_same_flow)
+        , keep_same_flow_mm3_per_mm_target(rhs.keep_same_flow_mm3_per_mm_target) {}
     ExtrusionMultiEntity(const std::vector<THING> &paths) : paths(paths), ExtrusionEntity(false) {};
     ExtrusionMultiEntity(const THING &path): ExtrusionEntity(false) { this->paths.push_back(path); }
 

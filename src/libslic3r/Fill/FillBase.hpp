@@ -221,9 +221,11 @@ protected:
 
     void do_gap_fill(const ExPolygons& gapfill_areas, const FillParams& params, ExtrusionEntitiesPtr& coll_out) const;
 
-    double compute_unscaled_volume_to_fill(const Surface* surface, const FillParams& params) const;
+    double compute_unscaled_volume_to_fill(const Surface &surface, const FillParams& params) const;
 
     ExtrusionRole getRoleFromSurfaceType(const FillParams &params, const Surface *surface) const;
+
+    float compute_flow_no_overextrude(const Surface &surface, const Polylines simple_polylines, const FillParams &params) const;
 
 public:
     static void connect_infill(Polylines&& infill_ordered, const ExPolygon& boundary, Polylines& polylines_out, const coord_t spacing, const FillParams& params);

@@ -58,6 +58,7 @@ Fill* Fill::new_from_type(const InfillPattern type)
     case ipScatteredRectilinear:return new FillScatteredRectilinear();
     case ipLine:                return new FillLine();
     case ipGrid:                return new FillGrid();
+    case ipGridVarSpeed:        return new FillGridVarSpeed();
     case ipTriangles:           return new FillTriangles();
     case ipStars:               return new FillStars();
     case ipCubic:               return new FillCubic();
@@ -182,12 +183,12 @@ std::pair<float, Point> Fill::_infill_direction(const Surface *surface) const
     return std::pair<float, Point>(out_angle, out_shift);
 }
 
-double Fill::compute_unscaled_volume_to_fill(const Surface* surface, const FillParams& params) const {
+double Fill::compute_unscaled_volume_to_fill(const Surface &surface, const FillParams& params) const {
     double polyline_volume = 0;
     if (this->no_overlap_expolygons.empty()) {
-        polyline_volume = unscaled(unscaled(surface->area())) * params.flow.height();
+        polyline_volume = unscaled(unscaled(surface.area())) * params.flow.height();
     } else {
-        for (const ExPolygon& poly : intersection_ex(ExPolygons{ surface->expolygon }, this->no_overlap_expolygons)) {
+        for (const ExPolygon& poly : intersection_ex(ExPolygons{ surface.expolygon }, this->no_overlap_expolygons)) {
             polyline_volume += params.flow.height() * unscaled(unscaled(poly.area()));
             //note: the no_overlap_expolygons is already at spacing from the centerline of the perimeter.
             }
@@ -204,6 +205,42 @@ ExtrusionRole Fill::getRoleFromSurfaceType(const FillParams &params, const Surfa
                                             ExtrusionRole::InternalInfill);
     }
     return params.role;
+}
+
+float Fill::compute_flow_no_overextrude(const Surface &surface, const Polylines simple_polylines, const FillParams &params) const {
+
+        // ensure it doesn't over or under-extrude
+        double mult_flow = 1;
+        if (!params.dont_adjust && params.full_infill() && !params.flow.bridge() && params.fill_exactly){
+            // compute the path of the nozzle -> extruded volume
+            double length_tot = 0;
+            for (auto pline = simple_polylines.begin(); pline != simple_polylines.end(); ++pline){
+                Lines lines = pline->lines();
+                for (auto line = lines.begin(); line != lines.end(); ++line){
+                    length_tot += unscaled(line->length());
+                }
+            }
+            //compute flow to remove spacing_ratio from the equation
+            double extruded_volume = 0;
+            if (params.flow.spacing_ratio() < 1.f && !params.flow.bridge()) {
+                // the spacing is larger than usual. get the flow from the current spacing
+                Flow test_flow = Flow::new_from_spacing(params.flow.spacing(), params.flow.nozzle_diameter(), params.flow.height(), 1, params.flow.bridge());
+                extruded_volume = test_flow.mm3_per_mm() * length_tot;
+            } else {
+                extruded_volume = params.flow.mm3_per_mm() * length_tot;
+            }
+            // compute real volume
+            double polyline_volume = compute_unscaled_volume_to_fill(surface, params);
+            if (extruded_volume != 0 && polyline_volume != 0) mult_flow *= polyline_volume / extruded_volume;
+            //failsafe, it can happen
+            if (mult_flow > 1.3) mult_flow = 1.3;
+            if (mult_flow < 0.8) mult_flow = 0.8;
+            BOOST_LOG_TRIVIAL(info) << "Layer " << layer_id << ": Fill process extrude " << extruded_volume << " mm3 for a volume of " << polyline_volume << " mm3 : we mult the flow by " << mult_flow;
+        }
+#if _DEBUG
+        this->debug_verify_flow_mult = mult_flow;
+#endif
+        return mult_flow;
 }
 
 void Fill::fill_surface_extrusion(const Surface *surface, const FillParams &params, ExtrusionEntitiesPtr &out) const
@@ -252,7 +289,7 @@ void Fill::fill_surface_extrusion(const Surface *surface, const FillParams &para
             double mult_flow = 1;
             if (!params.dont_adjust && params.full_infill() && !params.flow.bridge() && params.fill_exactly) {
                 // compute real volume
-                double polyline_volume = compute_unscaled_volume_to_fill(surface, params);
+                double polyline_volume = compute_unscaled_volume_to_fill(*surface, params);
                 if (extruded_volume != 0 && polyline_volume != 0) mult_flow *= polyline_volume / extruded_volume;
                 //failsafe, it can happen
                 if (mult_flow > 1.3) mult_flow = 1.3;
@@ -279,35 +316,7 @@ void Fill::fill_surface_extrusion(const Surface *surface, const FillParams &para
                 return;
 
             // ensure it doesn't over or under-extrude
-            double mult_flow = 1;
-            if (!params.dont_adjust && params.full_infill() && !params.flow.bridge() && params.fill_exactly){
-                // compute the path of the nozzle -> extruded volume
-                double length_tot = 0;
-                for (auto pline = simple_polylines.begin(); pline != simple_polylines.end(); ++pline){
-                    Lines lines = pline->lines();
-                    for (auto line = lines.begin(); line != lines.end(); ++line){
-                        length_tot += unscaled(line->length());
-                    }
-                }
-                //compute flow to remove spacing_ratio from the equation
-                double extruded_volume = 0;
-                if (params.flow.spacing_ratio() < 1.f && !params.flow.bridge()) {
-                    // the spacing is larger than usual. get the flow from the current spacing
-                    Flow test_flow = Flow::new_from_spacing(params.flow.spacing(), params.flow.nozzle_diameter(), params.flow.height(), 1, params.flow.bridge());
-                    extruded_volume = test_flow.mm3_per_mm() * length_tot;
-                }else
-                    extruded_volume = params.flow.mm3_per_mm() * length_tot;
-                // compute real volume
-                double polyline_volume = compute_unscaled_volume_to_fill(surface, params);
-                if (extruded_volume != 0 && polyline_volume != 0) mult_flow *= polyline_volume / extruded_volume;
-                //failsafe, it can happen
-                if (mult_flow > 1.3) mult_flow = 1.3;
-                if (mult_flow < 0.8) mult_flow = 0.8;
-                BOOST_LOG_TRIVIAL(info) << "Layer " << layer_id << ": Fill process extrude " << extruded_volume << " mm3 for a volume of " << polyline_volume << " mm3 : we mult the flow by " << mult_flow;
-            }
-#if _DEBUG
-            this->debug_verify_flow_mult = mult_flow;
-#endif
+            double mult_flow = compute_flow_no_overextrude(*surface, simple_polylines, params);
 
             // Save into layer.
             auto* eec = new ExtrusionEntityCollection();
@@ -3761,7 +3770,7 @@ FillWithPerimeter::fill_surface_extrusion(const Surface* surface, const FillPara
             double extruded_volume = ExtrusionVolume{}.get(*eecroot);
             // compute flow to remove spacing_ratio from the equation
             // compute real volume to fill
-            double polyline_volume = compute_unscaled_volume_to_fill(surface, params);
+            double polyline_volume = compute_unscaled_volume_to_fill(*surface, params);
             if (extruded_volume != 0 && polyline_volume != 0)
                 mult_flow = polyline_volume / extruded_volume;
             // failsafe, it can happen
