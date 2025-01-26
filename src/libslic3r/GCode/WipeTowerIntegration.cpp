@@ -217,7 +217,7 @@ std::string WipeTowerIntegration::post_process_wipe_tower_moves(const WipeTower:
                 bool has_xyz = never_skip || has_z;
                 if(transformed_pos.x() != old_pos.x()) has_xyz = true;
                 if(transformed_pos.y() != old_pos.y()) has_xyz = true;
-                if (has_xyz && gcode_flavor == (gcfNematX)) {
+                if (has_xyz && gcode_flavor == (gcfNematX) && !is_absolute_e) {
                     oss << " G90 ";
                 }
                 if (transformed_pos.x() != old_pos.x() || never_skip)
@@ -228,7 +228,7 @@ std::string WipeTowerIntegration::post_process_wipe_tower_moves(const WipeTower:
                     oss << " Z" << pos_z;
                 }
                 if (has_e) {
-                    if (gcode_flavor == (gcfNematX)) {
+                    if (gcode_flavor == (gcfNematX) && !is_absolute_e) {
                         oss << " G91";
                     }
                     oss << " " << extruder_letter << pos_e;
