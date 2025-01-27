@@ -1542,11 +1542,11 @@ void PrintObject::slice_volumes()
                     GraphData positive_hole_compensation_by_diameter;
                     if (hole_compensation_by_diameter.data_size() > 0) {
                         // simplify hole_compensation_by_diameter: keep only used points
-                        for (size_t i = 0; i < hole_compensation_by_diameter.begin_idx; i++)
-                            hole_compensation_by_diameter.graph_points.erase(hole_compensation_by_diameter.graph_points.begin());
+                        hole_compensation_by_diameter.graph_points
+                            .erase(hole_compensation_by_diameter.graph_points.begin(),
+                                   hole_compensation_by_diameter.graph_points.begin() + hole_compensation_by_diameter.begin_idx);
                         hole_compensation_by_diameter.end_idx -= hole_compensation_by_diameter.begin_idx;
-                        for (size_t i = hole_compensation_by_diameter.end_idx; i < hole_compensation_by_diameter.graph_points.size(); i++)
-                            hole_compensation_by_diameter.graph_points.pop_back();
+                        hole_compensation_by_diameter.graph_points.resize(hole_compensation_by_diameter.end_idx);
                         assert(hole_compensation_by_diameter.begin_idx == 0);
                         assert(hole_compensation_by_diameter.end_idx == hole_compensation_by_diameter.graph_points.size());
                         assert(!hole_compensation_by_diameter.graph_points.empty());
