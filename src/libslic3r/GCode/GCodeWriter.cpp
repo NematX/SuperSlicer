@@ -266,7 +266,7 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
     
     // some firmwares need to emit temp to wait for temp
     bool need_emit_temp = m_last_temperature_with_offset != temp_w_offset;
-    bool can_M109 = FLAVOR_IS_NOT(gcfTeacup) && FLAVOR_IS_NOT(gcfRepRap);
+    bool can_M109 = FLAVOR_IS_NOT(gcfTeacup) && FLAVOR_IS_NOT(gcfRepRap) && FLAVOR_IS_NOT(gcfNematX);
     if (wait && can_M109) {
         need_emit_temp = true;
     }
@@ -280,6 +280,7 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
             comment = "set temperature and wait for it to be reached"sv;
         } else if (FLAVOR_IS(gcfNematX) && tool > 0) {
             code = "M124";
+            comment = "set temperature"sv;
         } else {
             if (FLAVOR_IS(gcfRepRap)) { // M104 is deprecated on RepRapFirmware
                 code = "G10"sv;
@@ -303,10 +304,10 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
         gcode << temp_w_offset;
         bool multiple_tools = this->multiple_extruders && !m_single_extruder_multi_material;
         if (tool != -1 && (multiple_tools || FLAVOR_IS(gcfMakerWare) || FLAVOR_IS(gcfSailfish)) &&
-            FLAVOR_IS_NOT(gcfRepRap)) {
+            FLAVOR_IS_NOT(gcfRepRap) && FLAVOR_IS_NOT(gcfNematX)) {
             gcode << " T" << tool;
         }
-        if (this->config.gcode_comments) {
+        if (this->config.gcode_comments && !comment.empty()) {
             gcode << " ; " << comment;
         }
         gcode << "\n";
@@ -319,6 +320,19 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
                 gcode << " ; wait for temperature to be reached";
             }
             gcode << "\n";
+        }
+        if (FLAVOR_IS(gcfNematX)) {
+            if (tool == 0)
+                gcode << "M109 ; wait for extruder 1 temperature to be reached\n";
+            else
+                gcode << "M129 ; wait for extruder 2 temperature to be reached\n";
+            if (this->config.gcode_comments) {
+                if (this->config.tool_name.size() > tool) {
+                    gcode << " ; wait for extruder " << this->config.tool_name.get_at(tool) << " temperature to be reached\n";
+                } else {
+                    gcode << " ; wait for extruder " << tool << " temperature to be reached\n";
+                }
+            }
         }
     }
     // update internal var to prevent repeat
@@ -368,6 +382,21 @@ std::string GCodeWriter::set_bed_temperature(uint32_t temperature, bool wait)
         gcode << "M116";
         if (this->config.gcode_comments) {
             gcode << " ; wait for temperature to be reached";
+        }
+        gcode << "\n";
+    }
+    if (FLAVOR_IS(gcfNematX) && temperature == 0) {
+        gcode.clear();
+        gcode << "M141";
+        if (this->config.gcode_comments) {
+            gcode << " ; switch off bed temperature";
+        }
+        gcode << "\n";
+    }
+    if (FLAVOR_IS(gcfNematX) && wait) {
+        gcode << "M190";
+        if (this->config.gcode_comments) {
+            gcode << " ; wait for bed temperature to be reached";
         }
         gcode << "\n";
     }
