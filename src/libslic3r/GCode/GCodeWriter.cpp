@@ -306,12 +306,20 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
             FLAVOR_IS_NOT(gcfRepRap)) {
             gcode << " T" << tool;
         }
-        gcode << " ; " << comment << "\n";
+        if (this->config.gcode_comments) {
+            gcode << " ; " << comment;
+        }
+        gcode << "\n";
     }
     // emit wait (for  gcfTeacup, gcfRepRap, gcfNematX)
     if (wait && !can_M109) {
-        if ((FLAVOR_IS(gcfTeacup) || FLAVOR_IS(gcfRepRap)))
-            gcode << "M116 ; wait for temperature to be reached\n";
+        if ((FLAVOR_IS(gcfTeacup) || FLAVOR_IS(gcfRepRap))) {
+            gcode << "M116";
+            if (this->config.gcode_comments) {
+                gcode << " ; wait for temperature to be reached";
+            }
+            gcode << "\n";
+        }
     }
     // update internal var to prevent repeat
     m_last_temperature = temperature;
@@ -340,7 +348,7 @@ std::string GCodeWriter::set_bed_temperature(uint32_t temperature, bool wait)
         code = "M140"sv;
         comment = "set bed temperature"sv;
     }
-    
+
     std::ostringstream gcode;
     gcode << code;
     if (FLAVOR_IS(gcfMach3) || FLAVOR_IS(gcfMachinekit)) {
@@ -350,16 +358,20 @@ std::string GCodeWriter::set_bed_temperature(uint32_t temperature, bool wait)
     } else {
         gcode << " S";
     }
-    gcode << temperature << " ; " << comment << "\n";
-    
-    if (FLAVOR_IS(gcfTeacup) && wait)
-        gcode << "M116 ; wait for bed temperature to be reached\n";
-    if (FLAVOR_IS(gcfNematX) && temperature == 0) {
-        gcode.clear();
-        gcode << "M141 ; switch off bed temperature\n";
+    gcode << temperature;
+    if (this->config.gcode_comments) {
+         gcode << " ; " << comment;
     }
-    if (FLAVOR_IS(gcfNematX) && wait)
-        gcode << "M190 ; wait for bed temperature to be reached\n";
+    gcode << "\n";
+
+    if (FLAVOR_IS(gcfTeacup) && wait) {
+        gcode << "M116";
+        if (this->config.gcode_comments) {
+            gcode << " ; wait for temperature to be reached";
+        }
+        gcode << "\n";
+    }
+
     return gcode.str();
 }
 
@@ -386,8 +398,11 @@ std::string GCodeWriter::set_chamber_temperature(uint32_t temperature, bool wait
     }
     
     std::ostringstream gcode;
-    gcode << code << " " << "S";
-    gcode << temperature << " ; " << comment << "\n";
+    gcode << code << " " << "S" << temperature;
+    if (this->config.gcode_comments) {
+        gcode << " ; " << comment;
+    }
+    gcode << "\n";
     
     return gcode.str();
 }

@@ -226,11 +226,13 @@ public:
     Point(int64_t x, int64_t y) : Vec2crd(coord_t(x), coord_t(y)) {}
     Point(double x, double y) : Vec2crd(coord_t(std::round(x)), coord_t(std::round(y))) {}
     Point(const Point &rhs) { *this = rhs; }
+    // I don't know how to call it, as it call the implicit below
 	explicit Point(const Vec2d& rhs) : Vec2crd(coord_t(std::round(rhs.x())), coord_t(std::round(rhs.y()))) {}
 	// This constructor allows you to construct Point from Eigen expressions
     // This constructor has to be implicit (non-explicit) to allow implicit conversion from Eigen expressions.
     template<typename OtherDerived>
     Point(const Eigen::MatrixBase<OtherDerived> &other) : Vec2crd(other) {}
+    static Point round(const Vec2d& rhs) { return Point(coord_t(std::round(rhs.x())), coord_t(std::round(rhs.y()))); }
     static Point new_scale(coordf_t x, coordf_t y) { return Point(coord_t(scale_(x)), coord_t(scale_(y))); }
     static Point new_scale(const Point &p) { return Point(scale_t(p.x()), scale_t(p.y())); }
     template<typename OtherDerived>
@@ -253,8 +255,8 @@ public:
     void   rotate(double cos_a, double sin_a) {
         double cur_x = (double)this->x();
         double cur_y = (double)this->y();
-        this->x() = (coord_t)round(cos_a * cur_x - sin_a * cur_y);
-        this->y() = (coord_t)round(cos_a * cur_y + sin_a * cur_x);
+        this->x() = (coord_t)std::round(cos_a * cur_x - sin_a * cur_y);
+        this->y() = (coord_t)std::round(cos_a * cur_y + sin_a * cur_x);
     }
 
     void   rotate(double angle, const Point &center);

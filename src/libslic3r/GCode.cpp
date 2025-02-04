@@ -1952,7 +1952,7 @@ void GCodeGenerator::_do_export(Print& print_mod, GCodeOutputStream &file, Thumb
                     m_wipe_tower = std::make_unique<GCode::WipeTowerIntegration>(print.config(), *print.wipe_tower_data().priming.get(), print.wipe_tower_data().tool_changes, *print.wipe_tower_data().final_purge.get());
 
                     // Set position for wipe tower generation.
-                    file.write(this->writer().travel_to_z(first_layer_height, "Move to first z, for wipe tower"));
+                    preamble_to_put_start_layer.append(this->writer().travel_to_z(first_layer_height, "Move to first z, for wipe tower"));
                     m_last_layer_z = first_layer_height;
                     m_max_layer_z = std::max(m_max_layer_z, this->writer().get_unlifted_position().z());
 
@@ -2622,7 +2622,8 @@ std::string GCodeGenerator::placeholder_parser_process(
             } else {
                 //update our current position
                 Point pt_updated = this->gcode_to_point({pos[0], pos[1]});
-                if (!is_approx(pt_updated.x(), last_pos().x(), SCALED_EPSILON) ||
+                if (!last_pos_defined() ||
+                    !is_approx(pt_updated.x(), last_pos().x(), SCALED_EPSILON) ||
                     !is_approx(pt_updated.y(), last_pos().y(), SCALED_EPSILON)) {
                     set_last_pos(pt_updated);
                 }
@@ -4155,7 +4156,7 @@ std::string GCodeGenerator::extrude_loop_vase(const ExtrusionLoop &original_loop
         double l2 = v.squaredNorm();
         // Shift by no more than a nozzle diameter.
         //FIXME Hiding the seams will not work nicely for very densely discretized contours!
-        inward_point = (/*(nd * nd >= l2) ? p2 : */(p1 + v * (nd / sqrt(l2)))).cast<coord_t>();
+        inward_point = (/*(nd * nd >= l2) ? p2 : */Point::round(p1 + v * (nd / sqrt(l2))));
         inward_point.rotate(angle, paths.front().polyline.front());
     }
 
@@ -4305,7 +4306,7 @@ std::string GCodeGenerator::extrude_loop_vase(const ExtrusionLoop &original_loop
         double l2 = v.squaredNorm();
         // Shift by no more than a nozzle diameter.
         //FIXME Hiding the seams will not work nicely for very densely discretized contours!
-        inward_point = (/*(nd * nd >= l2) ? p2 : */(p1 + v * (nd / sqrt(l2)))).cast<coord_t>();
+        inward_point = (/*(nd * nd >= l2) ? p2 : */Point::round(p1 + v * (nd / sqrt(l2))));
         inward_point.rotate(angle, paths.front().polyline.front());
         
         // generate the travel move
@@ -4638,9 +4639,9 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
         //use a vec that is the mean between the two.
         vec_start = (vec_start + vec_end) / 2;
 
-        Point moved_start = (start_point.cast<double>() + vec_start * notch_value).cast<coord_t>();
+        Point moved_start = Point::round(start_point.cast<double>() + vec_start * notch_value);
         moved_start.rotate(angle, start_point);
-        Point moved_end = (end_point.cast<double>() + vec_start * notch_value).cast<coord_t>();
+        Point moved_end = Point::round(end_point.cast<double>() + vec_start * notch_value);
         moved_end.rotate(angle, end_point);
 
         //check if the current angle isn't too sharp
@@ -4682,6 +4683,7 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
             //reduce the flow of the notch path, as it's longer than previously
             path.attributes_mutable().width = path.width() * ratio;
             path.attributes_mutable().mm3_per_mm = path.mm3_per_mm() * ratio;
+            assert(path.polyline.is_valid());
         };
         for (ExtrusionPath &ep : notch_extrusion_start) {
             assert(!ep.can_reverse());
@@ -4734,9 +4736,12 @@ void GCodeGenerator::seam_notch(const ExtrusionLoop& original_loop,
             create_new_extrusion(notch_extrusion_end, model, 0.f, p1, moved_end);
         } //else : keep the path as-is
     }
-        for (ExtrusionPath &ep : notch_extrusion_start) {
-            assert(!ep.can_reverse());
-        }
+    for (ExtrusionPath &ep : notch_extrusion_start) {
+        assert(!ep.can_reverse());
+    }
+    for(auto &e : building_paths) assert(e.polyline.empty() || e.polyline.is_valid());
+    for(auto &e : notch_extrusion_start) assert(e.polyline.empty() || e.polyline.is_valid());
+    for(auto &e : notch_extrusion_end) assert(e.polyline.empty() || e.polyline.is_valid());
 }
 
 std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, const std::string_view description, double speed)
@@ -4950,7 +4955,7 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
         double vec_norm = vec_dist.norm();
         const double setting_max_depth = (m_config.wipe_inside_depth.get_abs_value(m_writer.tool()->id(), nozzle_diam));
         coordf_t dist = scale_d(nozzle_diam) / 2;
-        Point  pt = (current_pos + vec_dist * (2 * dist / vec_norm)).cast<coord_t>();
+        Point  pt = Point::round(current_pos + vec_dist * (2 * dist / vec_norm));
         pt.rotate(angle, current_point);
         //check if we can go to higher dist
         if (nozzle_diam != 0 && setting_max_depth > nozzle_diam * 0.55) {
@@ -4959,7 +4964,7 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
             if (m_writer.tool()->need_unretract()) {
                 this->m_throw_if_canceled();
                 dist = coordf_t(check_wipe::max_depth(wipe_paths, scale_t(setting_max_depth), scale_t(nozzle_diam), [current_pos, current_point, vec_dist, vec_norm, angle](coord_t dist)->Point {
-                    Point pt = (current_pos + vec_dist * (2 * dist / vec_norm)).cast<coord_t>();
+                    Point pt = Point::round(current_pos + vec_dist * (2 * dist / vec_norm));
                     pt.rotate(angle, current_point);
                     return pt;
                     }));
@@ -4967,7 +4972,7 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
         }
         // Shift by no more than a nozzle diameter.
         //FIXME Hiding the seams will not work nicely for very densely discretized contours!
-        pt = (/*(nd >= vec_norm) ? next_pos : */(current_pos + vec_dist * ( 2 * dist / vec_norm))).cast<coord_t>();
+        pt = Point::round(/*(nd >= vec_norm) ? next_pos : */(current_pos + vec_dist * ( 2 * dist / vec_norm)));
         pt.rotate(angle, current_point);
         //gcode += m_writer.travel_to_xy(this->point_to_gcode(pt), 0.0, "move inwards before retraction/seam");
         //this->set_last_pos(pt);
@@ -5137,14 +5142,13 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
         if (nozzle_diam != 0 && setting_max_depth > nozzle_diam * 0.55)
             dist = coordf_t(check_wipe::max_depth(wipe_paths, scale_t(setting_max_depth), scale_t(nozzle_diam), 
                 [current_pos, current_point, vec_dist, vec_norm, angle, sin_a](coord_t dist)->Point {
-                    Point pt = (current_pos + vec_dist * (dist / (vec_norm * sin_a))).cast<coord_t>();
+                    Point pt = Point::round(current_pos + vec_dist * (dist / (vec_norm * sin_a)));
                     pt.rotate(angle, current_point);
                     return pt;
                 }));
         // Shift by no more than a nozzle diameter.
         // FIXME Hiding the seams will not work nicely for very densely discretized contours!
-        Point pt_inside = (/*(nd >= vec_norm) ? next_pos : */ (current_pos + vec_dist * ( dist / (vec_norm * sin_a))))
-                              .cast<coord_t>();
+        Point pt_inside = Point::round(/*(nd >= vec_norm) ? next_pos : */ (current_pos + vec_dist * ( dist / (vec_norm * sin_a))));
         pt_inside.rotate(angle, current_point);
 
         if (EXTRUDER_CONFIG_WITH_DEFAULT(wipe_inside_end, true)) {
@@ -5521,6 +5525,7 @@ void GCodeGenerator::use(const ExtrusionEntityCollection &collection) {
 std::string GCodeGenerator::extrude_path(const ExtrusionPath &path, const std::string_view description, double speed_mm_per_sec) {
     std::string gcode;
     ExtrusionPath simplifed_path = path;
+        assert(simplifed_path.polyline.empty() || simplifed_path.polyline.is_valid());
     for (int i = 1; i < simplifed_path.polyline.size(); ++i)
         assert(!simplifed_path.polyline.get_point(i - 1).coincides_with_epsilon(simplifed_path.polyline.get_point(i)));
     
@@ -5572,6 +5577,7 @@ std::string GCodeGenerator::extrude_path(const ExtrusionPath &path, const std::s
         0;
     if (scaled_min_length > 0 && simplifed_path.length() < scaled_min_length) {
         m_last_too_small = simplifed_path;
+        assert(m_last_too_small.polyline.empty() || m_last_too_small.polyline.is_valid());
         m_last_description = description;
         m_last_speed_mm_per_sec = speed_mm_per_sec;
         return gcode;
@@ -8439,7 +8445,7 @@ std::string GCodeGenerator::set_extruder(uint16_t extruder_id, double print_z, b
     ensure_end_object_change_labels(gcode);
 
     //just for testing
-    assert(is_approx(this->writer().get_position().z(), print_z, EPSILON));
+    assert(m_layer == nullptr || is_approx(this->writer().get_position().z(), print_z, EPSILON));
 
     // if we are running a single-extruder setup, just set the extruder and return nothing
     if (!m_writer.multiple_extruders) {

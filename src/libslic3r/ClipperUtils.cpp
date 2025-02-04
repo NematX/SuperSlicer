@@ -1192,12 +1192,13 @@ ClipperLib_Z::Paths clip_extrusion(const ClipperLib_Z::Paths& subjects, const Cl
         ClipperLib_Z::PolyTreeToPaths(clipped_polytree, clipped_paths);
     }
 
-    // cleaning: can contain 0-length segments
-    for (ClipperLib_Z::Path& path : clipped_paths) {
-        for (size_t i = 1; i < path.size(); i++) {
-            if ((path[i - 1] - path[i]).squaredNorm() < SCALED_EPSILON) {
-                path.erase(path.begin() + i);
-                i--;
+    // cleaning
+    for (size_t i_path = 0; i_path < clipped_paths.size(); ++i_path) {
+        ClipperLib_Z::Path &path = clipped_paths[i_path];
+        for (size_t i_pt = 1; i_pt < path.size() - 1; i_pt++) {
+            if ((path[i_pt - 1] - path[i_pt]).squaredNorm() < SCALED_EPSILON) {
+                path.erase(path.begin() + i_pt);
+                i_pt--;
             }
         }
     }

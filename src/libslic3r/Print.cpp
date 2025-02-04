@@ -2056,38 +2056,48 @@ bool Print::has_wipe_tower() const
         m_config.nozzle_diameter.size() > 1;
 }
 
-const WipeTowerData& Print::wipe_tower_data(size_t extruders_cnt, double nozzle_diameter) const
+const WipeTowerData& Print::wipe_tower_data(const ConfigBase* config, double nozzle_diameter) const
 {
     // If the wipe tower wasn't created yet, make sure the depth and brim_width members are set to default.
-    if (! is_step_done(psWipeTower) && extruders_cnt !=0) {
-        const_cast<Print*>(this)->m_wipe_tower_data.brim_width = m_config.wipe_tower_brim_width;
+    if (! is_step_done(psWipeTower) && config != &this->m_config) {
+        size_t extruders_cnt = config->option("nozzle_diameter")->size();
 
         // Calculating depth should take into account currently set wiping volumes.
         // For a long time, the initial preview would just use 900/width per toolchange (15mm on a 60mm wide tower)
         // and it worked well enough. Let's try to do slightly better by accounting for the purging volumes.
-        std::vector<std::vector<float>> wipe_volumes = WipeTower::extract_wipe_volumes(m_config);
+        std::vector<std::vector<float>> wipe_volumes = WipeTower::extract_wipe_volumes(*config);
         std::vector<float> max_wipe_volumes;
         for (const std::vector<float>& v : wipe_volumes)
             max_wipe_volumes.emplace_back(*std::max_element(v.begin(), v.end()));
         float maximum = std::accumulate(max_wipe_volumes.begin(), max_wipe_volumes.end(), 0.f);
         maximum = maximum * extruders_cnt / max_wipe_volumes.size();
 
-        float width = float(m_config.wipe_tower_width);
-        float unscaled_brim_width = m_config.wipe_tower_brim_width.get_abs_value(nozzle_diameter);
+        float unscaled_brim_width = config->option<ConfigOptionFloatOrPercent>("wipe_tower_brim_width")->get_abs_value(nozzle_diameter);
         // use min layer height, as it's what wil disctate the wipe tower width.
-        float layer_height = 0;
-        if (m_objects.empty()) {
+        float first_layer_height = 0;
+        //if (m_objects.empty()) {
             // if no objects, then no extruder selected: use the first one.
-            layer_height = default_object_config().first_layer_height.get_abs_value(config().nozzle_diameter.get_at(0));
-        } else {
-            layer_height = get_min_first_layer_height();
-        }
+            //first_layer_height = default_object_config().first_layer_height.get_abs_value(config->option("nozzle_diameter")->get_float(0));
+            first_layer_height = config->option<ConfigOptionFloatOrPercent>("first_layer_height")->get_abs_value(config->option("nozzle_diameter")->get_float(0));
+        //} else {
+        //    first_layer_height = get_min_first_layer_height();
+        //}
         // FIXME: get layer height from layers instead of config.
-        layer_height = std::min(layer_height, float(default_object_config().layer_height.value));
-
-        const_cast<Print*>(this)->m_wipe_tower_data.depth = (maximum/layer_height)/width;
-        const_cast<Print*>(this)->m_wipe_tower_data.height = -1.f; // unknown yet
+        //float layer_height = std::min(first_layer_height, float(default_object_config().layer_height.value));
+        float layer_height = float(config->option("layer_height")->get_float());
+        if (first_layer_height > 0 && first_layer_height < layer_height) {
+            layer_height = first_layer_height;
+        }
+        
+        const_cast<Print*>(this)->m_wipe_tower_data.position = Vec2d{config->option("wipe_tower_x")->get_float(), config->option("wipe_tower_y")->get_float()};
+        const_cast<Print*>(this)->m_wipe_tower_data.width = float(config->option("wipe_tower_width")->get_float());
+        const_cast<Print*>(this)->m_wipe_tower_data.rotation_angle = float(config->option("wipe_tower_rotation_angle")->get_float());
+        const_cast<Print*>(this)->m_wipe_tower_data.depth = (maximum/layer_height)/this->m_wipe_tower_data.width;
         const_cast<Print*>(this)->m_wipe_tower_data.brim_width = unscaled_brim_width;
+        const_cast<Print*>(this)->m_wipe_tower_data.cone_angle = float(config->option("wipe_tower_cone_angle")->get_float());
+        const_cast<Print*>(this)->m_wipe_tower_data.first_layer_height = first_layer_height;
+        const_cast<Print*>(this)->m_wipe_tower_data.height = -1.f; // unknown yet
+        const_cast<Print*>(this)->m_wipe_tower_data.z_and_depth_pairs.clear(); // unknown yet
     }
 
     return this->m_wipe_tower_data;
