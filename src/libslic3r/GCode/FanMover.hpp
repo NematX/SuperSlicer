@@ -114,6 +114,7 @@ private:
     void _put_in_middle_G1(std::list<BufferData>::iterator item_to_split, float nb_sec, BufferData&& line_to_write, float max_time);
     void _print_in_middle_G1(BufferData& line_to_split, float nb_sec, const std::string& line_to_write);
     void _remove_slow_fan(int16_t min_speed, float past_sec);
+    int16_t _get_fan_speed(const std::string &line, GCodeFlavor flavor);
     void write_buffer_data();
     std::string _set_fan(int16_t speed, std::string_view comment);
 };

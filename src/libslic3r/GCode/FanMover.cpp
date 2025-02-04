@@ -70,6 +70,22 @@ float get_axis_value(const std::string &line, char axis)
     }
     return NAN;
 }
+float get_nematx_axis_value(const std::string &line)
+{
+
+    size_t pos = line.find('=') + 1;
+    // size_t end = std::min(line.find(' ', pos + 1), line.find(';', pos + 1));
+    // Try to parse the numeric value.
+    const char *c    = line.c_str();
+    char *      pend = nullptr;
+    errno            = 0;
+    double v         = strtod(c + pos, &pend);
+    if (pend != nullptr && errno == 0 && pend != c) {
+        // The axis value has been parsed correctly.
+        return float(v);
+    }
+    return NAN;
+}
 
 void change_axis_value(std::string &line, char axis, const float new_value, const int decimal_digits)
 {
@@ -79,23 +95,6 @@ void change_axis_value(std::string &line, char axis, const float new_value, cons
     size_t pos = line.find(match) + 2;
     size_t end = std::min(line.find(' ', pos + 1), line.find(';', pos + 1));
     line       = line.replace(pos, end - pos, to_string_nozero(new_value, decimal_digits));
-}
-
-int16_t get_fan_speed(const std::string &line, GCodeFlavor flavor)
-{
-    if (line.compare(0, 4, "M106") == 0) {
-        if (flavor == (gcfMach3) || flavor == (gcfMachinekit) || flavor == (gcfNematX)) {
-            return (int16_t) FanMover_func::get_axis_value(line, 'P');
-        } else {
-            return (int16_t) FanMover_func::get_axis_value(line, 'S');
-        }
-    } else if (line.compare(0, 4, "M127") == 0 || line.compare(0, 4, "M107") == 0) {
-        return 0;
-    } else if ((flavor == (gcfMakerWare) || flavor == (gcfSailfish)) && line.compare(0, 4, "M126") == 0) {
-        return (int16_t) FanMover_func::get_axis_value(line, 'T');
-    } else {
-        return -1;
-    }
 }
 
 bool parse_number(const std::string_view sv, int& out)
@@ -176,6 +175,34 @@ void FanMover::_put_in_middle_G1(std::list<BufferData>::iterator item_to_split, 
     } else {
         //not a G1, print it before
         m_buffer.insert(item_to_split, line_to_write);
+    }
+}
+
+int16_t FanMover::_get_fan_speed(const std::string &line, GCodeFlavor flavor)
+{
+    if (flavor == (gcfNematX)) {
+        if (line.compare(0, 4, "M106") == 0) {
+            if (m_current_extruder == 0) {
+                return (int16_t) FanMover_func::get_nematx_axis_value(line);
+            }
+        } else if (line.compare(0, 4, "M126") == 0) {
+            if (m_current_extruder == 1) {
+                return (int16_t) FanMover_func::get_nematx_axis_value(line);
+            }
+        }
+        return -1;
+    }else if (line.compare(0, 4, "M106") == 0) {
+        if (flavor == (gcfMach3) || flavor == (gcfMachinekit)) {
+            return (int16_t) FanMover_func::get_axis_value(line, 'P');
+        } else {
+            return (int16_t) FanMover_func::get_axis_value(line, 'S');
+        }
+    } else if (line.compare(0, 4, "M127") == 0 || line.compare(0, 4, "M107") == 0) {
+        return 0;
+    } else if ((flavor == (gcfMakerWare) || flavor == (gcfSailfish)) && line.compare(0, 4, "M126") == 0) {
+        return (int16_t) FanMover_func::get_axis_value(line, 'T');
+    } else {
+        return -1;
     }
 }
 
@@ -351,7 +378,7 @@ void FanMover::_process_gcode_line(GCodeReader& reader, const GCodeReader::GCode
         }
         case 'M':
         {
-            fan_speed = FanMover_func::get_fan_speed(line.raw(), m_writer.config.gcode_flavor);
+            fan_speed = this->_get_fan_speed(line.raw(), m_writer.config.gcode_flavor);
             if (fan_speed >= 0) {
                 const auto fan_baseline = (m_writer.config.fan_percentage.value ? 100.0 : 255.0);
                 fan_speed = 100 * fan_speed / fan_baseline;
