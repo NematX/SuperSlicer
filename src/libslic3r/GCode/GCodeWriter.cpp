@@ -278,8 +278,12 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
         if (wait && can_M109) {
             code = "M109"sv;
             comment = "set temperature and wait for it to be reached"sv;
-        } else if (FLAVOR_IS(gcfNematX) && tool > 0) {
-            code = "M124";
+        } else if (FLAVOR_IS(gcfNematX)) {
+            if (tool == 0) {
+                code = "M104"sv;
+            } else {
+                code = "M124"sv;
+            }
             comment = "set temperature"sv;
         } else {
             if (FLAVOR_IS(gcfRepRap)) { // M104 is deprecated on RepRapFirmware
@@ -298,6 +302,8 @@ std::string GCodeWriter::set_temperature(const int16_t temperature, bool wait, i
         } else if (wait && (FLAVOR_IS(gcfMarlinFirmware) || FLAVOR_IS(gcfMarlinLegacy)) &&
                    temp_w_offset < m_last_temperature_with_offset) {
             gcode << " R"; // marlin doesn't wait with S if it's a cooling change, it needs a R
+        } else if (FLAVOR_IS(gcfNematX)) {
+            gcode << "=";
         } else {
             gcode << " S";
         }
