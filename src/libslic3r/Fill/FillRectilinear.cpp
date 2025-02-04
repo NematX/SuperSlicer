@@ -3314,10 +3314,10 @@ void FillGridVarSpeed::fill_surface_extrusion(const Surface *surface, const Fill
     // create paths from polylines
     auto* eec_first_pass = new ExtrusionEntityCollection();
     eec_first_pass->set_can_sort_reverse(!this->no_sort(), !this->no_sort());
-    this->change_flow_intersection(polylines_first_pass, polylines_second_pass, 0.5, 0.5, *eec_first_pass, default_attribute, params);
+    this->change_flow_intersection(polylines_first_pass, polylines_second_pass, 0.5f, 0.5f, *eec_first_pass, default_attribute, params);
     auto* eec_second_pass = new ExtrusionEntityCollection();
     eec_second_pass->set_can_sort_reverse(!this->no_sort(), !this->no_sort());
-    this->change_flow_intersection(polylines_second_pass, polylines_first_pass, 0.1, 0.5, *eec_second_pass, default_attribute, params);
+    this->change_flow_intersection(polylines_second_pass, polylines_first_pass, 0.1f, 0.5f, *eec_second_pass, default_attribute, params);
     eec->set_entities().push_back(eec_first_pass);
     eec->set_entities().push_back(eec_second_pass);
 #ifdef _DEBUG
