@@ -182,6 +182,8 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver& /* ne
         "pause_print_gcode",
         "post_process",
         "print_custom_variables",
+        "print_bed_temperature",
+        "print_first_layer_bed_temperature",
         "printer_custom_variables",
         "perimeter_fan_speed",
         "printer_notes",
@@ -439,25 +441,40 @@ bool Print::is_step_done(PrintObjectStep step) const
 }
 
 // returns 0-based indices of used extruders
-std::set<uint16_t> Print::object_extruders(const PrintObjectPtrs &objects) const
+std::set<uint16_t> Print::object_extruders(const PrintObjectPtrs &objects, float z /*= -1*/) const
 {
     std::set<uint16_t> extruders;
-    for (const PrintObject *object : objects)
-        for (const PrintRegion& region : object->all_regions())
+    for (const PrintObject *object : objects) {
+        std::vector<std::reference_wrapper<const PrintRegion>> ok_regions;
+        if (z < 0) {
+            ok_regions = object->all_regions();
+        } else {
+            std::set<const PrintRegion*> region_set;
+            for (const Layer *layer : object->layers()) {
+                if (layer->print_z - layer->height - EPSILON < z && z < layer->print_z + EPSILON ) {
+                    for (const LayerRegion *lr : layer->regions()) {
+                        region_set.insert(&lr->region());
+                    }
+                }
+            }
+            for (const PrintRegion *lr : region_set) {
+                ok_regions.emplace_back(*lr);
+            }
+            assert(ok_regions.size() == region_set.size());
+        }
+        for (const PrintRegion &region : ok_regions) {
             region.collect_object_printing_extruders(*object->print(), extruders);
+        }
+    }
     return extruders;
 }
-std::set<uint16_t> Print::object_extruders() const
+std::set<uint16_t> Print::object_extruders(float z /*= -1*/) const
 {
-    std::set<uint16_t> extruders;
-    for (const PrintObject *object : m_objects)
-        for (const PrintRegion& region : object->all_regions())
-            region.collect_object_printing_extruders(*object->print(), extruders);
-    return extruders;
+    return object_extruders(m_objects, z);
 }
 
 // returns 0-based indices of used extruders
-std::set<uint16_t> Print::support_material_extruders() const
+std::set<uint16_t> Print::support_material_extruders(float z /*= -1*/) const
 {
     std::set<uint16_t> extruders;
     bool support_uses_current_extruder = false;
@@ -465,14 +482,26 @@ std::set<uint16_t> Print::support_material_extruders() const
 
     for (PrintObject *object : m_objects) {
         if (object->has_support_material()) {
-        	assert(object->config().support_material_extruder >= 0);
-            if (object->config().support_material_extruder == 0)
-                support_uses_current_extruder = true;
-            else {
-                uint16_t i = (uint16_t)object->config().support_material_extruder - 1;
-                extruders.insert((i >= num_extruders) ? 0 : i);
+            bool has_support = true;
+            bool has_support_interface = object->config().support_material_interface_layers > 0;
+            if (z >= 0) {
+                has_support = false;
+                for (const SupportLayer *suppl : object->support_layers()) {
+                    if (suppl->print_z - suppl->height - EPSILON < z && z < suppl->print_z + EPSILON && suppl->has_extrusions()) {
+                        has_support = true;
+                    }
+                }
             }
-            if (object->config().support_material_interface_layers > 0) {
+            if (has_support) {
+                assert(object->config().support_material_extruder >= 0);
+                if (object->config().support_material_extruder == 0)
+                    support_uses_current_extruder = true;
+                else {
+                    uint16_t i = (uint16_t) object->config().support_material_extruder - 1;
+                    extruders.insert((i >= num_extruders) ? 0 : i);
+                }
+            }
+            if (has_support && has_support_interface) {
                 assert(object->config().support_material_interface_extruder >= 0);
                 if (object->config().support_material_interface_extruder == 0)
                     support_uses_current_extruder = true;
@@ -492,16 +521,19 @@ std::set<uint16_t> Print::support_material_extruders() const
 }
 
 // returns 0-based indices of used extruders
-std::set<uint16_t> Print::extruders() const
+std::set<uint16_t> Print::extruders(float z /*= -1*/) const
 {
-    std::set<uint16_t> extruders = this->object_extruders(m_objects);
-    append(extruders, this->support_material_extruders());
+    std::set<uint16_t> extruders = this->object_extruders(m_objects, z);
+    append(extruders, this->support_material_extruders(z));
 
-    // The wipe tower extruder can also be set. When the wipe tower is enabled and it will be generated,
-    // append its extruder into the list too.
-    if (has_wipe_tower() && config().wipe_tower_extruder != 0 && extruders.size() > 1) {
-        assert(config().wipe_tower_extruder > 0 && config().wipe_tower_extruder < int(config().nozzle_diameter.size()));
-        extruders.insert(uint16_t(config().wipe_tower_extruder.value - 1)); // the config value is 1-based
+    if (z < 0) {
+        // The wipe tower extruder can also be set. When the wipe tower is enabled and it will be generated,
+        // append its extruder into the list too.
+        if (has_wipe_tower() && config().wipe_tower_extruder != 0 && extruders.size() > 1) {
+            assert(config().wipe_tower_extruder > 0 &&
+                   config().wipe_tower_extruder < int(config().nozzle_diameter.size()));
+            extruders.insert(uint16_t(config().wipe_tower_extruder.value - 1)); // the config value is 1-based
+        }
     }
 
     return extruders;

@@ -145,9 +145,10 @@ PrintObject::PrintObject(Print* print, ModelObject* model_object, const Transfor
 
 PrintBase::ApplyStatus PrintObject::set_instances(PrintInstances&& instances)
 {
-    for (PrintInstance& i : instances)
-    	// Add the center offset, which will be subtracted from the mesh when slicing.
-    	i.shift += m_center_offset;
+    for (PrintInstance &i : instances) {
+        // Add the center offset, which will be subtracted from the mesh when slicing.
+        i.shift += m_center_offset;
+    }
     // Invalidate and set copies.
     PrintBase::ApplyStatus status = PrintBase::APPLY_STATUS_UNCHANGED;
     bool equal_length = instances.size() == m_instances.size();
@@ -155,24 +156,27 @@ PrintBase::ApplyStatus PrintObject::set_instances(PrintInstances&& instances)
         [](const PrintInstance& lhs, const PrintInstance& rhs) { return lhs.model_instance == rhs.model_instance && lhs.shift == rhs.shift; });
     if (! equal) {
         status = PrintBase::APPLY_STATUS_CHANGED;
-        if (m_print->invalidate_steps({ psSkirtBrim, psGCodeExport }) ||
-            (! equal_length && m_print->invalidate_step(psWipeTower)))
+        if (m_print->invalidate_steps({psSkirtBrim, psGCodeExport}) ||
+            (!equal_length && m_print->invalidate_step(psWipeTower))) {
             status = PrintBase::APPLY_STATUS_INVALIDATED;
+        }
         m_instances = std::move(instances);
-	    for (PrintInstance &i : m_instances)
-	    	i.print_object = this;
+        for (PrintInstance &i : m_instances) {
+            i.print_object = this;
+        }
     }
     return status;
 }
 
-    std::vector<std::reference_wrapper<const PrintRegion>> PrintObject::all_regions() const
+std::vector<std::reference_wrapper<const PrintRegion>> PrintObject::all_regions() const
 {
-        std::vector<std::reference_wrapper<const PrintRegion>> out;
-        out.reserve(m_shared_regions->all_regions.size());
-        for (const std::unique_ptr<Slic3r::PrintRegion> &region : m_shared_regions->all_regions)
-            out.emplace_back(*region.get());
-        return out;
+    std::vector<std::reference_wrapper<const PrintRegion>> out;
+    out.reserve(m_shared_regions->all_regions.size());
+    for (const std::unique_ptr<Slic3r::PrintRegion> &region : m_shared_regions->all_regions) {
+        out.emplace_back(*region.get());
     }
+    return out;
+}
 
 // 1) Merges typed region slices into stInternal type.
 // 2) Increases an "extra perimeters" counter at region slices where needed.
