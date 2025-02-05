@@ -1,3 +1,4 @@
+1.0.15 use M129 in start gcode if not using the first extruder
 1.0.14 disable single_extruder_multi_material_priming, fix A[ -> A\[
 1.0.13 fix toolchange gcode: add reset E.
 1.0.12 fix extruder_temperature_offset, cleaned end gcode
