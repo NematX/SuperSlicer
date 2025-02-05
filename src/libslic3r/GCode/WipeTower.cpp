@@ -459,7 +459,9 @@ public:
 	// Set speed factor override percentage.
 	WipeTowerWriter& speed_override(int speed)
 	{
-        m_gcode += "M220 S" + std::to_string(speed) + "\n";
+        if (this->m_gcode_flavor != (gcfNematX)) {
+            m_gcode += "M220 S" + std::to_string(speed) + "\n";
+        }
 		return *this;
     }
 
@@ -475,10 +477,11 @@ public:
 	// Let the firmware restore the active speed override value.
 	WipeTowerWriter& speed_override_restore()
 	{
-        if (m_gcode_flavor == gcfMarlinLegacy || m_gcode_flavor == gcfMarlinFirmware)
+        if (m_gcode_flavor == gcfMarlinLegacy || m_gcode_flavor == gcfMarlinFirmware) {
             m_gcode += "M220 R\n";
-        else
+        } else if (this->m_gcode_flavor != (gcfNematX)) {
             m_gcode += "M220 S100\n";
+        }
 		return *this;
     }
 
