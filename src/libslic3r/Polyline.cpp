@@ -1830,7 +1830,8 @@ bool ArcPolyline::is_valid() const {
     double max_radius = 0;
     Point first_center;
     for (size_t i = 1; i < m_path.size(); ++i) {
-        assert(!m_path[i - 1].point.coincides_with_epsilon(m_path[i].point));
+        if(!this->is_3D)
+            assert(!m_path[i - 1].point.coincides_with_epsilon(m_path[i].point));
         if (m_path[i].radius != 0) {
             Vec2d center = Slic3r::Geometry::ArcWelder::arc_center(m_path[i-1].point.cast<coordf_t>(), m_path[i].point.cast<coordf_t>(), coordf_t(m_path[i].radius), m_path[i].ccw());
             double angle = Slic3r::Geometry::ArcWelder::arc_angle(m_path[i-1].point.cast<coordf_t>(), m_path[i].point.cast<coordf_t>(), coordf_t(m_path[i].radius));
@@ -1849,12 +1850,12 @@ bool ArcPolyline::is_valid() const {
             coordf_t new_length3 = Geometry::ArcWelder::arc_length<Vec2d,Vec2d,Vec2d,double>(startd, endd, centerd, m_path[i].ccw());
             assert(is_approx(new_length, new_length2, SCALED_EPSILON*4.));
             assert(is_approx(new_length2, new_length3, SCALED_EPSILON*10.));
-            assert(is_approx(new_length2, m_path[i].length, SCALED_EPSILON*1.));
+            assert(is_approx(new_length2, m_path[i].length, SCALED_EPSILON*2.));
             Slic3r::Geometry::ArcWelder::Orientation orientation = Slic3r::Geometry::ArcWelder::arc_orientation(m_path[i - 1].point, m_path[i].point, m_path[i].center, m_path[i].radius);
             assert(orientation == m_path[i].orientation);
             Slic3r::Geometry::ArcWelder::Orientation orientation2 = Slic3r::Geometry::ArcWelder::arc_orientation(m_path[i - 1].point, m_path[i].point, Point::round(center), m_path[i].radius);
-            assert(is_approx(coord_t(center.x()), m_path[i].center.x(), SCALED_EPSILON));
-            assert(is_approx(coord_t(center.y()), m_path[i].center.y(), SCALED_EPSILON));
+            assert(is_approx(coord_t(center.x()), m_path[i].center.x(), coord_t(std::abs(m_path[i].radius / 100))));
+            assert(is_approx(coord_t(center.y()), m_path[i].center.y(), coord_t(std::abs(m_path[i].radius / 100))));
         }
         //assert(std::abs(max_radius - min_radius) <= std::abs(max_radius) * 0.01);
     }

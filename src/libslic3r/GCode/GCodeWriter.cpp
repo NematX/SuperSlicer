@@ -1273,8 +1273,8 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, bool gcode_comm
             } else {
                 gcode << " S";
             }
-            gcode << (fan_baseline * (fan_speed / 100.0));
         }
+        gcode << (fan_baseline * (fan_speed / 100.0));
         if (gcode_comments)
             gcode << " ; " << (comment.empty() ? "enable fan" : comment);
         gcode << "\n";

@@ -104,6 +104,10 @@ inline coordf_t dot(const Vec2d &v) { return v.x() * v.x() + v.y() * v.y(); }
 
 inline bool operator<(const Vec2d &lhs, const Vec2d &rhs) { return lhs.x() < rhs.x() || (lhs.x() == rhs.x() && lhs.y() < rhs.y()); }
 
+inline distsqrf_t squared_norm(const Vec2crd &vec) {
+    return vec.x()*coordf_t(vec.x()) + vec.y()*coordf_t(vec.y());
+}
+
 // Cross product of two 2D vectors.
 // None of the vectors may be of int32_t type as the result would overflow.
 template<typename Derived, typename Derived2>
@@ -118,13 +122,13 @@ inline typename Derived::Scalar cross2(const Eigen::MatrixBase<Derived> &v1, con
 
 // cross2 that use double as intermediate values, to avoid overflow of int types.
 template<typename Derived, typename Derived2>
-inline typename Derived::Scalar cross2_double(const Eigen::MatrixBase<Derived> &v1, const Eigen::MatrixBase<Derived2> &v2)
+inline double cross2_double(const Eigen::MatrixBase<Derived> &v1, const Eigen::MatrixBase<Derived2> &v2)
 {
     static_assert(Derived::IsVectorAtCompileTime && int(Derived::SizeAtCompileTime) == 2, "cross2(): first parameter is not a 2D vector");
     static_assert(Derived2::IsVectorAtCompileTime && int(Derived2::SizeAtCompileTime) == 2, "cross2(): first parameter is not a 2D vector");
     static_assert(! std::is_same<typename Derived::Scalar, int32_t>::value, "cross2(): Scalar type must not be int32_t, otherwise the cross product would overflow.");
     static_assert(std::is_same<typename Derived::Scalar, typename Derived2::Scalar>::value, "cross2(): Scalar types of 1st and 2nd operand must be equal.");
-    return Derived::Scalar(double(v1.x()) * double(v2.y()) - double(v1.y()) * double(v2.x()));
+    return (double(v1.x()) * double(v2.y()) - double(v1.y()) * double(v2.x()));
 }
 
 // 2D vector perpendicular to the argument.

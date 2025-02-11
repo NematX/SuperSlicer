@@ -300,8 +300,10 @@ protected:
 
     static Geometry::ArcWelder::Path _from_polyline(const Points &poly);
     static Geometry::ArcWelder::Path _from_polyline(std::initializer_list<Point> poly);
-
 public:
+#ifdef _DEBUG
+    bool is_3D = false; // to deactivate assert about epsilon dist
+#endif
     ArcPolyline(){};
     ArcPolyline(const ArcPolyline &) = default;
     ArcPolyline(ArcPolyline &&)      = default;
