@@ -149,25 +149,33 @@ std::string LabelObjects::all_objects_header(BoundingBoxf3 &global_bounding_box,
             }
         }
         // add object json
-        out.append("; object:{\"name\":\"").append(label.unique_name).append("\"")
+        std::string object_json;
+        object_json.append("; object:{\"name\":\"").append(label.unique_name).append("\"")
             .append(",\"id\":\"").append(std::to_string(label.unique_id)).append("\"")
             .append(",\"object_id\":").append(std::to_string(label.unique_id))
             .append(",\"copy\":").append(std::to_string(label.copy_id));
         std::snprintf(buffer, sizeof(buffer) - 1, "%.3f,%.3f,%.3f", unscale<float>(center[0]), unscale<float>(center[1]), 0.f);
-        out.append(",\"object_center\":[").append(buffer).append("]");
+        object_json.append(",\"object_center\":[").append(buffer).append("]");
         std::snprintf(buffer, sizeof(buffer) - 1, "%.3f,%.3f,%.3f",bounding_box.center().x(), bounding_box.center().y(), bounding_box.center().z());
-        out.append(",\"boundingbox_center\":[").append(buffer).append("]");
+        object_json.append(",\"boundingbox_center\":[").append(buffer).append("]");
         std::snprintf(buffer, sizeof(buffer) - 1, "%.3f,%.3f,%.3f", bounding_box.size().x(), bounding_box.size().y(), bounding_box.size().z());
-        out.append(",\"boundingbox_size\":[").append(buffer).append("]");
+        object_json.append(",\"boundingbox_size\":[").append(buffer).append("]");
         std::snprintf(buffer, sizeof(buffer) - 1, "%.3f,%.3f,%.3f", print_instance->model_instance->get_scaling_factor(Axis::X), print_instance->model_instance->get_scaling_factor(Axis::Y), print_instance->model_instance->get_scaling_factor(Axis::Z));
-        out.append(",\"scale\":[").append(buffer).append("]");
-        out.append(",\"outline\":[");
+        object_json.append(",\"scale\":[").append(buffer).append("]");
+        object_json.append(",\"outline\":[");
         for (const Point& point : outline) {
             std::snprintf(buffer, sizeof(buffer) - 1, "[%.3f,%.3f],", unscale<float>(point[0]), unscale<float>(point[1]));
-            out += buffer;
+            object_json += buffer;
+            // prevent 2^12 overflow (4096) that can happen innematx firmware
+            if (object_json.size() > 4000) {
+                object_json += "\n";
+                out += object_json;
+                object_json = "; ";
+            }
         }
-        out.pop_back(); //remove last ','
-        out += "]}\n";
+        object_json.pop_back(); //remove last ','
+        object_json += "]}\n";
+        out += object_json;
     }
     if ( (m_label_objects_style == LabelObjectsStyle::Firmware || m_label_objects_style == LabelObjectsStyle::Both)  
         && (m_flavor == gcfMarlinLegacy || m_flavor == gcfMarlinFirmware || m_flavor == gcfRepRap)) {
@@ -176,23 +184,31 @@ std::string LabelObjects::all_objects_header(BoundingBoxf3 &global_bounding_box,
     }
     // add plater json
     {
-        out.append("; plater:{");
+        std::string platter_json;
+        platter_json.append("; plater:{");
         Point global_center = global_outline.centroid();
         std::snprintf(buffer, sizeof(buffer) - 1, "%.3f,%.3f,%.3f", unscaled(global_center.x()), unscaled(global_center.y()), 0.f);
-        out.append(",\"object_center\":[").append(buffer).append("]");
+        platter_json.append(",\"object_center\":[").append(buffer).append("]");
         std::snprintf(buffer, sizeof(buffer) - 1, "%.3f,%.3f,%.3f", global_bounding_box.center().x(), global_bounding_box.center().y(),
                       global_bounding_box.center().z());
-        out.append(",\"boundingbox_center\":[").append(buffer).append("]");
+        platter_json.append(",\"boundingbox_center\":[").append(buffer).append("]");
         std::snprintf(buffer, sizeof(buffer) - 1, "%.3f,%.3f,%.3f", global_bounding_box.size().x(), global_bounding_box.size().y(),
                       global_bounding_box.size().z());
-        out.append(",\"boundingbox_size\":[").append(buffer).append("]");
-        out.append(",\"outline\":[");
+        platter_json.append(",\"boundingbox_size\":[").append(buffer).append("]");
+        platter_json.append(",\"outline\":[");
         for (const Point &point : global_outline) {
             std::snprintf(buffer, sizeof(buffer) - 1, "[%.3f,%.3f],", unscale<float>(point[0]), unscale<float>(point[1]));
-            out += buffer;
+            platter_json += buffer;
+            // prevent 2^12 overflow (4096) that can happen innematx firmware
+            if (platter_json.size() > 4000) {
+                platter_json += "\n";
+                out += platter_json;
+                platter_json = "; ";
+            }
         }
-        out.pop_back(); // remove last ','
-        out += "]}\n\n";
+        platter_json.pop_back(); // remove last ','
+        platter_json += "]}\n\n";
+        out += platter_json;
     }
     return out;
 }
