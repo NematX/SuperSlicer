@@ -1553,7 +1553,8 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_extrusions(const Paramet
             extrusion_path_bbox.offset(SCALED_EPSILON);
             if (extrusion->is_closed) {
                 assert((extrusion_path.front() - extrusion_path.back()).norm() <= SCALED_EPSILON);
-                assert(Point(extrusion_path.front().x(),extrusion_path.front().y()).coincides_with_epsilon(Point(extrusion_path.back().x(), extrusion_path.back().y())));
+                assert(Point(extrusion_path.front().x(), extrusion_path.front().y())
+                           .distance_to(Point(extrusion_path.back().x(), extrusion_path.back().y())) < SCALED_EPSILON);
             } else if ((extrusion_path.front() - extrusion_path.back()).norm() <= SCALED_EPSILON) {
                 extrusion->is_closed = true; // fix error (yes, this happen and sohould be fixed beforehand)
             }
